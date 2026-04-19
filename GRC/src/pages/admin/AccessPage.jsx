@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { Trash2 } from "lucide-react";
 
-function UserFormModal({ newUser, handleChange, handleAddUser, companies, role, setShowForm, inputStyle, buttonStyle }) {
+function UserFormModal({ newUser, handleChange, handleAddUser, companies, role, setShowForm, inputStyle, buttonStyle,emailError, setEmailError}) {
+  const emailRegex = /^[a-zA-Z0-9._-]+@[a-zA-Z.-]+\.[a-zA-Z]{2,}$/;
+  
   return (
     <div
       style={{
@@ -74,13 +76,35 @@ function UserFormModal({ newUser, handleChange, handleAddUser, companies, role, 
         />
 
         <input
-          type="email"
-          name="email"
-          placeholder="Email"
-          value={newUser.email}
-          onChange={handleChange}
-          style={inputStyle}
-        />
+  type="email"
+  name="email"
+  value={newUser.email}
+  onChange={(e) => {
+    const value = e.target.value;
+
+    handleChange(e);
+
+    if (!value) {
+      setEmailError("Email required");
+    } 
+    else if (!emailRegex.test(value)) {
+      setEmailError("Invalid email format (ex: user@domain.com)");
+    } 
+    else {
+      setEmailError("");
+    }
+  }}
+  placeholder="Email"
+  style={{
+    ...inputStyle,
+    borderColor: emailError ? "#EF4444" : "#E2E8F0"
+  }}
+/>
+  {emailError && (
+  <div style={{ color: "#EF4444", fontSize: 12, marginTop: 6 }}>
+    {emailError}
+  </div>
+)}
         <select
           name="role"
           value={newUser.role}
@@ -113,7 +137,7 @@ function UserFormModal({ newUser, handleChange, handleAddUser, companies, role, 
         </select>
 
         
-        {newUser.role === "auditor" && (
+        {newUser.role === "user" && (
           <select
             name="company"
             value={newUser.company}
@@ -147,6 +171,7 @@ function UserFormModal({ newUser, handleChange, handleAddUser, companies, role, 
           </button>
           <button
             onClick={handleAddUser}
+            disabled={emailError !== ""}
             style={{
               flex: 2,
               padding: "11px",
@@ -173,8 +198,9 @@ export default function AccessPage() {
   const [tab, setTab] = useState("users");
   const [users, setUsers] = useState([]);
   const [companies, setCompanies] = useState([]);
-  const [role, setRole] = useState(["admin", "auditor", "user"]);
+  const [role, setRole] = useState(["admin",  "user"]);
   const [showForm, setShowForm] = useState(false);
+  const [emailError, setEmailError] = useState("");
   const [newUser, setNewUser] = useState({
     first_name: "",
     last_name: "",
@@ -247,13 +273,16 @@ export default function AccessPage() {
   }, []);
 
   // ── Gestion form ──────────────────────
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setNewUser(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
+  
+
+const handleChange = (e) => {
+  const { name, value } = e.target;
+
+  setNewUser(prev => ({
+    ...prev,
+    [name]: value
+  }));
+};
 
   const handleAddUser = async () => {
     if (!newUser.first_name || !newUser.last_name || !newUser.email || !newUser.role) {
@@ -412,6 +441,9 @@ export default function AccessPage() {
           setShowForm={setShowForm}
           inputStyle={inputStyle}
           buttonStyle={buttonStyle}
+          emailError={emailError}
+  setEmailError={setEmailError}
+
         />
       )}
     </div>

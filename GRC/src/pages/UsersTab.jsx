@@ -23,7 +23,7 @@ const T = {
 };
 
 // Mock data
-const ROLES = ["Analyst", "Viewer"];
+const ROLES = ["auditor", "user"];
 const DEPARTMENTS = ["IT Security", "Compliance", "Risk Management", "Legal", "Finance", "Operations"];
 
 // Utility helpers
@@ -50,7 +50,7 @@ const StatusBadge = ({ status }) => {
 
 const RoleBadge = ({ role }) => {
   const map = {
-    Admin: "#EF4444", Auditor: "#3B6FFF", Analyst: "#6D28D9", Viewer: "#64748B", CISO: "#F59E0B",
+    admin: "#EF4444", auditor: "#3B6FFF", user: "#6D28D9",
   };
   return (
     <span style={{ background: (map[role] || "#999") + "18", color: map[role] || "#999", fontSize: 11, fontWeight: 700, padding: "2px 10px", borderRadius: 20 }}>
@@ -75,11 +75,13 @@ function Field({ label, required, children }) {
 
 // Modal: Create / Edit User
 function UserModal({ user, groups, onClose, onSave }) {
+  const [emailError, setEmailError] = useState("");
+  const emailRegex = /^[a-zA-Z0-9._-]+@[a-zA-Z.-]+\.[a-zA-Z]{2,}$/;
   const [form, setForm] = useState(user || { 
     first_name: "", 
     last_name: "", 
     email: "", 
-    role: "Viewer", 
+    role: "user", 
     department: "", 
     status: "pending", 
     groups: [], 
@@ -185,8 +187,31 @@ function UserModal({ user, groups, onClose, onSave }) {
           </div>
           
           <Field label="Email" required>
-            <input value={form.email} onChange={e => set("email", e.target.value)} placeholder="user@company.com" style={inputStyle} />
-          </Field>
+  <input
+  value={form.email}
+  onChange={e => set("email", e.target.value)}
+  onBlur={() => {
+    const value = form.email;
+
+    if (value && !emailRegex.test(value)) {
+      setEmailError("Email invalide (ex: user@domain.com)");
+    } else {
+      setEmailError("");
+    }
+  }}
+  placeholder="user@company.com"
+  style={{
+    ...inputStyle,
+    borderColor: emailError ? "#EF4444" : "#E2E8F0"
+  }}
+/>
+
+  {emailError && (
+    <div style={{ color: T.danger, fontSize: 12, marginTop: 6 }}>
+      {emailError}
+    </div>
+  )}
+</Field>
           
           
           
@@ -243,7 +268,8 @@ function UserModal({ user, groups, onClose, onSave }) {
         </div>
         <div style={{ padding: "16px 32px 28px", display: "flex", justifyContent: "flex-end", gap: 12 }}>
           <button onClick={onClose} style={{ padding: "10px 24px", borderRadius: 12, border: `1px solid ${T.border}`, background: "transparent", color: T.muted, fontWeight: 600, fontSize: 14, cursor: "pointer" }}>Cancel</button>
-          <button onClick={handleSave} disabled={loading} style={{ padding: "10px 28px", borderRadius: 12, border: "none", background: `linear-gradient(135deg, ${T.primary}, ${T.primaryDark})`, color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer", boxShadow: `0 4px 16px ${T.primary}44`, opacity: loading ? 0.7 : 1 }}>
+          <button onClick={handleSave} disabled={loading || emailError !== ""}
+ style={{ padding: "10px 28px", borderRadius: 12, border: "none", background: `linear-gradient(135deg, ${T.primary}, ${T.primaryDark})`, color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer", boxShadow: `0 4px 16px ${T.primary}44`, opacity: loading ? 0.7 : 1 }}>
             {loading ? "Creating..." : (user ? "Save Changes" : "Create User")}
           </button>
         </div>

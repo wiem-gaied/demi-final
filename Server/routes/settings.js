@@ -84,11 +84,42 @@ router.post(
       // 🔐 Génération token invitation
       const activation_token = crypto.randomBytes(32).toString("hex");
       const invitationLink = `http://localhost:5173/activate?token=${activation_token}`;
+      const emailRegex = /^[a-zA-Z0-9._-]+@[a-zA-Z.-]+\.[a-zA-Z]{2,}$/;
+
+      if (!email || !emailRegex.test(email)) {
+        return res.status(400).json({
+          message: "Email does not comply with the defined policy"
+        });
+      }
+
+      // 🔐 Vérifier doublon
+      const [existing] = await db.query(
+        "SELECT id FROM users WHERE email = ?",
+        [email]
+      );
+
+      if (existing.length > 0) {
+        return res.status(409).json({
+          message: "User already exists"
+        });
+      }
+
+      // 🔐 Contrôle rôle
+      const allowedRoles = ["admin", "user", "auditor"];
+
+      if (!allowedRoles.includes(role)) {
+        return res.status(400).json({
+          message: "Invalid role"
+        });
+      }
 
       // ✅ Détermination organisation
       let finalOrganization;
+      const activation_expires = new Date(
+        Date.now() + 4 * 60 * 60 * 1000
+      );
 
-      if (creator.role === "auditor") {
+      if (creator.role === "user") {
         finalOrganization = creator.organization;
       }
 
@@ -104,8 +135,8 @@ router.post(
       // 🧠 Insert user
       const [result] = await db.query(
         `INSERT INTO users 
-        (first_name, last_name, email, role, department, organization, status, activation_token)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        (first_name, last_name, email, role, department, organization,activation_expires, status, activation_token)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           first_name,
           last_name,
@@ -113,6 +144,7 @@ router.post(
           role,
           department,
           finalOrganization,
+          activation_expires,
           status,
           activation_token
         ]
@@ -139,6 +171,7 @@ router.post(
         organization: finalOrganization,
         status,
         department,
+        activation_expires,
         groups
       });
 
@@ -150,6 +183,7 @@ router.post(
 );
 router.get("/users", async (req, res) => {
   try {
+    
     const [rows] = await db.query(`
       SELECT 
         u.*,

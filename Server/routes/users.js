@@ -31,6 +31,8 @@ router.get("/", async (req, res) => {
     res.status(500).json({ error: "Erreur serveur" });
   }
 });
+const emailRegex = /^[a-zA-Z0-9._-]+@[a-zA-Z.-]+\.[a-zA-Z]{2,}$/;
+
 router.post("/",activityLogger("CREATE_USER", { table: "users", nameColumn: "email" }),async (req, res) => {
   const { first_name, last_name, email, role, organization,status,department} = req.body;
   
@@ -38,12 +40,26 @@ router.post("/",activityLogger("CREATE_USER", { table: "users", nameColumn: "ema
   try {
     const activation_token = crypto.randomBytes(32).toString("hex");
     const invitationLink = `http://localhost:5173/activate?token=${activation_token}`;
+    if (!email || !emailRegex.test(email)) {
+        return res.status(400).json({
+          message: "Invalid email format",
+        });
+      }
+    const [existing] = await pool.query("SELECT id FROM users WHERE email=?", [email]);
+      if (existing.length > 0) {
+        return res.status(409).json({ message: "User already exists" });
+      }
+      const allowedRoles = ["admin", "user", "auditor"];
+      if (!allowedRoles.includes(role)) {
+        return res.status(400).json({ message: "Rôle invalide" });
+      }
+      const activation_expires = new Date(Date.now() + 4 * 60 * 60 * 1000);
 
     // Envoyer l’email via ton mailer
     await sendInvitationEmail(email, first_name, invitationLink);
 
     const [result] = await pool.query(
-      "INSERT INTO users (first_name,last_name,email,role,organization,activation_token,status,department) VALUES (?,?,?,?,?,?,?,?)",
+      "INSERT INTO users (first_name,last_name,email,role,organization,activation_token,activation_expires,status,department) VALUES (?,?,?,?,?,?,?,?,?)",
       [
         first_name,
         last_name,
@@ -51,6 +67,7 @@ router.post("/",activityLogger("CREATE_USER", { table: "users", nameColumn: "ema
         role,
         organization,
         activation_token,
+        activation_expires,
         status,
         department,
         

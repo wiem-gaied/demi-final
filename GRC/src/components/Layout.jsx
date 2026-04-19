@@ -48,9 +48,9 @@ const menuItems = [
       { to: "/layout/business", label: "Business " },
     ]
   },
-  { to: "/layout/logs", icon: FileText, label: "Logs", roles: ["auditor"] },
+  { to: "/layout/logs", icon: FileText, label: "Logs", roles: ["user"] },
   { to: "/layout/reporting", icon: BarChart, label: "Reporting" },
-  { to: "/layout/settings", icon: Settings, label: "Settings", roles: ["auditor"] },
+  { to: "/layout/settings", icon: Settings, label: "Settings", roles: ["user"] },
 ];
 
 const handleLogout = async () => {
@@ -832,7 +832,6 @@ const Layout = () => {
                       <NavLink
                         key={sub.label}
                         to={sub.to}
-                        end
                         style={({ isActive }) => ({
                           padding: "7px 12px",
                           borderRadius: 7,
