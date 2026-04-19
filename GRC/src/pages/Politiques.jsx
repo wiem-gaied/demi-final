@@ -1,118 +1,193 @@
-import { useState, useEffect } from "react";
+// PolicyLibrary.jsx
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import { 
+  Package, BookOpen, FileText, Shield, Search, Plus, X, 
+  AlertCircle, CheckCircle, ChevronRight, ChevronDown, Trash2, Edit3
+} from "lucide-react";
 
-// ─── Design Tokens ────────────────────────────────────────────────────────────
-const C = {
-  bg: "#F8FAFF", surface: "#FFFFFF", surfaceAlt: "#F0F4FF",
-  border: "#E2E8F8", borderStrong: "#C7D2F0",
-  accent: "#3B6FFF", accentLight: "#EEF2FF", accentHover: "#2D5CE8",
-  purple: "#6D28D9", purpleLight: "#F5F0FF",
-  success: "#059669", successLight: "#ECFDF5",
-  warning: "#D97706", warningLight: "#FFFBEB",
-  danger: "#DC2626", dangerLight: "#FEF2F2",
-  info: "#0891B2", infoLight: "#ECFEFF",
-  text: "#0F172A", textMid: "#475569", textMuted: "#94A3B8",
-  shadow: "0 1px 3px rgba(15,23,42,0.07)",
-  shadowMd: "0 4px 12px rgba(15,23,42,0.09)",
-  shadowLg: "0 10px 30px rgba(15,23,42,0.13)",
+/* ─── Theme Constants ───────────────── */
+const THEME = {
+  colors: {
+    primary: "#6366F1",
+    primaryDark: "#4F46E5",
+    primaryLight: "#818CF8",
+    primaryBg: "#EEF2FF",
+    textDark: "#0F172A",
+    textGray: "#64748B",
+    textLight: "#94A3B8",
+    white: "#fff",
+    background: "#F8FAFC",
+    border: "#E2E8F0",
+    borderLight: "#F1F5F9",
+    success: "#10B981",
+    successLight: "#D1FAE5",
+    warning: "#F59E0B",
+    warningLight: "#FEF3C7",
+    error: "#EF4444",
+    errorLight: "#FEF2F2",
+    info: "#3B82F6",
+    infoLight: "#EFF6FF",
+  },
+  gradients: {
+    button: "linear-gradient(135deg, #6366F1, #4F46E5)",
+    cardHover: "linear-gradient(135deg, rgba(99,102,241,0.02), rgba(139,92,246,0.02))",
+  },
+  shadows: {
+    card: "0 2px 12px rgba(0,0,0,0.04)",
+    cardHover: "0 8px 24px rgba(0,0,0,0.08)",
+    modal: "0 32px 80px rgba(0,0,0,0.18)",
+    button: "0 4px 16px rgba(99,102,241,0.3)",
+  },
+  animation: {
+    fadeUp: {
+      hidden: { opacity: 0, y: 20 },
+      visible: { opacity: 1, y: 0 },
+    },
+    staggerContainer: {
+      hidden: { opacity: 0 },
+      visible: {
+        opacity: 1,
+        transition: { staggerChildren: 0.05 },
+      },
+    },
+  },
 };
-const F = { display: "'Fraunces', Georgia, serif", body: "'DM Sans', system-ui, sans-serif" };
 
-const STATUS_S = {
-  mandatory:   { bg: "#FEF2F2", text: "#DC2626", label: "Mandatory" },
-  recommended: { bg: "#FFFBEB", text: "#D97706", label: "Recommended" },
-  optional:    { bg: "#F0FDF4", text: "#059669", label: "Optional" },
+const STATUS_CONFIG = {
+  mandatory: { bg: THEME.colors.errorLight, text: THEME.colors.error, label: "Mandatory" },
+  recommended: { bg: THEME.colors.primaryBg, text: THEME.colors.primary, label: "Recommended" },
+  optional: { bg: THEME.colors.borderLight, text: THEME.colors.textGray, label: "Optional" },
 };
 
-// ─── Safe ID extractor ────────────────────────────────────────────────────────
-function resolveId(obj) {
-  if (!obj) return undefined;
-  return obj.id ?? obj.item_id ?? obj.chapter_id ?? obj.package_id ?? obj.policy_id ?? undefined;
-}
+/* ─── Badge Component ───────────────────────────── */
+const Badge = ({ variant = "default", children }) => {
+  const variants = {
+    primary: { bg: THEME.colors.primaryBg, text: THEME.colors.primary },
+    error: { bg: THEME.colors.errorLight, text: THEME.colors.error },
+    default: { bg: THEME.colors.borderLight, text: THEME.colors.textGray },
+  };
+  const style = variants[variant] || variants.default;
 
-function Badge({ bg, text, children }) {
-  return <span style={{ display:"inline-flex", alignItems:"center", padding:"2px 8px", borderRadius:20, fontSize:11, fontWeight:700, backgroundColor:bg, color:text, fontFamily:F.body }}>{children}</span>;
-}
+  return (
+    <span style={{
+      display: "inline-flex",
+      alignItems: "center",
+      padding: "2px 8px",
+      borderRadius: "20px",
+      fontSize: "11px",
+      fontWeight: "700",
+      backgroundColor: style.bg,
+      color: style.text,
+      fontFamily: "inherit",
+    }}>
+      {children}
+    </span>
+  );
+};
 
-// ─── Exception Badge ──────────────────────────────────────────────────────────
-function ExceptionBadge({ onAddException, isExcluded }) {
-  const [hov, setHov] = useState(false);
+/* ─── Exception Badge Component ───────────────────────────── */
+const ExceptionBadge = ({ onAddException, isExcluded }) => {
+  const [isHovered, setIsHovered] = useState(false);
+
   if (isExcluded) {
     return (
-      <span style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"2px 8px", borderRadius:20, fontSize:10, fontWeight:600, background:C.warningLight, color:C.warning, border:`1px solid ${C.warning}40` }}>
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-          <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-        </svg>
+      <span style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "4px",
+        padding: "2px 8px",
+        borderRadius: "20px",
+        fontSize: "10px",
+        fontWeight: "600",
+        background: THEME.colors.errorLight,
+        color: THEME.colors.error,
+        border: `1px solid ${THEME.colors.error}40`,
+      }}>
+        <AlertCircle size={10} />
         Excluded
       </span>
     );
   }
-  return (
-    <button onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)} onClick={onAddException}
-      style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"2px 8px", borderRadius:20, border:`1px solid ${hov ? C.warning : C.border}`, cursor:"pointer",
-        background: hov ? C.warningLight : C.surfaceAlt, color: hov ? C.warning : C.textMuted,
-        fontFamily:F.body, fontSize:10, fontWeight:600, transition:"all .15s" }}>
-      <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-        <path d="M5 1V9M1 5H9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-      </svg>
-      Add exception
-    </button>
-  );
-}
-
-// ─── Toggle Switch (replaces Import/Remove Button) ────────────────────────────
-function ImportUnimportBtn({ color, onImport, onUnimport, size = "md", isImported }) {
-  const [hov, setHov] = useState(false);
-  const isSmall = size === "sm";
-  const trackW = isSmall ? 36 : 44;
-  const trackH = isSmall ? 20 : 24;
-  const knobSize = isSmall ? 14 : 18;
-  const knobOffset = isSmall ? 3 : 3;
-  const knobTranslate = isSmall ? 16 : 20;
-
-  const trackColor = isImported
-    ? (hov ? color : color)
-    : (hov ? `${color}30` : C.surfaceAlt);
-
-  const trackBorder = isImported
-    ? `1.5px solid ${color}`
-    : `1.5px solid ${hov ? color + "60" : C.border}`;
 
   return (
     <button
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      onClick={onAddException}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "4px",
+        padding: "2px 8px",
+        borderRadius: "20px",
+        border: `1px solid ${isHovered ? THEME.colors.error : THEME.colors.border}`,
+        cursor: "pointer",
+        background: isHovered ? THEME.colors.errorLight : THEME.colors.white,
+        color: isHovered ? THEME.colors.error : THEME.colors.textGray,
+        fontFamily: "inherit",
+        fontSize: "10px",
+        fontWeight: "600",
+        transition: "all 0.15s",
+      }}
+    >
+      <Plus size={10} />
+      Add exception
+    </button>
+  );
+};
+
+/* ─── Toggle Switch Component ───────────────────────────── */
+const ToggleSwitch = ({ onImport, onUnimport, size = "md", isImported }) => {
+  const [isHovered, setIsHovered] = useState(false);
+  const isSmall = size === "sm";
+  const trackWidth = isSmall ? 36 : 44;
+  const trackHeight = isSmall ? 20 : 24;
+  const knobSize = isSmall ? 14 : 18;
+  const knobTranslate = isSmall ? 16 : 20;
+  const color = THEME.colors.primary;
+
+  const trackColor = isImported
+    ? (isHovered ? color : color)
+    : (isHovered ? `${color}30` : THEME.colors.borderLight);
+
+  const trackBorder = isImported
+    ? `1.5px solid ${color}`
+    : `1.5px solid ${isHovered ? color + "60" : THEME.colors.border}`;
+
+  return (
+    <button
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       onClick={isImported ? onUnimport : onImport}
-      title={isImported ? "Remove" : "Import"}
+      title={isImported ? "Remove from library" : "Import to library"}
       style={{
         position: "relative",
-        width: trackW,
-        height: trackH,
-        borderRadius: trackH,
+        width: trackWidth,
+        height: trackHeight,
+        borderRadius: trackHeight,
         border: trackBorder,
         background: trackColor,
         cursor: "pointer",
         padding: 0,
-        transition: "background .22s, border-color .22s, box-shadow .22s",
-        boxShadow: isImported
-          ? `0 0 0 3px ${color}22`
-          : hov ? `0 0 0 2px ${color}18` : "none",
+        transition: "background 0.22s, border-color 0.22s, box-shadow 0.22s",
+        boxShadow: isImported ? `0 0 0 3px ${color}22` : (isHovered ? `0 0 0 2px ${color}18` : "none"),
         flexShrink: 0,
         outline: "none",
       }}
     >
-      {/* Knob */}
       <span
         style={{
           position: "absolute",
           top: "50%",
-          left: knobOffset,
+          left: 3,
           transform: `translateY(-50%) translateX(${isImported ? knobTranslate : 0}px)`,
           width: knobSize,
           height: knobSize,
           borderRadius: "50%",
-          background: isImported ? "#fff" : (hov ? color : C.borderStrong),
-          transition: "transform .22s cubic-bezier(.34,1.56,.64,1), background .18s",
+          background: isImported ? "#fff" : (isHovered ? color : THEME.colors.border),
+          transition: "transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.18s",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -120,20 +195,19 @@ function ImportUnimportBtn({ color, onImport, onUnimport, size = "md", isImporte
           pointerEvents: "none",
         }}
       >
-        {/* Checkmark when imported */}
         {isImported && (
-          <svg width={isSmall ? 7 : 9} height={isSmall ? 7 : 9} viewBox="0 0 9 9" fill="none">
-            <path d="M1.5 4.5L3.5 6.5L7.5 2.5" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
+          <CheckCircle size={isSmall ? 7 : 9} color={color} />
         )}
       </span>
     </button>
   );
-}
+};
 
-// ─── Import Modal ─────────────────────────────────────────────────────────────
-function ImportModal({ target, color, onClose, onConfirm }) {
+/* ─── Import Modal ───────────────────────────── */
+const ImportModal = ({ target, onClose, onConfirm }) => {
   const [isImporting, setIsImporting] = useState(false);
+  const color = THEME.colors.primary;
+
   const handleImport = async () => {
     if (!target) return;
     setIsImporting(true);
@@ -146,69 +220,129 @@ function ImportModal({ target, color, onClose, onConfirm }) {
       onClose();
     }
   };
+
   return (
-    <div style={{ position:"fixed", inset:0, backgroundColor:"rgba(15,23,42,0.48)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:2000, backdropFilter:"blur(5px)" }} onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()}
-        style={{ background:C.surface, borderRadius:20, padding:30, width:460, maxWidth:"92vw", boxShadow:C.shadowLg, border:`1px solid ${C.border}`, animation:"slideUp .2s ease" }}>
-        <style>{`@keyframes slideUp{from{transform:translateY(16px);opacity:0}to{transform:none;opacity:1}}`}</style>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:14 }}>
+    <div style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(15,23,42,0.6)",
+      backdropFilter: "blur(8px)",
+      zIndex: 1000,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+    }} onClick={onClose}>
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.95, opacity: 0 }}
+        style={{
+          background: THEME.colors.white,
+          borderRadius: "24px",
+          width: "480px",
+          maxWidth: "90vw",
+          boxShadow: THEME.shadows.modal,
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ padding: "24px 28px 0 28px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
-            <div style={{ fontFamily:F.display, fontSize:18, fontWeight:800, color:C.text, marginBottom:3 }}>Import Policy</div>
-            <div style={{ fontFamily:F.body, fontSize:13, color:C.textMid }}>
-              Import <span style={{ color, fontWeight:700 }}>{target?.title || "this policy"}</span> to your library
-            </div>
+            <h2 style={{ fontSize: "20px", fontWeight: "700", color: THEME.colors.textDark, marginBottom: "4px" }}>Import Policy</h2>
+            <p style={{ fontSize: "13px", color: THEME.colors.textGray }}>
+              Import <span style={{ color, fontWeight: 700 }}>{target?.title || "this policy"}</span> to your library
+            </p>
           </div>
-          <button onClick={onClose} style={{ width:30, height:30, borderRadius:8, border:"none", background:C.surfaceAlt, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", color:C.textMid }}>
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 2L10 10M10 2L2 10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+          <button onClick={onClose} style={{
+            background: THEME.colors.borderLight,
+            border: "none",
+            borderRadius: "10px",
+            width: "32px",
+            height: "32px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer",
+            color: THEME.colors.textGray,
+          }}>
+            <X size={16} />
           </button>
         </div>
-        <div style={{ display:"flex", gap:7, alignItems:"center", flexWrap:"wrap", padding:"12px 16px", borderRadius:12, background:`${color}08`, marginBottom:20, border:`1px solid ${color}20` }}>
-          <span style={{ fontFamily:F.body, fontSize:13, fontWeight:600, color:C.text }}>Version:</span>
-          <span style={{ fontFamily:F.body, fontSize:12, color }}>v{target?.version || "1.0"}</span>
-          {target?.level === "package" && target?.chaptersCount && (
-            <>
-              <span style={{ fontFamily:F.body, fontSize:13, fontWeight:600, color:C.text }}>Contains:</span>
-              <span style={{ fontFamily:F.body, fontSize:12, color:C.textMuted }}>{target.chaptersCount} chapters, {target.itemsCount} items</span>
-            </>
-          )}
-        </div>
-        <div style={{ marginBottom:20 }}>
-          <div style={{ fontFamily:F.body, fontSize:13, color:C.textMid, marginBottom:8 }}>
+
+        <div style={{ padding: "0 28px" }}>
+          <div style={{
+            display: "flex",
+            gap: "8px",
+            alignItems: "center",
+            flexWrap: "wrap",
+            padding: "12px 16px",
+            borderRadius: "12px",
+            background: `${color}08`,
+            marginBottom: "20px",
+            border: `1px solid ${color}20`,
+          }}>
+            <span style={{ fontSize: "13px", fontWeight: "600", color: THEME.colors.textDark }}>Version:</span>
+            <span style={{ fontSize: "12px", color }}>v{target?.version || "1.0"}</span>
+            {target?.level === "package" && target?.chaptersCount && (
+              <>
+                <span style={{ fontSize: "13px", fontWeight: "600", color: THEME.colors.textDark }}>Contains:</span>
+                <span style={{ fontSize: "12px", color }}>{target.chaptersCount} chapters, {target.itemsCount} items</span>
+              </>
+            )}
+          </div>
+
+          <div style={{ fontSize: "13px", color: THEME.colors.textGray, marginBottom: "20px" }}>
             {target?.level === "package"
               ? `This will import the entire package "${target.title}" including all its chapters and items.`
               : `This policy will be added to your imported policies library.`}
           </div>
         </div>
-        <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
-          <button onClick={onClose} style={{ padding:"8px 18px", borderRadius:9, border:`1px solid ${C.border}`, background:C.surface, cursor:"pointer", fontFamily:F.body, fontSize:13, fontWeight:600, color:C.textMid }}>
-            Cancel
-          </button>
-          <button onClick={handleImport} disabled={isImporting}
-            style={{ padding:"8px 22px", borderRadius:9, border:"none", cursor:isImporting?"wait":"pointer",
-              background:isImporting?C.borderStrong:`linear-gradient(135deg,${color},${C.accentHover})`,
-              color:"#fff", fontFamily:F.body, fontSize:13, fontWeight:600,
-              boxShadow:isImporting?"none":`0 2px 8px ${color}40`, transition:"all .15s",
-              display:"flex", alignItems:"center", gap:8 }}>
-            {isImporting ? (
-              <>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="8">
-                    <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.8s" repeatCount="indefinite"/>
-                  </circle>
-                </svg>
-                Importing...
-              </>
-            ) : "Confirm Import"}
-          </button>
+
+        <div style={{ padding: "0 28px 28px 28px" }}>
+          <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+            <button onClick={onClose} style={{
+              padding: "8px 18px",
+              borderRadius: "10px",
+              border: `1.5px solid ${THEME.colors.border}`,
+              background: THEME.colors.white,
+              cursor: "pointer",
+              fontSize: "13px",
+              fontWeight: "600",
+              color: THEME.colors.textGray,
+            }}>
+              Cancel
+            </button>
+            <button onClick={handleImport} disabled={isImporting} style={{
+              padding: "8px 22px",
+              borderRadius: "10px",
+              border: "none",
+              cursor: isImporting ? "wait" : "pointer",
+              background: isImporting ? THEME.colors.border : THEME.gradients.button,
+              color: THEME.colors.white,
+              fontSize: "13px",
+              fontWeight: "600",
+              boxShadow: isImporting ? "none" : THEME.shadows.button,
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+            }}>
+              {isImporting ? (
+                <>
+                  <div style={{ width: 14, height: 14, border: `2px solid ${THEME.colors.white}`, borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                  Importing...
+                </>
+              ) : "Confirm Import"}
+            </button>
+          </div>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
-}
+};
 
-// ─── Unimport Modal ───────────────────────────────────────────────────────────
-function UnimportModal({ target, color, onClose, onConfirm }) {
+/* ─── Unimport Modal ───────────────────────────── */
+const UnimportModal = ({ target, onClose, onConfirm }) => {
   const [isUnimporting, setIsUnimporting] = useState(false);
+
   const handleUnimport = async () => {
     if (!target) return;
     setIsUnimporting(true);
@@ -221,127 +355,279 @@ function UnimportModal({ target, color, onClose, onConfirm }) {
       onClose();
     }
   };
+
   return (
-    <div style={{ position:"fixed", inset:0, backgroundColor:"rgba(15,23,42,0.48)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:2000, backdropFilter:"blur(5px)" }} onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()}
-        style={{ background:C.surface, borderRadius:20, padding:30, width:460, maxWidth:"92vw", boxShadow:C.shadowLg, border:`1px solid ${C.border}`, animation:"slideUp .2s ease" }}>
-        <style>{`@keyframes slideUp{from{transform:translateY(16px);opacity:0}to{transform:none;opacity:1}}`}</style>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:14 }}>
+    <div style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(15,23,42,0.6)",
+      backdropFilter: "blur(8px)",
+      zIndex: 1000,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+    }} onClick={onClose}>
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.95, opacity: 0 }}
+        style={{
+          background: THEME.colors.white,
+          borderRadius: "24px",
+          width: "480px",
+          maxWidth: "90vw",
+          boxShadow: THEME.shadows.modal,
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ padding: "24px 28px 0 28px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
-            <div style={{ fontFamily:F.display, fontSize:18, fontWeight:800, color:C.text, marginBottom:3 }}>Remove Imported Policy</div>
-            <div style={{ fontFamily:F.body, fontSize:13, color:C.textMid }}>
-              Remove <span style={{ color, fontWeight:700 }}>{target?.title || "this policy"}</span> from your library
-            </div>
+            <h2 style={{ fontSize: "20px", fontWeight: "700", color: THEME.colors.textDark, marginBottom: "4px" }}>Remove Imported Policy</h2>
+            <p style={{ fontSize: "13px", color: THEME.colors.textGray }}>
+              Remove <span style={{ color: THEME.colors.error, fontWeight: 700 }}>{target?.title || "this policy"}</span> from your library
+            </p>
           </div>
-          <button onClick={onClose} style={{ width:30, height:30, borderRadius:8, border:"none", background:C.surfaceAlt, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", color:C.textMid }}>
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 2L10 10M10 2L2 10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+          <button onClick={onClose} style={{
+            background: THEME.colors.borderLight,
+            border: "none",
+            borderRadius: "10px",
+            width: "32px",
+            height: "32px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer",
+            color: THEME.colors.textGray,
+          }}>
+            <X size={16} />
           </button>
         </div>
-        <div style={{ display:"flex", gap:7, alignItems:"center", flexWrap:"wrap", padding:"12px 16px", borderRadius:12, background:`${C.danger}08`, marginBottom:20, border:`1px solid ${C.danger}20` }}>
-          <span style={{ fontFamily:F.body, fontSize:13, fontWeight:600, color:C.text }}>Version:</span>
-          <span style={{ fontFamily:F.body, fontSize:12, color }}>v{target?.version || "1.0"}</span>
-        </div>
-        <div style={{ marginBottom:20 }}>
-          <div style={{ fontFamily:F.body, fontSize:13, color:C.textMid, marginBottom:8 }}>
+
+        <div style={{ padding: "0 28px" }}>
+          <div style={{
+            display: "flex",
+            gap: "8px",
+            alignItems: "center",
+            flexWrap: "wrap",
+            padding: "12px 16px",
+            borderRadius: "12px",
+            background: `${THEME.colors.error}08`,
+            marginBottom: "20px",
+            border: `1px solid ${THEME.colors.error}20`,
+          }}>
+            <span style={{ fontSize: "13px", fontWeight: "600", color: THEME.colors.textDark }}>Version:</span>
+            <span style={{ fontSize: "12px", color: THEME.colors.error }}>v{target?.version || "1.0"}</span>
+          </div>
+
+          <div style={{ fontSize: "13px", color: THEME.colors.textGray, marginBottom: "16px" }}>
             {target?.level === "package"
               ? `This will remove the entire package "${target.title}" including all chapters and items.`
               : `This policy will be removed from your imported policies library.`}
           </div>
-          <div style={{ fontFamily:F.body, fontSize:12, color:C.warning, background:C.warningLight, padding:"8px 12px", borderRadius:8, marginTop:8 }}>
+
+          <div style={{
+            fontSize: "12px",
+            color: THEME.colors.error,
+            background: THEME.colors.errorLight,
+            padding: "8px 12px",
+            borderRadius: "8px",
+            marginBottom: "20px",
+          }}>
             ⚠️ This action cannot be undone.
           </div>
         </div>
-        <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
-          <button onClick={onClose} style={{ padding:"8px 18px", borderRadius:9, border:`1px solid ${C.border}`, background:C.surface, cursor:"pointer", fontFamily:F.body, fontSize:13, fontWeight:600, color:C.textMid }}>
-            Cancel
-          </button>
-          <button onClick={handleUnimport} disabled={isUnimporting}
-            style={{ padding:"8px 22px", borderRadius:9, border:"none", cursor:isUnimporting?"wait":"pointer",
-              background:isUnimporting?C.borderStrong:C.danger, color:"#fff",
-              fontFamily:F.body, fontSize:13, fontWeight:600,
-              boxShadow:isUnimporting?"none":`0 2px 8px ${C.danger}40`, transition:"all .15s",
-              display:"flex", alignItems:"center", gap:8 }}>
-            {isUnimporting ? (
-              <>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="8">
-                    <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.8s" repeatCount="indefinite"/>
-                  </circle>
-                </svg>
-                Removing...
-              </>
-            ) : "Confirm Remove"}
-          </button>
+
+        <div style={{ padding: "0 28px 28px 28px" }}>
+          <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+            <button onClick={onClose} style={{
+              padding: "8px 18px",
+              borderRadius: "10px",
+              border: `1.5px solid ${THEME.colors.border}`,
+              background: THEME.colors.white,
+              cursor: "pointer",
+              fontSize: "13px",
+              fontWeight: "600",
+              color: THEME.colors.textGray,
+            }}>
+              Cancel
+            </button>
+            <button onClick={handleUnimport} disabled={isUnimporting} style={{
+              padding: "8px 22px",
+              borderRadius: "10px",
+              border: "none",
+              cursor: isUnimporting ? "wait" : "pointer",
+              background: isUnimporting ? THEME.colors.border : THEME.colors.error,
+              color: THEME.colors.white,
+              fontSize: "13px",
+              fontWeight: "600",
+              boxShadow: isUnimporting ? "none" : `0 2px 8px ${THEME.colors.error}40`,
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+            }}>
+              {isUnimporting ? (
+                <>
+                  <div style={{ width: 14, height: 14, border: `2px solid ${THEME.colors.white}`, borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                  Removing...
+                </>
+              ) : "Confirm Remove"}
+            </button>
+          </div>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
-}
+};
 
-// ─── Exception Modal ──────────────────────────────────────────────────────────
-function ExceptionModal({ target, onClose, onConfirm }) {
+/* ─── Exception Modal ───────────────────────────── */
+const ExceptionModal = ({ target, onClose, onConfirm }) => {
   const [reason, setReason] = useState("");
   const [isAdding, setIsAdding] = useState(false);
+
   const handleSubmit = async () => {
     if (!reason.trim()) return;
     setIsAdding(true);
     try {
       await onConfirm(reason);
-            onClose();
+      onClose();
     } catch (err) {
       console.error(err);
     } finally {
       setIsAdding(false);
     }
   };
+
   return (
-    <div style={{ position:"fixed", inset:0, backgroundColor:"rgba(15,23,42,0.48)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:2000, backdropFilter:"blur(5px)" }} onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()}
-        style={{ background:C.surface, borderRadius:20, padding:30, width:460, maxWidth:"92vw", boxShadow:C.shadowLg, border:`1px solid ${C.border}` }}>
-        <div style={{ marginBottom:14 }}>
-          <div style={{ fontFamily:F.display, fontSize:18, fontWeight:800 }}>Add Exception</div>
-          <div style={{ fontFamily:F.body, fontSize:13, color:C.textMid }}>Exclude <b>{target?.title}</b> from compliance scope</div>
+    <div style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(15,23,42,0.6)",
+      backdropFilter: "blur(8px)",
+      zIndex: 1000,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+    }} onClick={onClose}>
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.95, opacity: 0 }}
+        style={{
+          background: THEME.colors.white,
+          borderRadius: "24px",
+          width: "480px",
+          maxWidth: "90vw",
+          boxShadow: THEME.shadows.modal,
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ padding: "24px 28px 0 28px" }}>
+          <h2 style={{ fontSize: "20px", fontWeight: "700", color: THEME.colors.textDark, marginBottom: "4px" }}>Add Exception</h2>
+          <p style={{ fontSize: "13px", color: THEME.colors.textGray, marginBottom: "20px" }}>
+            Exclude <strong>{target?.title}</strong> from compliance scope
+          </p>
         </div>
-        <div style={{ marginBottom:20 }}>
-          <label style={{ fontSize:12, fontWeight:700 }}>Reason *</label>
-          <textarea value={reason} onChange={e=>setReason(e.target.value)}
-            style={{ width:"100%", minHeight:100, marginTop:8, padding:10, borderRadius:8, border:`1px solid ${C.border}`, boxSizing:"border-box" }}/>
+
+        <div style={{ padding: "0 28px" }}>
+          <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: THEME.colors.textGray, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "8px" }}>Reason *</label>
+          <textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Please provide a reason for this exception..."
+            style={{
+              width: "100%",
+              minHeight: "100px",
+              padding: "10px 14px",
+              border: `1.5px solid ${THEME.colors.border}`,
+              borderRadius: "12px",
+              fontSize: "14px",
+              color: THEME.colors.textDark,
+              outline: "none",
+              fontFamily: "inherit",
+              resize: "vertical",
+              marginBottom: "20px",
+            }}
+          />
         </div>
-        <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
-          <button onClick={onClose} style={{ padding:"8px 16px", borderRadius:8, border:`1px solid ${C.border}`, background:C.surface, cursor:"pointer", fontFamily:F.body, fontSize:13, color:C.textMid }}>Cancel</button>
-          <button onClick={handleSubmit} disabled={!reason.trim() || isAdding}
-            style={{ background:C.warning, color:"#fff", padding:"8px 16px", borderRadius:8, border:"none", cursor:"pointer", fontFamily:F.body, fontSize:13, fontWeight:600 }}>
-            {isAdding ? "Adding..." : "Confirm Exception"}
-          </button>
+
+        <div style={{ padding: "0 28px 28px 28px" }}>
+          <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+            <button onClick={onClose} style={{
+              padding: "8px 18px",
+              borderRadius: "10px",
+              border: `1.5px solid ${THEME.colors.border}`,
+              background: THEME.colors.white,
+              cursor: "pointer",
+              fontSize: "13px",
+              fontWeight: "600",
+              color: THEME.colors.textGray,
+            }}>
+              Cancel
+            </button>
+            <button onClick={handleSubmit} disabled={!reason.trim() || isAdding} style={{
+              padding: "8px 22px",
+              borderRadius: "10px",
+              border: "none",
+              cursor: (!reason.trim() || isAdding) ? "not-allowed" : "pointer",
+              background: (!reason.trim() || isAdding) ? THEME.colors.border : THEME.colors.error,
+              color: THEME.colors.white,
+              fontSize: "13px",
+              fontWeight: "600",
+              opacity: (!reason.trim() || isAdding) ? 0.6 : 1,
+            }}>
+              {isAdding ? "Adding..." : "Confirm Exception"}
+            </button>
+          </div>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
-}
+};
 
-// ─── Item Row ─────────────────────────────────────────────────────────────────
-function ItemRow({ item, pkgColor, isImported, isExcluded, onImport, onUnimport, onAddException }) {
-  const [hov, setHov] = useState(false);
-  const itemId = resolveId(item);
+/* ─── Item Row Component ───────────────────────────── */
+const ItemRow = ({ item, isImported, isExcluded, onImport, onUnimport, onAddException }) => {
+  const [isHovered, setIsHovered] = useState(false);
+  const status = STATUS_CONFIG[item.type] || STATUS_CONFIG.optional;
 
   return (
-    <div onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
-      style={{ borderRadius:10, border:`1px solid ${hov?pkgColor+"44":C.border}`, background:isExcluded?C.warningLight:C.surface, padding:"11px 14px", transition:"all .18s", boxShadow:hov?`0 3px 12px ${pkgColor}12`:C.shadow, transform:hov?"translateY(-1px)":"none" }}>
-      <div style={{ display:"flex", gap:10, alignItems:"flex-start" }}>
-        <div style={{ width:7, height:7, borderRadius:"50%", marginTop:6, flexShrink:0, backgroundColor:isExcluded?C.warning:(isImported?C.success:C.border), transition:"all .2s" }}/>
-        <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ display:"flex", alignItems:"center", gap:7, flexWrap:"wrap", marginBottom:3 }}>
-            <span style={{ fontFamily:F.display, fontSize:13, fontWeight:700, color:isExcluded?C.warning:C.text }}>{item.title}</span>
-            <span style={{ fontFamily:F.body, fontSize:10, color:C.textMuted, background:C.surfaceAlt, padding:"1px 6px", borderRadius:5, fontWeight:600 }}>v{item.version||"1.0"}</span>
-            <Badge bg={STATUS_S[item.type]?.bg||C.surfaceAlt} text={STATUS_S[item.type]?.text||C.textMuted}>{STATUS_S[item.type]?.label||item.type||"Optional"}</Badge>
-            <ExceptionBadge isExcluded={isExcluded} onAddException={onAddException}/>
+    <div
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      style={{
+        borderRadius: "10px",
+        border: `1px solid ${isHovered ? THEME.colors.primary + "44" : THEME.colors.borderLight}`,
+        background: isExcluded ? THEME.colors.errorLight : THEME.colors.white,
+        padding: "11px 14px",
+        transition: "all 0.18s",
+        boxShadow: isHovered ? `0 3px 12px ${THEME.colors.primary}12` : "none",
+        transform: isHovered ? "translateY(-1px)" : "none",
+      }}
+    >
+      <div style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
+        <div style={{
+          width: "7px",
+          height: "7px",
+          borderRadius: "50%",
+          marginTop: "6px",
+          flexShrink: 0,
+          backgroundColor: isExcluded ? THEME.colors.error : (isImported ? THEME.colors.primary : THEME.colors.border),
+          transition: "all 0.2s",
+        }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "3px" }}>
+            <span style={{ fontSize: "13px", fontWeight: "700", color: isExcluded ? THEME.colors.error : THEME.colors.textDark }}>{item.title}</span>
+            <span style={{ fontSize: "10px", color: THEME.colors.textLight, background: THEME.colors.borderLight, padding: "1px 6px", borderRadius: "5px", fontWeight: "600" }}>v{item.version || "1.0"}</span>
+            <Badge variant={item.type === "mandatory" ? "error" : "primary"}>{status.label}</Badge>
+            <ExceptionBadge isExcluded={isExcluded} onAddException={onAddException} />
           </div>
-          <p style={{ fontFamily:F.body, fontSize:12, color:C.textMid, margin:"0 0 7px", lineHeight:1.5 }}>{item.description}</p>
+          <p style={{ fontSize: "12px", color: THEME.colors.textGray, margin: "0 0 7px", lineHeight: 1.5 }}>{item.description}</p>
         </div>
         {!isExcluded && (
-          <ImportUnimportBtn color={pkgColor} size="sm" isImported={isImported}
+          <ToggleSwitch
+            size="sm"
+            isImported={isImported}
             onImport={() => onImport({
-              id: itemId,
+              id: item.id,
               title: item.title,
               level: "item",
               version: item.version || "1.0",
@@ -349,7 +635,7 @@ function ItemRow({ item, pkgColor, isImported, isExcluded, onImport, onUnimport,
               package_id: item.package_id
             })}
             onUnimport={() => onUnimport({
-              id: itemId,
+              id: item.id,
               title: item.title,
               level: "item",
               version: item.version || "1.0"
@@ -359,55 +645,72 @@ function ItemRow({ item, pkgColor, isImported, isExcluded, onImport, onUnimport,
       </div>
     </div>
   );
-}
+};
 
-// ─── Chapter Card ─────────────────────────────────────────────────────────────
-function ChapterCard({ chapter, pkgColor, importedItems, excludedItems, onImport, onUnimport, onAddException, packageId }) {
-  const [open, setOpen] = useState(true);
-  const chapterId = resolveId(chapter);
-  const importedChapter = importedItems.find(
-  i => i.id === chapterId && i.level === "chapter"
-);
+/* ─── Chapter Card Component ───────────────────────────── */
+const ChapterCard = ({ chapter, importedItems, excludedItems, onImport, onUnimport, onAddException, packageId }) => {
+  const [isOpen, setIsOpen] = useState(true);
+  const chapterId = chapter.id;
 
-const isChapterChanged =
-  importedChapter &&
-  importedChapter.itemsCount !== (chapter.items?.length || 0);
-
-const chapterImported = importedChapter && !isChapterChanged;
-  const chapterExcluded = excludedItems.some(i =>i.id === chapterId && i.level === "chapter");
+  const importedChapter = importedItems.find(i => i.id === chapterId && i.level === "chapter");
+  const isStructureChanged = importedChapter && importedChapter.itemsCount !== (chapter.items?.length || 0);
+  const chapterImported = importedChapter && !isStructureChanged;
+  const chapterExcluded = excludedItems.some(i => i.id === chapterId && i.level === "chapter");
   const allItemsImported = chapter.items?.length > 0 && chapter.items.every(item =>
-    importedItems.some(i =>i.id === resolveId(item) && i.level === "item")
+    importedItems.some(i => i.id === item.id && i.level === "item")
   );
 
   return (
-    <div style={{ borderRadius:12, border:`1.5px solid ${open?pkgColor+"28":C.border}`, overflow:"hidden", background:C.surface }}>
-      <div style={{ display:"flex", alignItems:"center", background:open?`${pkgColor}07`:C.surfaceAlt, borderBottom:open?`1px solid ${C.border}`:"none" }}>
-        <button onClick={()=>setOpen(o=>!o)}
-          style={{ flex:1, display:"flex", alignItems:"center", gap:9, padding:"10px 14px", background:"transparent", border:"none", cursor:"pointer", textAlign:"left" }}>
-          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style={{ transform:open?"rotate(90deg)":"none", transition:"transform .2s", flexShrink:0 }}>
-            <path d="M4 2.5L9 6.5L4 10.5" stroke={pkgColor} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-          <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-  <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>
-    {chapter.title}
-  </span>
-
-  {chapter.description && (
-    <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>
-      {chapter.description}
-    </div>
-  )}
-</div>
+    <div style={{
+      borderRadius: "12px",
+      border: `1.5px solid ${isOpen ? THEME.colors.primary + "28" : THEME.colors.borderLight}`,
+      overflow: "hidden",
+      background: THEME.colors.white,
+    }}>
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        background: isOpen ? `${THEME.colors.primary}07` : THEME.colors.borderLight,
+        borderBottom: isOpen ? `1px solid ${THEME.colors.borderLight}` : "none",
+      }}>
+        <button onClick={() => setIsOpen(!isOpen)} style={{
+          flex: 1,
+          display: "flex",
+          alignItems: "center",
+          gap: "9px",
+          padding: "10px 14px",
+          background: "transparent",
+          border: "none",
+          cursor: "pointer",
+          textAlign: "left",
+        }}>
+          <ChevronRight size={13} style={{
+            transform: isOpen ? "rotate(90deg)" : "none",
+            transition: "transform 0.2s",
+            flexShrink: 0,
+          }} color={THEME.colors.primary} />
+          <div style={{ flex: 1 }}>
+            <span style={{ fontSize: "13px", fontWeight: "700", color: THEME.colors.textDark }}>{chapter.title}</span>
+            {chapter.description && (
+              <div style={{ fontSize: "12px", color: THEME.colors.textGray, marginTop: "2px" }}>{chapter.description}</div>
+            )}
+          </div>
           {allItemsImported && !chapterExcluded && (
-            <span style={{ fontFamily:F.body, fontSize:10, fontWeight:600, color:C.success, background:C.successLight, padding:"2px 8px", borderRadius:12 }}>All imported</span>
+            <span style={{ fontSize: "10px", fontWeight: "600", padding: "2px 8px", borderRadius: "12px", background: THEME.colors.primaryBg, color: THEME.colors.primary }}>
+              All imported
+            </span>
           )}
           {chapterExcluded && (
-            <span style={{ fontFamily:F.body, fontSize:10, fontWeight:600, color:C.warning, background:C.warningLight, padding:"2px 8px", borderRadius:12 }}>Excluded</span>
+            <span style={{ fontSize: "10px", fontWeight: "600", padding: "2px 8px", borderRadius: "12px", background: THEME.colors.errorLight, color: THEME.colors.error }}>
+              Excluded
+            </span>
           )}
         </button>
         {!chapterExcluded && (
-          <div style={{ padding:"0 12px" }}>
-            <ImportUnimportBtn color={pkgColor} size="sm" isImported={chapterImported||allItemsImported}
+          <div style={{ padding: "0 12px" }}>
+            <ToggleSwitch
+              size="sm"
+              isImported={chapterImported || allItemsImported}
               onImport={() => onImport({
                 id: chapterId,
                 title: chapter.title,
@@ -427,112 +730,122 @@ const chapterImported = importedChapter && !isChapterChanged;
           </div>
         )}
       </div>
-      {open && chapter.items && (
-        <div style={{ padding:"10px 12px", display:"flex", flexDirection:"column", gap:7 }}>
-          {chapter.items.map((item, idx) => {
-            const itemId = resolveId(item);
-            return (
-              <ItemRow key={itemId ?? idx} item={item} pkgColor={pkgColor}
-                isImported={importedItems.some(i =>i.id === itemId && i.level === "item")}
-                isExcluded={excludedItems.some(i =>i.id === itemId && i.level === "item")}
-                onImport={onImport}
-                onUnimport={onUnimport}
-                onAddException={() => onAddException({ ...item, id: itemId, level: "item" })}
-              />
-            );
-          })}
+      {isOpen && chapter.items && (
+        <div style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: "7px" }}>
+          {chapter.items.map((item) => (
+            <ItemRow
+              key={item.id}
+              item={item}
+              isImported={importedItems.some(i => i.id === item.id && i.level === "item")}
+              isExcluded={excludedItems.some(i => i.id === item.id && i.level === "item")}
+              onImport={onImport}
+              onUnimport={onUnimport}
+              onAddException={() => onAddException({ ...item, id: item.id, level: "item" })}
+            />
+          ))}
         </div>
       )}
     </div>
   );
-}
+};
 
-// ─── Package Panel ────────────────────────────────────────────────────────────
-function PackagePanel({ pkg, importedItems, excludedItems, onImport, onUnimport, onAddException, isNew }) {
-  const [open, setOpen] = useState(true);
-  const pkgId = resolveId(pkg);
+/* ─── Package Panel Component ───────────────────────────── */
+const PackagePanel = ({ pkg, importedItems, excludedItems, onImport, onUnimport, onAddException, isNew }) => {
+  const [isOpen, setIsOpen] = useState(true);
+  const pkgId = pkg.id;
   const allItems = pkg.chapters?.flatMap(c => c.items) || [];
   const allChapters = pkg.chapters || [];
 
-  const importedPkg = importedItems.find(
-  i => i.id === pkgId && i.level === "package"
-);
-
-const allItemsImported =
-  allItems.length > 0 &&
-  allItems.every(item =>
-    importedItems.some(i => i.id === resolveId(item) && i.level === "item")
+  const importedPkg = importedItems.find(i => i.id === pkgId && i.level === "package");
+  const allItemsImported = allItems.length > 0 && allItems.every(item =>
+    importedItems.some(i => i.id === item.id && i.level === "item")
   );
-  const allChaptersImported =
-  allChapters.length > 0 &&
-  allChapters.every(ch =>
-    importedItems.some(i => i.id === resolveId(ch) && i.level === "chapter")
+  const allChaptersImported = allChapters.length > 0 && allChapters.every(ch =>
+    importedItems.some(i => i.id === ch.id && i.level === "chapter")
   );
-const isStructureChanged =
-  importedPkg &&
-  (
-    importedPkg.chaptersCount !== allChapters.length ||
-    importedPkg.itemsCount !== allItems.length
-  );
+  const pkgImported = importedPkg || (allItemsImported && allChaptersImported);
+  const pkgExcluded = excludedItems.some(i => i.id === pkgId && i.level === "package");
 
-const pkgImported =
-  importedPkg ||
-  (allItemsImported && allChaptersImported);
-  const pkgExcluded = excludedItems.some(i =>i.id === pkgId && i.level === "package");
-
-  const importedCount = allItems.filter(item => importedItems.some(i =>i.id === resolveId(item) && i.level === "item")).length;
+  const importedCount = allItems.filter(item => importedItems.some(i => i.id === item.id && i.level === "item")).length;
   const importedChaptersCount = allChapters.filter(ch => {
-    const chId = resolveId(ch);
-    return importedItems.some(i =>i.id === chId && i.level === "chapter") ||
-      ch.items?.every(item => importedItems.some(i =>i.id === resolveId(item) && i.level === "item"));
+    return importedItems.some(i => i.id === ch.id && i.level === "chapter") ||
+      ch.items?.every(item => importedItems.some(i => i.id === item.id && i.level === "item"));
   }).length;
 
-  const colors = ["#3B6FFF", "#059669", "#EA580C", "#7C3AED", "#0891B2", "#D97706"];
-  const pkgColor = pkg.color || colors[pkgId % colors.length] || colors[0];
-
   return (
-    <div style={{ borderRadius:16, border:`1.5px solid ${open?pkgColor+"50":C.border}`, background:pkgExcluded?C.warningLight:C.surface, boxShadow:open?`0 4px 22px ${pkgColor}14`:C.shadow, overflow:"hidden", transition:"box-shadow .2s, border-color .2s" }}>
-      <div style={{ display:"flex", alignItems:"center", background:open?`linear-gradient(to right,${pkgColor}10,transparent)`:C.surfaceAlt, borderBottom:open?`1px solid ${C.border}`:"none" }}>
-        <button onClick={()=>setOpen(o=>!o)}
-          style={{ flex:1, display:"flex", alignItems:"center", gap:13, padding:"15px 18px", background:"transparent", border:"none", cursor:"pointer", textAlign:"left" }}>
-          <div style={{ flex:1, minWidth:0 }}>
-            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4, flexWrap:"wrap" }}>
-              <span style={{ fontFamily:F.display, fontSize:20, fontWeight:900, color:pkgExcluded?C.warning:C.text }}>{pkg.title}</span>
-              {pkg.description && (
-  <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>
-    {pkg.description}
-  </div>
-)}
+    <div style={{
+      borderRadius: "20px",
+      border: `1.5px solid ${isOpen ? THEME.colors.primary + "50" : THEME.colors.borderLight}`,
+      background: pkgExcluded ? THEME.colors.errorLight : THEME.colors.white,
+      boxShadow: isOpen ? `0 4px 22px ${THEME.colors.primary}14` : THEME.shadows.card,
+      overflow: "hidden",
+      transition: "box-shadow 0.2s, border-color 0.2s",
+    }}>
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        background: isOpen ? `linear-gradient(to right, ${THEME.colors.primary}10, transparent)` : THEME.colors.borderLight,
+        borderBottom: isOpen ? `1px solid ${THEME.colors.borderLight}` : "none",
+      }}>
+        <button onClick={() => setIsOpen(!isOpen)} style={{
+          flex: 1,
+          display: "flex",
+          alignItems: "center",
+          gap: "13px",
+          padding: "15px 18px",
+          background: "transparent",
+          border: "none",
+          cursor: "pointer",
+          textAlign: "left",
+        }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px", flexWrap: "wrap" }}>
+              <span style={{ fontSize: "20px", fontWeight: "900", color: pkgExcluded ? THEME.colors.error : THEME.colors.textDark }}>{pkg.title}</span>
               {isNew && !pkgImported && !pkgExcluded && (
-                <span style={{ fontFamily:F.body, fontSize:10, fontWeight:700, background:C.warningLight, color:C.warning, padding:"2px 8px", borderRadius:12, border:`1px solid ${C.warning}40` }}>New</span>
+                <span style={{ fontSize: "10px", fontWeight: "700", background: THEME.colors.primaryBg, color: THEME.colors.primary, padding: "2px 8px", borderRadius: "12px", border: `1px solid ${THEME.colors.primary}40` }}>New</span>
               )}
               {pkgExcluded && (
-                <span style={{ fontFamily:F.body, fontSize:10, fontWeight:700, background:C.warningLight, color:C.warning, padding:"2px 8px", borderRadius:12, border:`1px solid ${C.warning}40` }}>Excluded</span>
+                <span style={{ fontSize: "10px", fontWeight: "700", background: THEME.colors.errorLight, color: THEME.colors.error, padding: "2px 8px", borderRadius: "12px", border: `1px solid ${THEME.colors.error}40` }}>Excluded</span>
               )}
-              <span style={{ fontFamily:F.body, fontSize:11, color:pkgColor, background:`${pkgColor}15`, padding:"2px 8px", borderRadius:6, fontWeight:700 }}>v{pkg.version||"1.0"}</span>
-              <Badge bg={STATUS_S[pkg.type]?.bg||C.surfaceAlt} text={STATUS_S[pkg.type]?.text||C.textMuted}>{STATUS_S[pkg.type]?.label||"Optional"}</Badge>
+              <span style={{ fontSize: "11px", color: THEME.colors.primary, background: `${THEME.colors.primary}15`, padding: "2px 8px", borderRadius: "6px", fontWeight: "700" }}>v{pkg.version || "1.0"}</span>
+              <Badge variant={pkg.type === "mandatory" ? "error" : "primary"}>
+                {pkg.type === "mandatory" ? "Mandatory" : pkg.type === "recommended" ? "Recommended" : "Optional"}
+              </Badge>
             </div>
+            {pkg.description && (
+              <div style={{ fontSize: "12px", color: THEME.colors.textGray, marginTop: "4px" }}>{pkg.description}</div>
+            )}
             {allItems.length > 0 && !pkgExcluded && (
-              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                <div style={{ width:120, height:4, background:C.surfaceAlt, borderRadius:99, overflow:"hidden" }}>
-                  <div style={{ height:"100%", width:`${(importedCount/allItems.length)*100}%`, background:`linear-gradient(90deg,${pkgColor},${C.purple})`, borderRadius:99, transition:"width .4s" }}/>
+              <div style={{ marginTop: "8px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <div style={{ width: "120px", height: "4px", background: THEME.colors.borderLight, borderRadius: "99px", overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${(importedCount / allItems.length) * 100}%`, background: THEME.gradients.button, borderRadius: "99px", transition: "width 0.4s" }} />
+                  </div>
+                  <span style={{ fontSize: "10px", color: THEME.colors.textLight }}>
+                    {importedChaptersCount}/{allChapters.length} chapters · {importedCount}/{allItems.length} items imported
+                  </span>
                 </div>
-                <span style={{ fontFamily:F.body, fontSize:10, color:C.textMuted }}>
-                  {importedChaptersCount}/{allChapters.length} chapters · {importedCount}/{allItems.length} items imported
-                </span>
               </div>
             )}
             {pkgExcluded && (
-              <div style={{ fontFamily:F.body, fontSize:11, color:C.warning, marginTop:4 }}>This package is excluded from compliance scope</div>
+              <div style={{ fontSize: "11px", color: THEME.colors.error, marginTop: "4px" }}>
+                This package is excluded from compliance scope
+              </div>
             )}
           </div>
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ transform:open?"rotate(180deg)":"none", transition:"transform .2s", flexShrink:0, marginRight:4 }}>
-            <path d="M3 5L7 9L11 5" stroke={C.textMuted} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
+          <ChevronDown size={14} style={{
+            transform: isOpen ? "rotate(180deg)" : "none",
+            transition: "transform 0.2s",
+            flexShrink: 0,
+            marginRight: "4px",
+            color: THEME.colors.textLight,
+          }} />
         </button>
         {!pkgExcluded && (
-          <div style={{ padding:"0 16px" }}>
-            <ImportUnimportBtn color={pkgColor} size="md" isImported={pkgImported}
+          <div style={{ padding: "0 16px" }}>
+            <ToggleSwitch
+              size="md"
+              isImported={pkgImported}
               onImport={() => onImport({
                 id: pkgId,
                 title: pkg.title,
@@ -553,31 +866,47 @@ const pkgImported =
           </div>
         )}
       </div>
-      {open && pkg.chapters && !pkgExcluded && (
-        <div style={{ padding:"14px 16px", display:"flex", flexDirection:"column", gap:10 }}>
-          {pkg.chapters.map((ch, idx) => {
-            const chId = resolveId(ch);
-            return (
-              <ChapterCard key={chId ?? idx} chapter={{ ...ch, id: chId }} pkgColor={pkgColor}
-                importedItems={importedItems} excludedItems={excludedItems}
-                onImport={onImport} onUnimport={onUnimport} onAddException={onAddException}
-                packageId={pkgId}
-              />
-            );
-          })}
+      {isOpen && pkg.chapters && !pkgExcluded && (
+        <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: "10px" }}>
+          {pkg.chapters.map((ch) => (
+            <ChapterCard
+              key={ch.id}
+              chapter={{ ...ch, id: ch.id }}
+              importedItems={importedItems}
+              excludedItems={excludedItems}
+              onImport={onImport}
+              onUnimport={onUnimport}
+              onAddException={onAddException}
+              packageId={pkgId}
+            />
+          ))}
         </div>
       )}
     </div>
   );
-}
+};
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
-export default function Politiques() {
+/* ─── Helper Functions ───────────────────────────── */
+const resolveId = (obj) => {
+  if (!obj) return undefined;
+  return obj.id ?? obj.item_id ?? obj.chapter_id ?? obj.package_id ?? obj.policy_id ?? undefined;
+};
+
+const formatImportedItems = (data) =>
+  data.map(i => ({
+    id: i.policyId ?? i.id,
+    level: i.level,
+    title: i.title,
+    version: i.version
+  })).filter(item => item.id != null);
+
+/* ─── Main Policy Library Page ───────────────────────────── */
+export default function PolicyLibrary() {
   const navigate = useNavigate();
-  const [modal, setModal] = useState(null);
+  const [importModal, setImportModal] = useState(null);
   const [unimportModal, setUnimportModal] = useState(null);
   const [exceptionModal, setExceptionModal] = useState(null);
-  const [filterPkg, setFilterPkg] = useState("all");
+  const [filterPackage, setFilterPackage] = useState("all");
   const [search, setSearch] = useState("");
   const [importedItems, setImportedItems] = useState([]);
   const [excludedItems, setExcludedItems] = useState([]);
@@ -586,14 +915,6 @@ export default function Politiques() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const formatImportedItems = (data) =>
-    data.map(i => ({
-      id: i.policyId ?? i.id,
-      level: i.level,
-      title: i.title,
-      version: i.version
-    })).filter(item => item.id != null);
-
   const refreshImportedItems = async () => {
     try {
       const res = await fetch("http://localhost:3000/api/framauditor/imported-policies", { credentials: "include" });
@@ -601,7 +922,7 @@ export default function Politiques() {
       const data = await res.json();
       setImportedItems(formatImportedItems(data));
     } catch (err) {
-      console.error("❌ Failed to refresh imported items:", err);
+      console.error("Failed to refresh imported items:", err);
     }
   };
 
@@ -618,7 +939,7 @@ export default function Politiques() {
       })).filter(ex => ex.id != null);
       setExcludedItems(formatted);
     } catch (err) {
-      console.error("❌ Failed to refresh excluded items:", err);
+      console.error("Failed to refresh excluded items:", err);
     }
   };
 
@@ -693,7 +1014,7 @@ export default function Politiques() {
       await Promise.allSettled(promises);
       await refreshImportedItems();
     } catch (err) {
-      console.error("❌ Import error:", err);
+      console.error("Import error:", err);
       await refreshImportedItems();
       throw err;
     }
@@ -742,13 +1063,13 @@ export default function Politiques() {
       await Promise.allSettled(promises);
       await refreshImportedItems();
     } catch (err) {
-      console.error("❌ Unimport error:", err);
+      console.error("Unimport error:", err);
       await refreshImportedItems();
     }
   };
 
   const handleAddException = async (target, reason) => {
-    if (!target || target.id == null || excludedItems.some(i =>i.id === target.id && i.level === target.level)) return;
+    if (!target || target.id == null || excludedItems.some(i => i.id === target.id && i.level === target.level)) return;
     try {
       await fetch("http://localhost:3000/api/framauditor/add-exception", {
         method: "POST",
@@ -758,15 +1079,15 @@ export default function Politiques() {
       });
       await refreshExcludedItems();
     } catch (err) {
-      console.error("❌ Error saving exception:", err);
+      console.error("Error saving exception:", err);
     }
   };
 
   const allPolicies = policies;
   const displayed = (allPolicies || [])
-    .filter(p => filterPkg === "all" || resolveId(p) === parseInt(filterPkg))
+    .filter(p => filterPackage === "all" || resolveId(p) === parseInt(filterPackage))
     .filter(p => {
-      if (showImportedOnly) return importedItems.some(i =>i.id === resolveId(p) && i.level === "package");
+      if (showImportedOnly) return importedItems.some(i => i.id === resolveId(p) && i.level === "package");
       return true;
     })
     .filter(p => {
@@ -778,11 +1099,11 @@ export default function Politiques() {
 
   if (loading) {
     return (
-      <div style={{ fontFamily:F.body, background:C.bg, minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center" }}>
-        <div style={{ textAlign:"center" }}>
-          <div style={{ width:40, height:40, border:`3px solid ${C.border}`, borderTopColor:C.accent, borderRadius:"50%", animation:"spin 1s linear infinite", marginBottom:16 }}/>
-          <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-          <p style={{ color:C.textMid }}>Loading policies...</p>
+      <div style={{ fontFamily: "Inter, system-ui, sans-serif", background: THEME.colors.background, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ width: 40, height: 40, border: `3px solid ${THEME.colors.border}`, borderTopColor: THEME.colors.primary, borderRadius: "50%", animation: "spin 1s linear infinite", marginBottom: 16 }} />
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+          <p style={{ color: THEME.colors.textGray }}>Loading policies...</p>
         </div>
       </div>
     );
@@ -790,114 +1111,174 @@ export default function Politiques() {
 
   if (error) {
     return (
-      <div style={{ fontFamily:F.body, background:C.bg, minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center" }}>
-        <div style={{ textAlign:"center", background:C.surface, padding:32, borderRadius:16, border:`1px solid ${C.border}` }}>
-          <div style={{ fontSize:48, marginBottom:16 }}>⚠️</div>
-          <p style={{ color:C.danger, marginBottom:16 }}>{error}</p>
-          <button onClick={()=>window.location.reload()} style={{ padding:"8px 20px", borderRadius:8, background:C.accent, color:"#fff", border:"none", cursor:"pointer" }}>Retry</button>
+      <div style={{ fontFamily: "Inter, system-ui, sans-serif", background: THEME.colors.background, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ textAlign: "center", background: THEME.colors.white, padding: 32, borderRadius: 20, border: `1px solid ${THEME.colors.border}` }}>
+          <AlertCircle size={48} style={{ marginBottom: 16, color: THEME.colors.error }} />
+          <p style={{ color: THEME.colors.error, marginBottom: 16 }}>{error}</p>
+          <button onClick={() => window.location.reload()} style={{ padding: "8px 20px", borderRadius: "10px", background: THEME.gradients.button, color: THEME.colors.white, border: "none", cursor: "pointer" }}>
+            Retry
+          </button>
         </div>
       </div>
     );
   }
 
   return (
-    <div style={{ fontFamily:F.body, background:C.bg, minHeight:"100vh", padding:"26px 30px" }}>
-      <div style={{ marginBottom:22 }}>
-        <div style={{ display:"flex", alignItems:"flex-end", justifyContent:"space-between", flexWrap:"wrap", gap:16, marginBottom:14 }}>
-          <div>
-            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:5 }}>
-              <h1 style={{ fontFamily:F.display, fontSize:25, fontWeight:900, color:C.text, margin:0 }}>Policy Library</h1>
-              <span style={{ fontFamily:F.body, fontSize:12, background:C.successLight, color:C.success, padding:"3px 8px", borderRadius:20 }}>
-                {importedItems.length} imported
-              </span>
-            </div>
-            <p style={{ fontFamily:F.body, fontSize:13, color:C.textMid, margin:0 }}>
+    <div style={{ fontFamily: "Inter, system-ui, sans-serif", background: THEME.colors.background, minHeight: "100vh", padding: "26px 30px" }}>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        input:focus, textarea:focus { 
+          border-color: ${THEME.colors.primary} !important; 
+          box-shadow: 0 0 0 3px rgba(99,102,241,0.1); 
+        }
+      `}</style>
+
+      <div style={{ marginBottom: "22px" }}>
+        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", flexWrap: "wrap", gap: "16px", marginBottom: "14px" }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ color: THEME.colors.primary, fontSize: "11px", letterSpacing: "0.12em", textTransform: "uppercase", fontWeight: "700", marginBottom: "8px" }}>Compliance Library</div>
+            <h1 style={{ fontSize: "25px", fontWeight: "900", color: THEME.colors.textDark, margin: 0 }}>
+              Policy Library
+              <span style={{ fontSize: "12px", background: THEME.colors.primaryBg, color: THEME.colors.primary, padding: "3px 8px", borderRadius: "20px", marginLeft: "10px" }}>{importedItems.length} imported</span>
+            </h1>
+            <p style={{ fontSize: "13px", color: THEME.colors.textGray, marginTop: "8px" }}>
               Import policies from admin to your library. Importing a package imports all its chapters and items automatically.
               Click "Add exception" to exclude policies from compliance scope.
             </p>
           </div>
-          <button onClick={()=>navigate("/layout/exception")}
-            style={{ padding:"8px 16px", borderRadius:9, border:`1px solid ${C.accent}`, cursor:"pointer", fontFamily:F.body, fontSize:13, fontWeight:600, color:C.accent, display:"flex", alignItems:"center", gap:7, background:C.surface }}>
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M7 1V13M1 7H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-              <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.5"/>
-            </svg>
+          <button onClick={() => navigate("/layout/exception")} style={{
+            padding: "8px 16px",
+            borderRadius: "10px",
+            border: `1.5px solid ${THEME.colors.primary}`,
+            cursor: "pointer",
+            fontSize: "13px",
+            fontWeight: "600",
+            color: THEME.colors.primary,
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            background: THEME.colors.white,
+            transition: "all 0.2s",
+          }} onMouseEnter={(e) => e.currentTarget.style.background = THEME.colors.primaryBg} onMouseLeave={(e) => e.currentTarget.style.background = THEME.colors.white}>
+            <AlertCircle size={14} />
             View Exceptions ({excludedItems.length})
           </button>
         </div>
       </div>
 
-      <div style={{ display:"flex", gap:8, marginBottom:18, flexWrap:"wrap", alignItems:"center" }}>
-        <button onClick={()=>setFilterPkg("all")} style={{ padding:"5px 13px", borderRadius:20, border:"none", cursor:"pointer", background:filterPkg==="all"?`linear-gradient(135deg,${C.accent},${C.accentHover})`:C.surfaceAlt, color:filterPkg==="all"?"#fff":C.textMid, fontFamily:F.body, fontSize:12, fontWeight:600, transition:"all .15s", boxShadow:filterPkg==="all"?"0 2px 6px rgba(59,111,255,.3)":"none" }}>All</button>
+      <div style={{ display: "flex", gap: "8px", marginBottom: "18px", flexWrap: "wrap", alignItems: "center" }}>
+        <button onClick={() => setFilterPackage("all")} style={{
+          padding: "5px 13px",
+          borderRadius: "20px",
+          border: "none",
+          cursor: "pointer",
+          background: filterPackage === "all" ? THEME.gradients.button : THEME.colors.borderLight,
+          color: filterPackage === "all" ? THEME.colors.white : THEME.colors.textGray,
+          fontSize: "12px",
+          fontWeight: "600",
+          transition: "all 0.15s",
+          boxShadow: filterPackage === "all" ? THEME.shadows.button : "none",
+        }}>All</button>
         {allPolicies?.map(p => {
           const pId = resolveId(p);
           return (
-            <button key={pId} onClick={()=>setFilterPkg(pId?.toString() || "")} style={{ padding:"5px 13px", borderRadius:20, border:"none", cursor:"pointer", background:filterPkg===pId?.toString()?`linear-gradient(135deg,${C.accent},${C.accentHover})`:C.surfaceAlt, color:filterPkg===pId?.toString()?"#fff":C.textMid, fontFamily:F.body, fontSize:12, fontWeight:600, transition:"all .15s", boxShadow:filterPkg===pId?.toString()?"0 2px 6px rgba(59,111,255,.3)":"none" }}>
-              {p.title.length > 20 ? p.title.substring(0,20)+"..." : p.title}
+            <button key={pId} onClick={() => setFilterPackage(pId?.toString() || "")} style={{
+              padding: "5px 13px",
+              borderRadius: "20px",
+              border: "none",
+              cursor: "pointer",
+              background: filterPackage === pId?.toString() ? THEME.gradients.button : THEME.colors.borderLight,
+              color: filterPackage === pId?.toString() ? THEME.colors.white : THEME.colors.textGray,
+              fontSize: "12px",
+              fontWeight: "600",
+              transition: "all 0.15s",
+              boxShadow: filterPackage === pId?.toString() ? THEME.shadows.button : "none",
+            }}>
+              {p.title.length > 20 ? p.title.substring(0, 20) + "..." : p.title}
             </button>
           );
         })}
-        <div style={{ marginLeft:"auto", display:"flex", gap:10, alignItems:"center" }}>
-          <label style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer" }}>
-            <input type="checkbox" checked={showImportedOnly} onChange={e=>setShowImportedOnly(e.target.checked)}/>
-            <span style={{ fontFamily:F.body, fontSize:12, color:C.textMid }}>Show only imported</span>
+        <div style={{ marginLeft: "auto", display: "flex", gap: "10px", alignItems: "center" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}>
+            <input type="checkbox" checked={showImportedOnly} onChange={e => setShowImportedOnly(e.target.checked)} />
+            <span style={{ fontSize: "12px", color: THEME.colors.textGray }}>Show only imported</span>
           </label>
-          <div style={{ position:"relative" }}>
-            <input placeholder="Search policies…" value={search} onChange={e=>setSearch(e.target.value)}
-              style={{ width:190, padding:"7px 12px 7px 30px", border:`1px solid ${C.border}`, borderRadius:9, fontFamily:F.body, fontSize:13, color:C.text, background:C.surface, outline:"none" }}/>
-            <svg style={{ position:"absolute", left:9, top:"50%", transform:"translateY(-50%)" }} width="13" height="13" viewBox="0 0 13 13" fill="none">
-              <circle cx="5.5" cy="5.5" r="4" stroke={C.textMuted} strokeWidth="1.4"/>
-              <path d="M9 9L12 12" stroke={C.textMuted} strokeWidth="1.4" strokeLinecap="round"/>
-            </svg>
+          <div style={{ position: "relative" }}>
+            <Search size={13} style={{ position: "absolute", left: "9px", top: "50%", transform: "translateY(-50%)", color: THEME.colors.textLight }} />
+            <input
+              placeholder="Search policies..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{
+                width: "190px",
+                padding: "7px 12px 7px 30px",
+                border: `1.5px solid ${THEME.colors.border}`,
+                borderRadius: "10px",
+                fontSize: "13px",
+                color: THEME.colors.textDark,
+                background: THEME.colors.white,
+                outline: "none",
+                transition: "all 0.2s",
+              }}
+              onFocus={(e) => e.target.style.borderColor = THEME.colors.primary}
+              onBlur={(e) => e.target.style.borderColor = THEME.colors.border}
+            />
           </div>
         </div>
       </div>
 
-      <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
-        {displayed.length === 0
-          ? <div style={{ textAlign:"center", padding:"50px 0", color:C.textMuted, fontFamily:F.body, fontSize:14 }}>No policies match your search.</div>
-          : displayed.map((pkg, idx) => {
+      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        {displayed.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "50px 0", color: THEME.colors.textLight, fontSize: "14px" }}>
+            No policies match your search.
+          </div>
+        ) : (
+          <motion.div variants={THEME.animation.staggerContainer} initial="hidden" animate="visible">
+            {displayed.map((pkg, idx) => {
               const pkgId = resolveId(pkg);
-              const isNew = !importedItems.some(i =>i.id === pkgId && i.level === "package") &&
-                            !excludedItems.some(i =>i.id === pkgId && i.level === "package");
+              const isNew = !importedItems.some(i => i.id === pkgId && i.level === "package") &&
+                            !excludedItems.some(i => i.id === pkgId && i.level === "package");
               return (
-                <PackagePanel key={pkgId ?? idx}
-                  pkg={{ ...pkg, id: pkgId }}
-                  isNew={isNew}
-                  importedItems={importedItems}
-                  excludedItems={excludedItems}
-                  onImport={target => setModal({ target, color: pkg.color || "#3B6FFF" })}
-                  onUnimport={target => setUnimportModal({ target, color: pkg.color || "#3B6FFF" })}
-                  onAddException={target => setExceptionModal({ target })}
-                />
+                <motion.div key={pkgId ?? idx} variants={THEME.animation.fadeUp} custom={idx}>
+                  <PackagePanel
+                    pkg={{ ...pkg, id: pkgId }}
+                    isNew={isNew}
+                    importedItems={importedItems}
+                    excludedItems={excludedItems}
+                    onImport={target => setImportModal({ target })}
+                    onUnimport={target => setUnimportModal({ target })}
+                    onAddException={target => setExceptionModal({ target })}
+                  />
+                </motion.div>
               );
-            })
-        }
+            })}
+          </motion.div>
+        )}
       </div>
 
-      {modal && (
-        <ImportModal
-          target={modal.target}
-          color={modal.color}
-          onClose={()=>setModal(null)}
-          onConfirm={handleImport}
-        />
-      )}
-      {unimportModal && (
-        <UnimportModal
-          target={unimportModal.target}
-          color={unimportModal.color}
-          onClose={()=>setUnimportModal(null)}
-          onConfirm={handleUnimport}
-        />
-      )}
-      {exceptionModal && (
-        <ExceptionModal
-          target={exceptionModal.target}
-          onClose={()=>setExceptionModal(null)}
-          onConfirm={reason=>handleAddException(exceptionModal.target, reason)}
-        />
-      )}
+      <AnimatePresence>
+        {importModal && (
+          <ImportModal
+            target={importModal.target}
+            onClose={() => setImportModal(null)}
+            onConfirm={handleImport}
+          />
+        )}
+        {unimportModal && (
+          <UnimportModal
+            target={unimportModal.target}
+            onClose={() => setUnimportModal(null)}
+            onConfirm={handleUnimport}
+          />
+        )}
+        {exceptionModal && (
+          <ExceptionModal
+            target={exceptionModal.target}
+            onClose={() => setExceptionModal(null)}
+            onConfirm={reason => handleAddException(exceptionModal.target, reason)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
