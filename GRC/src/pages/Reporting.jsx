@@ -1,587 +1,517 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
+import PermissionGuard from "../components/PermissionGuard";
 
-const SECTIONS = [
-  {
-    id: "compliance-status",
-    label: "Compliance Status",
-    description: "Framework adherence rates, open findings, and remediation progress",
-    tag: "compliance",
-    content: () => (
-      <section>
-        <SectionHeading index="01" title="Compliance Status" />
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 16, marginBottom: 24 }}>
-          {[
-            { label: "ISO 27001 Adherence", value: "87%", delta: "+4%", color: "#059669" },
-            { label: "GDPR Compliance", value: "94%", delta: "+2%", color: "#059669" },
-            { label: "Open Findings", value: "12", delta: "−5", color: "#D97706" },
-            { label: "Overdue Actions", value: "3", delta: "−2", color: "#DC2626" },
-          ].map((k) => (
-            <KpiCard key={k.label} {...k} />
-          ))}
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          {[
-            { label: "ISO 27001", pct: 87 },
-            { label: "GDPR", pct: 94 },
-            { label: "SOC 2", pct: 72 },
-            { label: "DORA", pct: 58 },
-          ].map((f) => (
-            <ProgressRow key={f.label} {...f} />
-          ))}
-        </div>
-      </section>
-    ),
+const CLASSIFICATION_OPTIONS = [
+  { value: "public", label: "Public", color: "#16a34a", bg: "#dcfce7" },
+  { value: "interne", label: "Internal", color: "#2563eb", bg: "#dbeafe" },
+  { value: "confidentiel", label: "Confidential", color: "#d97706", bg: "#fef3c7" },
+  { value: "secret", label: "Secret", color: "#dc2626", bg: "#fee2e2" },
+  { value: "tres_secret", label: "Top Secret", color: "#7c3aed", bg: "#ede9fe" },
+];
+const THEME = {
+  colors: {
+    primary: "#6366F1",
+    primaryDark: "#4F46E5",
+    primaryLight: "#818CF8",
+    primaryBg: "#EEF2FF",
+    textDark: "#0F172A",
+    textGray: "#64748B",
+    textLight: "#94A3B8",
+    white: "#fff",
+    background: "#F8FAFC",
+    border: "#E2E8F0",
+    borderLight: "#F1F5F9",
+    success: "#10B981",
+    successLight: "#D1FAE5",
+    warning: "#F59E0B",
+    warningLight: "#FEF3C7",
+    error: "#EF4444",
+    errorLight: "#FEF2F2",
+    info: "#3B82F6",
+    infoLight: "#EFF6FF",
   },
-  {
-    id: "audit-findings",
-    label: "Audit Findings",
-    description: "Internal audit results, control gaps, and corrective actions",
-    tag: "audit",
-    content: () => (
-      <section>
-        <SectionHeading index="02" title="Audit Findings" />
-        <ReportTable
-          headers={["Finding", "Severity", "Owner", "Due", "Status"]}
-          rows={[
-            ["MFA not enforced — legacy apps", "Critical", "IT Security", "Apr 30", "Remediated"],
-            ["Incomplete access review Q1", "High", "IAM Team", "May 15", "In progress"],
-            ["Missing DR test documentation", "Medium", "IT Ops", "May 20", "Pending"],
-            ["Outdated incident response plan", "High", "SecOps", "Apr 12", "Overdue"],
-            ["Log retention below policy minimum", "Medium", "SOC", "May 31", "In progress"],
-          ]}
-          statusCol={4}
-        />
-      </section>
-    ),
+  gradients: {
+    button: "linear-gradient(135deg, #6366F1, #4F46E5)",
+    cardHover: "linear-gradient(135deg, rgba(99,102,241,0.02), rgba(139,92,246,0.02))",
   },
-  {
-    id: "asset-inventory",
-    label: "Asset Inventory",
-    description: "Critical asset classification, ownership, and risk exposure",
-    tag: "assets",
-    content: () => (
-      <section>
-        <SectionHeading index="03" title="Asset Inventory" />
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, marginBottom: 24 }}>
-          {[
-            { label: "Total Assets", value: "1,284", delta: "+37", color: "#3B6FFF" },
-            { label: "Critical Assets", value: "142", delta: "+8", color: "#DC2626" },
-            { label: "Unclassified", value: "21", delta: "−14", color: "#D97706" },
-          ].map((k) => (
-            <KpiCard key={k.label} {...k} />
-          ))}
-        </div>
-        <ReportTable
-          headers={["Asset", "Classification", "Owner", "Risk Level"]}
-          rows={[
-            ["ERP System — SAP", "Critical", "IT Ops", "High"],
-            ["Customer database — primary", "Critical", "DBA Team", "Critical"],
-            ["Internal VPN gateway", "Sensitive", "Network", "Medium"],
-            ["HR information system", "Sensitive", "HR IT", "Medium"],
-          ]}
-          statusCol={3}
-        />
-      </section>
-    ),
+  shadows: {
+    card: "0 2px 12px rgba(0,0,0,0.04)",
+    cardHover: "0 8px 24px rgba(0,0,0,0.08)",
+    modal: "0 32px 80px rgba(0,0,0,0.18)",
+    button: "0 4px 16px rgba(99,102,241,0.3)",
   },
+  animation: {
+    fadeUp: {
+      hidden: { opacity: 0, y: 20 },
+      visible: { opacity: 1, y: 0 },
+    },
+    staggerContainer: {
+      hidden: { opacity: 0 },
+      visible: {
+        opacity: 1,
+        transition: { staggerChildren: 0.05 },
+      },
+    },
+  },
+};
+
+
+const REPORT_TYPES = [
+  "Compliance Audit",
+  "Risk Analysis",
+  "Incident Report",
+  "Controls Assessment",
+  "Policy Review",
+  "Vulnerability Report",
 ];
 
-const SAVED_REPORTS = [
+const MOCK_REPORTS = [
   
 ];
 
-const TAG_COLORS = {
-  compliance: { bg: "#F0FDF4", text: "#15803D" },
-  audit:      { bg: "#FFFBEB", text: "#92400E" },
-  assets:     { bg: "#F0F9FF", text: "#0C4A6E" },
+const STATUS_STYLE = {
+  finalized: { color: "#16a34a", bg: "#dcfce7" },
+  "in review": { color: "#d97706", bg: "#fef3c7" },
+  draft: { color: "#6b7280", bg: "#f3f4f6" },
 };
 
-const PRIORITY_STYLES = {
-  Critical: { bg: "#FEF2F2", text: "#B91C1C", dot: "#DC2626" },
-  High:     { bg: "#FFFBEB", text: "#92400E", dot: "#D97706" },
-  Medium:   { bg: "#EFF6FF", text: "#1E40AF", dot: "#3B82F6" },
-  Low:      { bg: "#F0FDF4", text: "#166534", dot: "#22C55E" },
-};
+const classificationOf = (val) =>
+  CLASSIFICATION_OPTIONS.find((c) => c.value === val) || CLASSIFICATION_OPTIONS[0];
 
-const STATUS_STYLES = {
-  "Remediated":  { color: "#15803D" },
-  "Active":      { color: "#15803D" },
-  "Mitigated":   { color: "#15803D" },
-  "In progress": { color: "#1D4ED8" },
-  "In review":   { color: "#1D4ED8" },
-  "Monitoring":  { color: "#1D4ED8" },
-  "Pending":     { color: "#92400E" },
-  "Open":        { color: "#B91C1C" },
-  "Overdue":     { color: "#B91C1C" },
-  "Due for review": { color: "#B91C1C" },
-  "Critical":    { color: "#B91C1C" },
-  "High":        { color: "#92400E" },
-  "Medium":      { color: "#1D4ED8" },
-};
+export default function Reporting() {
+  const [reports, setReports] = useState(MOCK_REPORTS);
+  const [showModal, setShowModal] = useState(false);
+  const [templateFile, setTemplateFile] = useState(null);
+  const [templateDrag, setTemplateDrag] = useState(false);
+  const [form, setForm] = useState({
+    name: "",
+    type: "",
+    classification: "interne",
+  });
+  const [generating, setGenerating] = useState(false);
+  const [generated, setGenerated] = useState(false);
+  const [search, setSearch] = useState("");
+  const [filterClass, setFilterClass] = useState("tous");
+  const [sortBy, setSortBy] = useState("date");
+  const [detailReport, setDetailReport] = useState(null);
+  const fileRef = useRef();
 
-function SectionHeading({ index, title }) {
+  const handleFileSelect = (file) => {
+    if (!file) return;
+    if (file) setTemplateFile(file);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setTemplateDrag(false);
+    const file = e.dataTransfer.files[0];
+    if (file) setTemplateFile(file);
+  };
+
+  const handleGenerate = () => {
+    if (!form.name || !form.type || !templateFile) return;
+    setGenerating(true);
+    setGenerated(false);
+    setTimeout(() => {
+      setGenerating(false);
+      setGenerated(true);
+    }, 2200);
+  };
+
+  const handleCreate = () => {
+    const cls = classificationOf(form.classification);
+    const newReport = {
+      id: Date.now(),
+      name: form.name,
+      type: form.type,
+      classification: form.classification,
+      template: templateFile?.name || "—",
+      createdAt: new Date().toISOString().slice(0, 10),
+      createdBy: "Yassoura A.",
+      status: "draft",
+      size: `${(Math.random() * 3 + 0.4).toFixed(1)} MB`,
+    };
+    setReports([newReport, ...reports]);
+    setShowModal(false);
+    setTemplateFile(null);
+    setForm({ name: "", type: "", classification: "interne" });
+    setGenerated(false);
+  };
+
+  const filteredReports = reports
+    .filter((r) => {
+      const q = search.toLowerCase();
+      return (
+        r.name.toLowerCase().includes(q) ||
+        r.type.toLowerCase().includes(q) ||
+        r.createdBy.toLowerCase().includes(q)
+      );
+    })
+    .filter((r) => filterClass === "tous" || r.classification === filterClass)
+    .sort((a, b) => {
+      if (sortBy === "date") return b.createdAt.localeCompare(a.createdAt);
+      if (sortBy === "nom") return a.name.localeCompare(b.name);
+      return 0;
+    });
+
   return (
-    <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 20, paddingBottom: 14, borderBottom: "1px solid #E5E7EB" }}>
-      <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: "#9CA3AF", letterSpacing: "0.08em", minWidth: 24 }}>{index}</span>
-      <h2 style={{ fontSize: 18, fontWeight: 600, color: "#111827", letterSpacing: "-0.01em", margin: 0, fontFamily: "'Fraunces', Georgia, serif" }}>{title}</h2>
-    </div>
-  );
-}
+    <div style={{ minHeight: "100vh", background: "#F8FAFF", fontFamily: "'DM Sans', sans-serif", padding: "32px 40px" }}>
 
-function KpiCard({ label, value, delta, color }) {
-  const positive = delta.startsWith("+");
-  return (
-    <div style={{ background: "#F9FAFB", borderRadius: 10, padding: "16px 18px", border: "1px solid #E5E7EB" }}>
-      <p style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 6, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</p>
-      <p style={{ fontSize: 22, fontWeight: 700, color, marginBottom: 4, fontFamily: "'Fraunces', Georgia, serif" }}>{value}</p>
-      <p style={{ fontSize: 12, color: positive ? "#059669" : "#DC2626", fontWeight: 500 }}>
-        {delta} vs last period
-      </p>
-    </div>
-  );
-}
-
-function ProgressRow({ label, pct }) {
-  const color = pct >= 85 ? "#059669" : pct >= 70 ? "#D97706" : "#DC2626";
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-      <span style={{ width: 80, fontSize: 13, color: "#374151", fontWeight: 500, flexShrink: 0 }}>{label}</span>
-      <div style={{ flex: 1, height: 6, background: "#E5E7EB", borderRadius: 999, overflow: "hidden" }}>
-        <div style={{ width: `${pct}%`, height: "100%", background: color, borderRadius: 999, transition: "width 0.6s ease" }} />
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 32 }}>
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 6 }}>
+            
+            <h1 style={{ fontSize: "25px", fontWeight: "900", color: THEME.colors.textDark, margin: 0 }}>
+              Reports
+            </h1>
+          </div>
+          <p style={{ color: "#64748b", fontSize: 14, margin: 0 }}>
+            Generate and manage your GRC reports from your own templates.
+          </p>
+        </div>
+      <PermissionGuard permission="generate_reports">
+        <button
+          onClick={() => { setShowModal(true); setGenerated(false); setTemplateFile(null); setForm({ name: "", type: "", classification: "interne" }); }}
+          style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 20px", background: "linear-gradient(135deg, #3B6FFF 0%, #6D28D9 100%)", color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", boxShadow: "0 4px 14px rgba(59,111,255,0.25)" }}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          New report
+        </button>
+      </PermissionGuard>
       </div>
-      <span style={{ width: 36, fontSize: 12, fontWeight: 600, color, textAlign: "right" }}>{pct}%</span>
-    </div>
-  );
-}
 
-function ReportTable({ headers, rows, statusCol }) {
-  return (
-    <div style={{ overflowX: "auto" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-        <thead>
-          <tr>
-            {headers.map((h) => (
-              <th key={h} style={{ textAlign: "left", padding: "8px 12px", fontSize: 11, fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid #E5E7EB", whiteSpace: "nowrap" }}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, ri) => (
-            <tr key={ri} style={{ borderBottom: ri < rows.length - 1 ? "1px solid #F3F4F6" : "none" }}>
-              {row.map((cell, ci) => {
-                const isStatus = ci === statusCol;
-                const style = isStatus ? STATUS_STYLES[cell] : null;
-                return (
-                  <td key={ci} style={{ padding: "10px 12px", color: isStatus ? (style?.color || "#374151") : "#374151", fontWeight: isStatus ? 500 : 400, fontSize: 13, whiteSpace: ci === 0 ? "normal" : "nowrap" }}>
-                    {cell}
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function RecommendationRow({ priority, text }) {
-  const s = PRIORITY_STYLES[priority];
-  return (
-    <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 14px", background: "#FAFAFA", border: "1px solid #E5E7EB", borderRadius: 8 }}>
-      <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "2px 10px", borderRadius: 999, background: s.bg, color: s.text, fontSize: 11, fontWeight: 600, whiteSpace: "nowrap", flexShrink: 0, marginTop: 1 }}>
-        <span style={{ width: 6, height: 6, borderRadius: "50%", background: s.dot, display: "inline-block" }} />
-        {priority}
-      </span>
-      <p style={{ margin: 0, fontSize: 13, color: "#374151", lineHeight: 1.7 }}>{text}</p>
-    </div>
-  );
-}
-
-const inputStyle = {
-  width: "100%", height: 34, padding: "0 10px",
-  background: "#F9FAFB", border: "1px solid #E5E7EB",
-  borderRadius: 8, fontSize: 13, color: "#111827",
-  fontFamily: "inherit", outline: "none",
-};
-
-function Field({ label, children }) {
-  return (
-    <div>
-      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 5 }}>{label}</label>
-      {children}
-    </div>
-  );
-}
-
-function ReportBuilder() {
-  const [step, setStep] = useState("selection");
-  const [selected, setSelected] = useState([]);
-  const [reportTitle, setReportTitle] = useState("");
-  const [author, setAuthor] = useState("");
-  const [classification, setClassification] = useState("Confidential");
-  const [period, setPeriod] = useState("");
-  const [activeFilter, setActiveFilter] = useState("all");
-
-  const toggleSection = (id) =>
-    setSelected((prev) => prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]);
-
-  const selectAll = () =>
-    setSelected(selected.length === SECTIONS.length ? [] : SECTIONS.map((s) => s.id));
-
-  const tags = ["all", ...Array.from(new Set(SECTIONS.map((s) => s.tag)))];
-  const visible = activeFilter === "all" ? SECTIONS : SECTIONS.filter((s) => s.tag === activeFilter);
-  const ordered = SECTIONS.filter((s) => selected.includes(s.id));
-
-  // Step 3: View final report
-  if (step === "view") {
-    return (
-      <div style={{ minHeight: "100vh", background: "#F3F4F6", fontFamily: "'DM Sans', system-ui, sans-serif" }}>
-        <div style={{ background: "#fff", borderBottom: "1px solid #E5E7EB", padding: "12px 32px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <button
-            onClick={() => setStep("selection")}
-            style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", border: "1px solid #E5E7EB", borderRadius: 8, background: "transparent", cursor: "pointer", fontSize: 13, color: "#374151", fontFamily: "inherit" }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
-            Back to builder
-          </button>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 12, padding: "3px 10px", borderRadius: 6, border: "1px solid #E5E7EB", color: "#6B7280" }}>{classification}</span>
-            <button
-              onClick={() => window.print()}
-              style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", background: "#3B6FFF", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 600, color: "#fff", fontFamily: "inherit" }}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Export / Print
-            </button>
-          </div>
+      {/* Filters bar */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
+        <div style={{ position: "relative", flex: "1 1 220px", minWidth: 180 }}>
+          <svg style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input
+            type="text"
+            placeholder="Search for a report..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{ width: "100%", paddingLeft: 36, paddingRight: 12, height: 38, border: "1.5px solid #e2e8f0", borderRadius: 8, fontSize: 13, color: "#0f172a", background: "#fff", outline: "none", fontFamily: "'DM Sans', sans-serif", boxSizing: "border-box" }}
+          />
         </div>
 
-        <div style={{ maxWidth: 860, margin: "40px auto", padding: "0 24px 60px" }}>
-          <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 16, overflow: "hidden" }}>
-            <div style={{ background: "#3B6FFF", padding: "36px 48px 32px" }}>
-              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 24 }}>
-                <div style={{ textAlign: "right", marginLeft: "auto" }}>
-                  <p style={{ color: "#E0E7FF", fontSize: 12, lineHeight: 1.8 }}>Prepared by: {author}</p>
-                  <p style={{ color: "#E0E7FF", fontSize: 12, lineHeight: 1.8 }}>Period: {period}</p>
-                  <p style={{ color: "#E0E7FF", fontSize: 12, lineHeight: 1.8 }}>Generated: {new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}</p>
-                </div>
-              </div>
-              <h1 style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 28, fontWeight: 700, color: "#FFFFFF", margin: 0, letterSpacing: "-0.02em", lineHeight: 1.3 }}>{reportTitle}</h1>
-              <p style={{ color: "#E0E7FF", fontSize: 13, marginTop: 8 }}>{ordered.length} section{ordered.length !== 1 ? "s" : ""} included</p>
-            </div>
+        <select
+          value={filterClass}
+          onChange={(e) => setFilterClass(e.target.value)}
+          style={{ height: 38, border: "1.5px solid #e2e8f0", borderRadius: 8, fontSize: 13, color: "#0f172a", background: "#fff", padding: "0 12px", fontFamily: "'DM Sans', sans-serif", cursor: "pointer", outline: "none" }}
+        >
+          <option value="tous">All classifications</option>
+          {CLASSIFICATION_OPTIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+        </select>
 
-            <div style={{ padding: "40px 48px", display: "flex", flexDirection: "column", gap: 40 }}>
-              {ordered.map((s) => (
-                <div key={s.id}>
-                  {s.content()}
-                </div>
-              ))}
-
-              <section>
-                <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 20, paddingBottom: 14, borderBottom: "1px solid #E5E7EB" }}>
-                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: "#9CA3AF", letterSpacing: "0.08em" }}>—</span>
-                  <h2 style={{ fontSize: 18, fontWeight: 600, color: "#111827", margin: 0, fontFamily: "'Fraunces', Georgia, serif" }}>Executive Remarks</h2>
-                </div>
-                <div
-                  contentEditable
-                  suppressContentEditableWarning
-                  style={{ minHeight: 80, background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 8, padding: "14px 16px", fontSize: 14, color: "#6B7280", lineHeight: 1.8, outline: "none" }}
-                >
-                  Click to add executive remarks, observations, or overall assessment for this reporting period...
-                </div>
-              </section>
-
-              <div style={{ borderTop: "1px solid #E5E7EB", paddingTop: 20, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: 11, color: "#9CA3AF" }}>{reportTitle} — {new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" })}</span>
-                <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 10px", border: "1px solid #E5E7EB", borderRadius: 4, color: "#6B7280" }}>{classification}</span>
-              </div>
-            </div>
-          </div>
-        </div>
+        <select
+          value={sortBy}
+          onChange={(e) => setSortBy(e.target.value)}
+          style={{ height: 38, border: "1.5px solid #e2e8f0", borderRadius: 8, fontSize: 13, color: "#0f172a", background: "#fff", padding: "0 12px", fontFamily: "'DM Sans', sans-serif", cursor: "pointer", outline: "none" }}
+        >
+          <option value="date">Sort by date</option>
+          <option value="nom">Sort by name</option>
+        </select>
       </div>
-    );
-  }
 
-  // Step 2: Configure report details
-  if (step === "configure") {
-    const canGenerate = reportTitle.trim() && author.trim() && period.trim();
-
-    return (
-      <div style={{ minHeight: "100vh", background: "#F8FAFF", fontFamily: "'DM Sans', system-ui, sans-serif", display: "flex", alignItems: "center", justifyContent: "center", padding: "40px" }}>
-        <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 16, maxWidth: 520, width: "100%", overflow: "hidden" }}>
-          <div style={{ background: "#3152ac", padding: "28px 32px" }}>
-            <h2 style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 22, fontWeight: 700, color: "#fff", margin: 0, letterSpacing: "-0.01em" }}>Configure Report</h2>
-            <p style={{ color: "#E0E7FF", fontSize: 13, marginTop: 6 }}>Fill in the required information to generate your report</p>
-          </div>
-
-          <div style={{ padding: "32px" }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 18, marginBottom: 28 }}>
-              <Field label="Report Title *">
-                <input
-                  value={reportTitle}
-                  onChange={e => setReportTitle(e.target.value)}
-                  placeholder="e.g., Q2 2026 — GRC Compliance Report"
-                  style={inputStyle}
-                />
-              </Field>
-
-              <Field label="Prepared By *">
-                <input
-                  value={author}
-                  onChange={e => setAuthor(e.target.value)}
-                  placeholder="e.g., Security & Compliance Team"
-                  style={inputStyle}
-                />
-              </Field>
-
-              <Field label="Period *">
-                <input
-                  value={period}
-                  onChange={e => setPeriod(e.target.value)}
-                  placeholder="e.g., April 1 – June 30, 2026"
-                  style={inputStyle}
-                />
-              </Field>
-
-              <Field label="Classification">
-                <select value={classification} onChange={e => setClassification(e.target.value)} style={inputStyle}>
-                  <option>Confidential</option>
-                  <option>Internal use only</option>
-                  <option>Restricted</option>
-                  <option>Public</option>
-                </select>
-              </Field>
-            </div>
-
-            <div style={{ background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 10, padding: "16px 18px", marginBottom: 24 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                  <polyline points="14 2 14 8 20 8"/>
-                </svg>
-                <span style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.06em" }}>Selected Sections</span>
-              </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                {ordered.map(s => {
-                  const tc = TAG_COLORS[s.tag];
-                  return (
-                    <span key={s.id} style={{ fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: 999, background: tc.bg, color: tc.text }}>
-                      {s.label}
-                    </span>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div style={{ display: "flex", gap: 12 }}>
-              <button
-                onClick={() => setStep("selection")}
-                style={{ flex: 1, padding: "11px 0", background: "transparent", border: "1px solid #E5E7EB", borderRadius: 10, fontSize: 14, fontWeight: 600, color: "#374151", cursor: "pointer", fontFamily: "inherit" }}
-              >
-                Back
-              </button>
-              <button
-                disabled={!canGenerate}
-                onClick={() => setStep("view")}
-                style={{ flex: 1, padding: "11px 0", background: canGenerate ? "#3B6FFF" : "#E5E7EB", color: canGenerate ? "#fff" : "#9CA3AF", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: canGenerate ? "pointer" : "not-allowed", fontFamily: "inherit", transition: "background 0.2s" }}
-              >
-                Generate Report
-              </button>
-            </div>
-          </div>
+      {/* Reports grid */}
+      {filteredReports.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "80px 0", color: "#94a3b8" }}>
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 12, opacity: 0.4 }}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <p style={{ fontSize: 15, margin: 0 }}>No reports found.</p>
         </div>
-      </div>
-    );
-  }
-
-  // Step 1: Select sections
-  return (
-    <div style={{ minHeight: "100vh", background: "#F8FAFF", fontFamily: "'DM Sans', system-ui, sans-serif", padding: "40px 48px" }}>
-      <div style={{ maxWidth: 800, margin: "0 auto" }}>
-        <div style={{ marginBottom: 32 }}>
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: "#111827", margin: "0 0 6px", fontFamily: "'Fraunces', Georgia, serif", letterSpacing: "-0.01em" }}>Create New Report</h1>
-          <p style={{ fontSize: 14, color: "#6B7280", margin: 0 }}>Select the sections you want to include in your report</p>
-        </div>
-
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", marginBottom: 20 }}>
-          <button onClick={selectAll} style={{ fontSize: 13, color: "#3B6FFF", background: "none", border: "none", cursor: "pointer", fontWeight: 600, padding: 0, fontFamily: "inherit" }}>
-            {selected.length === SECTIONS.length ? "Deselect all" : "Select all"}
-          </button>
-        </div>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 32 }}>
-          {SECTIONS.map((s) => {
-            const checked = selected.includes(s.id);
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 }}>
+          {filteredReports.map((report) => {
+            const cls = classificationOf(report.classification);
+            const st = STATUS_STYLE[report.status] || STATUS_STYLE["draft"];
             return (
-              <div key={s.id} onClick={() => toggleSection(s.id)}
-                style={{ background: "#fff", border: checked ? "2px solid #3B6FFF" : "1px solid #E5E7EB", borderRadius: 12, padding: "20px 24px", cursor: "pointer", transition: "all 0.2s",
-                  boxShadow: checked ? "0 4px 12px rgba(59, 111, 255, 0.15)" : "none",
-                }}>
-                <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
-                  <input type="checkbox" checked={checked} onChange={() => {}} onClick={e => e.stopPropagation()}
-                    style={{ marginTop: 2, accentColor: "#3B6FFF", flexShrink: 0, width: 18, height: 18, cursor: "pointer" }} />
-                  <div style={{ flex: 1 }}>
-                    <h3 style={{ fontSize: 15, fontWeight: 600, color: "#111827", margin: "0 0 6px" }}>{s.label}</h3>
-                    <p style={{ fontSize: 13, color: "#6B7280", margin: 0, lineHeight: 1.6 }}>{s.description}</p>
+              <div
+                key={report.id}
+                onClick={() => setDetailReport(report)}
+                style={{ background: "#fff", border: "1.5px solid #e8eef8", borderRadius: 14, padding: "20px 22px", cursor: "pointer", transition: "box-shadow 0.18s, border-color 0.18s", position: "relative", overflow: "hidden" }}
+                onMouseEnter={(e) => { e.currentTarget.style.boxShadow = "0 6px 24px rgba(59,111,255,0.10)"; e.currentTarget.style.borderColor = "#b3c6ff"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.borderColor = "#e8eef8"; }}
+              >
+                {/* Classification accent */}
+                <div style={{ position: "absolute", top: 0, left: 0, width: 4, height: "100%", background: cls.color, borderRadius: "14px 0 0 14px" }} />
+
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10, paddingLeft: 8 }}>
+                  <div style={{ flex: 1, minWidth: 0, marginRight: 10 }}>
+                    <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: "#0f172a", lineHeight: 1.4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {report.name}
+                    </p>
+                    <p style={{ margin: "3px 0 0", fontSize: 12, color: "#94a3b8" }}>{report.type}</p>
                   </div>
+                  <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 600, padding: "3px 9px", borderRadius: 6, background: cls.bg, color: cls.color, letterSpacing: "0.3px" }}>
+                    {cls.label}
+                  </span>
+                </div>
+
+                <div style={{ borderTop: "1px solid #f1f5f9", paddingTop: 12, paddingLeft: 8, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 5, background: st.bg, color: st.color }}>{report.status}</span>
+                    <span style={{ fontSize: 11, color: "#94a3b8" }}>{report.createdAt}</span>
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); alert(`Downloading "${report.name}"`); }}
+                      style={{ width: 28, height: 28, borderRadius: 7, border: "1px solid #e2e8f0", background: "#f8faff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#3B6FFF" }}
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setReports(reports.filter((r) => r.id !== report.id)); }}
+                      style={{ width: 28, height: 28, borderRadius: 7, border: "1px solid #fee2e2", background: "#fff5f5", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#dc2626" }}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ paddingLeft: 8, marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  <span style={{ fontSize: 11, color: "#94a3b8" }}>{report.template} · {report.size}</span>
                 </div>
               </div>
             );
           })}
         </div>
+      )}
 
-        <div style={{ position: "sticky", bottom: 32, background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: "20px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", boxShadow: "0 -4px 20px rgba(0,0,0,0.08)" }}>
-          <span style={{ fontSize: 14, color: "#6B7280" }}>
-            <span style={{ fontWeight: 600, color: "#111827" }}>{selected.length}</span> of {SECTIONS.length} sections selected
-          </span>
-          <button
-            disabled={selected.length === 0}
-            onClick={() => setStep("configure")}
-            style={{ padding: "11px 24px", background: selected.length === 0 ? "#E5E7EB" : "#3B6FFF", color: selected.length === 0 ? "#9CA3AF" : "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: selected.length === 0 ? "not-allowed" : "pointer", fontFamily: "inherit", transition: "background 0.2s" }}
-          >
-            Continue to Configuration
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+      {/* ── New report modal ── */}
+      {showModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20 }}>
+          <div style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 560, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 24px 64px rgba(15,23,42,0.18)" }}>
 
-function SavedReportsView() {
-  return (
-    <div style={{ minHeight: "100vh", background: "#F8FAFF", fontFamily: "'DM Sans', system-ui, sans-serif", padding: "40px 48px" }}>
-      <div style={{ maxWidth: 1200, margin: "0 auto" }}>
-        <div style={{ marginBottom: 32 }}>
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: "#111827", margin: "0 0 6px", fontFamily: "'Fraunces', Georgia, serif", letterSpacing: "-0.01em" }}>Saved Reports</h1>
-          <p style={{ fontSize: 14, color: "#6B7280", margin: 0 }}>View and manage previously generated reports</p>
-        </div>
+            {/* Modal header */}
+            <div style={{ padding: "24px 28px 16px", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#0f172a", fontFamily: "'Fraunces', serif" }}>New report</h2>
+                <p style={{ margin: "4px 0 0", fontSize: 12, color: "#94a3b8" }}>Import your template then configure the report.</p>
+              </div>
+              <button onClick={() => setShowModal(false)} style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid #e2e8f0", background: "#f8faff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#64748b" }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 20 }}>
-          {SAVED_REPORTS.map((report) => (
-            <div key={report.id} style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, overflow: "hidden", transition: "all 0.2s", cursor: "pointer" }}
-              onMouseEnter={e => e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.08)"}
-              onMouseLeave={e => e.currentTarget.style.boxShadow = "none"}>
+            <div style={{ padding: "24px 28px" }}>
 
-              <div style={{ background: "#3d61bd", padding: "20px 24px" }}>
-                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "flex-end", marginBottom: 12 }}>
-                  <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 999, background: report.status === "Final" ? "#15803D" : "#6B7280", color: "#fff", fontWeight: 600 }}>
-                    {report.status}
-                  </span>
+              {/* Step 1 – Import template */}
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                  <div style={{ width: 22, height: 22, borderRadius: 6, background: templateFile ? "#dcfce7" : "linear-gradient(135deg,#3B6FFF,#6D28D9)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {templateFile
+                      ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                      : <span style={{ color: "#fff", fontSize: 11, fontWeight: 700 }}>1</span>
+                    }
+                  </div>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>Import template</span>
                 </div>
-                <h3 style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 16, fontWeight: 700, color: "#fff", margin: 0, letterSpacing: "-0.01em", lineHeight: 1.4 }}>{report.title}</h3>
+
+                <label
+  style={{
+    border: `2px dashed ${templateDrag ? "#3B6FFF" : templateFile ? "#16a34a" : "#cbd5e1"}`,
+    borderRadius: 12,
+    padding: "28px 20px",
+    textAlign: "center",
+    cursor: "pointer",
+    background: templateDrag ? "#f0f4ff" : templateFile ? "#f0fdf4" : "#fafafa",
+    transition: "all 0.2s",
+    display: "block"
+  }}
+  onDragOver={(e) => { e.preventDefault(); setTemplateDrag(true); }}
+  onDragLeave={() => setTemplateDrag(false)}
+  onDrop={handleDrop}
+>
+  <input
+    type="file"
+    hidden
+    accept=".docx,.pdf,.xlsx,.doc"
+    onChange={(e) => handleFileSelect(e.target.files[0])}
+  />
+
+  {templateFile ? (
+    <div>
+      <p style={{ margin: 0 }}>{templateFile.name}</p>
+      <p style={{ fontSize: 11 }}>
+        {(templateFile.size / 1024).toFixed(0)} KB
+      </p>
+    </div>
+  ) : (
+    <div>
+      <p>Drag your template here</p>
+      <p style={{ fontSize: 11 }}>
+        or click to browse your files
+      </p>
+    </div>
+  )}
+</label>
               </div>
 
-              <div style={{ padding: "20px 24px" }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
-                  <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" style={{ marginTop: 2, flexShrink: 0 }}>
-                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                      <line x1="16" y1="2" x2="16" y2="6"/>
-                      <line x1="8" y1="2" x2="8" y2="6"/>
-                      <line x1="3" y1="10" x2="21" y2="10"/>
-                    </svg>
-                    <div style={{ flex: 1 }}>
-                      <p style={{ fontSize: 11, color: "#9CA3AF", margin: "0 0 2px", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>Period</p>
-                      <p style={{ fontSize: 13, color: "#374151", margin: 0 }}>{report.period}</p>
-                    </div>
+              {/* Step 2 – Report info */}
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                  <div style={{ width: 22, height: 22, borderRadius: 6, background: !templateFile ? "#f1f5f9" : "linear-gradient(135deg,#3B6FFF,#6D28D9)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <span style={{ color: !templateFile ? "#94a3b8" : "#fff", fontSize: 11, fontWeight: 700 }}>2</span>
                   </div>
-
-                  <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" style={{ marginTop: 2, flexShrink: 0 }}>
-                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                      <circle cx="12" cy="7" r="4"/>
-                    </svg>
-                    <div style={{ flex: 1 }}>
-                      <p style={{ fontSize: 11, color: "#9CA3AF", margin: "0 0 2px", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>Author</p>
-                      <p style={{ fontSize: 13, color: "#374151", margin: 0 }}>{report.author}</p>
-                    </div>
-                  </div>
-
-                  <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" style={{ marginTop: 2, flexShrink: 0 }}>
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                      <polyline points="14 2 14 8 20 8"/>
-                    </svg>
-                    <div style={{ flex: 1 }}>
-                      <p style={{ fontSize: 11, color: "#9CA3AF", margin: "0 0 2px", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>Sections</p>
-                      <p style={{ fontSize: 13, color: "#374151", margin: 0 }}>{report.sections} sections included</p>
-                    </div>
-                  </div>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: !templateFile ? "#94a3b8" : "#0f172a" }}>Report information</span>
                 </div>
 
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 16, borderTop: "1px solid #F3F4F6" }}>
-                  <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6, background: "#F3F4F6", color: "#6B7280", fontWeight: 500 }}>
-                    {report.classification}
-                  </span>
-                  <span style={{ fontSize: 11, color: "#9CA3AF" }}>
-                    {new Date(report.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                  </span>
+                <div style={{ display: "flex", flexDirection: "column", gap: 14, opacity: !templateFile ? 0.45 : 1, pointerEvents: !templateFile ? "none" : "auto" }}>
+
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: "#475569", display: "block", marginBottom: 6 }}>Report name *</label>
+                    <input
+                      type="text"
+                      placeholder="e.g., ISO 27001 Audit – Q2 2025"
+                      value={form.name}
+                      onChange={(e) => setForm({ ...form, name: e.target.value })}
+                      style={{ width: "100%", height: 40, border: "1.5px solid #e2e8f0", borderRadius: 8, padding: "0 14px", fontSize: 13, color: "#0f172a", background: "#fff", outline: "none", fontFamily: "'DM Sans', sans-serif", boxSizing: "border-box" }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: "#475569", display: "block", marginBottom: 6 }}>Report type *</label>
+                    <select
+                      value={form.type}
+                      onChange={(e) => setForm({ ...form, type: e.target.value })}
+                      style={{ width: "100%", height: 40, border: "1.5px solid #e2e8f0", borderRadius: 8, padding: "0 14px", fontSize: 13, color: form.type ? "#0f172a" : "#94a3b8", background: "#fff", outline: "none", fontFamily: "'DM Sans', sans-serif", cursor: "pointer" }}
+                    >
+                      <option value="" disabled>Select a type...</option>
+                      {REPORT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: "#475569", display: "block", marginBottom: 8 }}>Classification *</label>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {CLASSIFICATION_OPTIONS.map((c) => (
+                        <button
+                          key={c.value}
+                          onClick={() => setForm({ ...form, classification: c.value })}
+                          style={{ padding: "6px 14px", borderRadius: 8, border: `2px solid ${form.classification === c.value ? c.color : "#e2e8f0"}`, background: form.classification === c.value ? c.bg : "#fff", color: form.classification === c.value ? c.color : "#64748b", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s" }}
+                        >
+                          {c.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
 
-export default function App() {
-  const [activeTab, setActiveTab] = useState("create");
+              {/* Step 3 – Generation */}
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                  <div style={{ width: 22, height: 22, borderRadius: 6, background: generated ? "#dcfce7" : (!templateFile || !form.name || !form.type) ? "#f1f5f9" : "linear-gradient(135deg,#3B6FFF,#6D28D9)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {generated
+                      ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                      : <span style={{ color: (!templateFile || !form.name || !form.type) ? "#94a3b8" : "#fff", fontSize: 11, fontWeight: 700 }}>3</span>
+                    }
+                  </div>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: (!templateFile || !form.name || !form.type) ? "#94a3b8" : "#0f172a" }}>Generate report</span>
+                </div>
 
-  return (
-    <div style={{ minHeight: "100vh", background: "#F8FAFF", fontFamily: "'DM Sans', system-ui, sans-serif" }}>
-      <div style={{ background: "#fff", borderBottom: "1px solid #E5E7EB" }}>
-        <div style={{ padding: "20px 32px 0" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-            
-            <div>
-              <h1 style={{ fontSize: 20, fontWeight: 700, color: "#111827", margin: 0, fontFamily: "'Fraunces', Georgia, serif" }}>Reporting</h1>
-              
+                {!generated ? (
+                
+                  <button
+                    onClick={handleGenerate}
+                    disabled={!templateFile || !form.name || !form.type || generating}
+                    style={{ width: "100%", height: 44, borderRadius: 10, border: "none", background: (!templateFile || !form.name || !form.type) ? "#f1f5f9" : "linear-gradient(135deg,#3B6FFF 0%,#6D28D9 100%)", color: (!templateFile || !form.name || !form.type) ? "#94a3b8" : "#fff", fontSize: 14, fontWeight: 600, cursor: (!templateFile || !form.name || !form.type) ? "not-allowed" : "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, transition: "opacity 0.2s" }}
+                  >
+                    {generating ? (
+                      <>
+                        <div style={{ width: 16, height: 16, border: "2.5px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                        Generate report
+                      </>
+                    )}
+                  </button>
+                  
+                ) : (
+                  <div style={{ border: "1.5px solid #bbf7d0", borderRadius: 12, padding: "16px 18px", background: "#f0fdf4", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{ width: 32, height: 32, borderRadius: 8, background: "#dcfce7", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                      </div>
+                      <div>
+                        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#15803d" }}>Report generated successfully</p>
+                        <p style={{ margin: 0, fontSize: 11, color: "#16a34a" }}>Ready to be added to the library</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleCreate}
+                      style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: "#16a34a", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}
+                    >
+                      Save
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
+        </div>
+      )}
 
-          <div style={{ display: "flex", gap: 4 }}>
-            <button
-              onClick={() => setActiveTab("view")}
-              style={{
-                padding: "10px 20px",
-                background: "transparent",
-                border: "none",
-                borderBottom: activeTab === "view" ? "2px solid #3B6FFF" : "2px solid transparent",
-                color: activeTab === "view" ? "#3B6FFF" : "#6B7280",
-                fontSize: 14,
-                fontWeight: 600,
-                cursor: "pointer",
-                fontFamily: "inherit",
-                transition: "all 0.2s",
-              }}
-            >
-              View Reports
-            </button>
-            <button
-              onClick={() => setActiveTab("create")}
-              style={{
-                padding: "10px 20px",
-                background: "transparent",
-                border: "none",
-                borderBottom: activeTab === "create" ? "2px solid #3B6FFF" : "2px solid transparent",
-                color: activeTab === "create" ? "#3B6FFF" : "#6B7280",
-                fontSize: 14,
-                fontWeight: 600,
-                cursor: "pointer",
-                fontFamily: "inherit",
-                transition: "all 0.2s",
-              }}
-            >
-              Create Report
-            </button>
+      {/* ── Report detail modal ── */}
+      {detailReport && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20 }}>
+          <div style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 480, boxShadow: "0 24px 64px rgba(15,23,42,0.18)" }}>
+            {(() => {
+              const cls = classificationOf(detailReport.classification);
+              const st = STATUS_STYLE[detailReport.status] || STATUS_STYLE["draft"];
+              return (
+                <>
+                  <div style={{ padding: "22px 26px 14px", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 6, background: cls.bg, color: cls.color }}>{cls.label}</span>
+                        <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 5, background: st.bg, color: st.color }}>{detailReport.status}</span>
+                      </div>
+                      <h2 style={{ margin: "6px 0 0", fontSize: 16, fontWeight: 700, color: "#0f172a", fontFamily: "'Fraunces', serif" }}>{detailReport.name}</h2>
+                    </div>
+                    <button onClick={() => setDetailReport(null)} style={{ width: 30, height: 30, borderRadius: 7, border: "1px solid #e2e8f0", background: "#f8faff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#64748b" }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                  </div>
+                  <div style={{ padding: "18px 26px 24px" }}>
+                    {[
+                      ["Type", detailReport.type],
+                      ["Template", detailReport.template],
+                      ["Size", detailReport.size],
+                      ["Created by", detailReport.createdBy],
+                      ["Creation date", detailReport.createdAt],
+                    ].map(([label, val]) => (
+                      <div key={label} style={{ display: "flex", justifyContent: "space-between", padding: "9px 0", borderBottom: "1px solid #f8faff" }}>
+                        <span style={{ fontSize: 13, color: "#64748b" }}>{label}</span>
+                        <span style={{ fontSize: 13, fontWeight: 500, color: "#0f172a" }}>{val}</span>
+                      </div>
+                    ))}
+                    <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+                      <button style={{ flex: 1, height: 40, borderRadius: 9, border: "1.5px solid #e2e8f0", background: "#f8faff", color: "#3B6FFF", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        Download
+                      </button>
+                      <button style={{ flex: 1, height: 40, borderRadius: 9, border: "none", background: "linear-gradient(135deg,#3B6FFF,#6D28D9)", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+                        Open
+                      </button>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
-      </div>
+      )}
 
-      {activeTab === "view" ? <SavedReportsView /> : <ReportBuilder />}
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:wght@700&display=swap');
+        @keyframes spin { to { transform: rotate(360deg); } }
+        input:focus, select:focus { border-color: #3B6FFF !important; box-shadow: 0 0 0 3px rgba(59,111,255,0.1); }
+      `}</style>
     </div>
   );
 }

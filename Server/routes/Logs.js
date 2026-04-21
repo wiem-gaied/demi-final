@@ -50,5 +50,26 @@ router.get("/", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+router.get("/:email", async (req, res) => {
+  const { email } = req.params;
 
+  try {
+    console.log("EMAIL RECEIVED 👉", email);
+
+    const [rows] = await db.query(
+      "SELECT * FROM logs WHERE user_email = ? ORDER BY created_at DESC",
+      [email]
+    );
+
+    console.log("LOGS RESULT 👉", rows);
+
+    res.json(rows);
+  } catch (err) {
+    console.error("🔥 FULL LOG ERROR 👉", err); // IMPORTANT
+    res.status(500).json({
+      message: "Server error",
+      error: err.message, // 👈 AJOUTE ÇA
+    });
+  }
+});
 export default router;

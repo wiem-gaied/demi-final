@@ -109,10 +109,11 @@ export function activityLogger(actionType, options = {}) {
       // 🔹 INSERT
       await db.query(
         `INSERT INTO logs 
-        (user_email, role, action, target, extra_info, level, ip_address, user_agent)
+        ( user_email, role, action, target, extra_info, level, ip_address, user_agent)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           userEmail,
+    
           userRole,
           action,
           target,

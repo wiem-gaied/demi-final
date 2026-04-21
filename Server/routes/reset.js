@@ -3,6 +3,7 @@ import crypto from "crypto";
 import bcrypt from "bcrypt";
 import pool from "../db.js";
 import  sendResetLink from "../mailer.js";
+import { authMiddleware } from "../middlewares/rbac.js";
 
 const router = express.Router();
 
@@ -113,6 +114,84 @@ router.post("/reset-password", async (req, res) => {
   } catch (err) {
     console.error("Reset password error:", err);
     res.status(500).json({ error: err.message });
+  }
+});
+router.post("/check-password", authMiddleware, async (req, res) => {
+  try {
+    const { currentPassword } = req.body;
+
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ message: "Unauthorized user" });
+    }
+
+    const userId = req.user.id;
+    console.log("SESSION:", req.session);
+console.log("USER:", req.session.user);
+console.log("COOKIES:", req.headers.cookie);
+
+    const [rows] = await pool.query(
+      "SELECT password FROM users WHERE id = ?",
+      [userId]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const match = await bcrypt.compare(
+      currentPassword,
+      rows[0].password
+    );
+
+    if (!match) {
+      return res.status(400).json({ message: "Current password is incorrect" });
+    }
+
+    return res.json({ valid: true });
+
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: "Server error" });
+  }
+});
+router.put("/change-password", authMiddleware, async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+
+  try {
+    const [users] = await pool.query(
+      "SELECT * FROM users WHERE id = ?",
+      [req.user.id]
+    );
+
+    if (!users.length) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const user = users[0];
+
+    // vérifier ancien mot de passe
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+
+    if (!isMatch) {
+      return res.status(400).json({ message: "Current password is incorrect" });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({ message: "Password too short" });
+    }
+
+    const hashed = await bcrypt.hash(newPassword, 10);
+
+    await pool.query(
+      "UPDATE users SET password = ? WHERE id = ?",
+      [hashed, req.user.id]
+    );
+
+    return res.json({ message: "Password updated successfully" });
+
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: "Server error" });
   }
 });
 

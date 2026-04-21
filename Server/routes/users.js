@@ -91,6 +91,39 @@ router.post("/",activityLogger("CREATE_USER", { table: "users", nameColumn: "ema
     res.status(500).json({ message: "Erreur serveur" });
   }
 });
+router.get("/activate", async (req, res) => {
+  const { token } = req.query;
+
+  try {
+    const [rows] = await pool.query(
+      "SELECT * FROM users WHERE activation_token=?",
+      [token]
+    );
+
+    if (!rows.length) {
+      return res.status(400).json({ message: "Token invalide" });
+    }
+
+    const user = rows[0];
+
+    // 🔥 Vérification expiration
+    if (new Date() > new Date(user.activation_expires)) {
+      return res.status(400).json({ message: "Lien expiré" });
+    }
+
+    // Activer le compte
+    await pool.query(
+      "UPDATE users SET status='active', activation_token=NULL WHERE id=?",
+      [user.id]
+    );
+
+    res.json({ message: "Compte activé avec succès" });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Erreur serveur" });
+  }
+});
 router.delete("/:id",activityLogger("DELETE_USER", { table: "users", nameColumn: "email" }), async (req, res) => {
   const id = req.params.id;
 

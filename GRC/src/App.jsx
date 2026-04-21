@@ -22,6 +22,8 @@ import SettingsPage from "./pages/Settings.jsx";
 import Reporting from "./pages/Reporting.jsx";
 import About from "./pages/About.jsx"
 import Contact from "./pages/Contact.jsx";
+import Profile from "./pages/Profile.jsx";
+import Settingsprofile from "./pages/Settingsprofile.jsx";
 
 
 
@@ -46,6 +48,7 @@ const App = () => {
       
 
       <Routes>
+
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<AuthModal />} />
         <Route path="/forgot" element={<AuthModal />} />
@@ -78,6 +81,8 @@ const App = () => {
         
         {/* Routes enfants supplémentaires */}
         <Route path="dashboard" element={<Dashboard />} />
+        <Route path="profile" element={<Profile />} />
+        <Route path="settingsprofile" element={<Settingsprofile />} />
         
         <Route path="risques" element={<Risques />} />
           <Route path="assets" element={<Assets />} />

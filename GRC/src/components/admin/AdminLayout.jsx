@@ -586,15 +586,24 @@ export default function AdminLayout() {
                         <span style={{ color: "#475569", fontSize: "11px" }}>{admin.lastLogin}</span>
                       </div>
                     </div>
-                    {[{ icon: UserCircle, label: "Profile" }, { icon: Settings, label: "Settings" }].map((a, i) => {
+                    {[{ to:"/layout/profile", icon: UserCircle, label: "Profile" }].map((a, i) => {
                       const Icon = a.icon;
                       return (
-                        <button key={i} style={{ display: "flex", alignItems: "center", gap: "9px", width: "100%", padding: "10px 13px", border: "none", background: "transparent", color: "#475569", fontSize: "12px", fontWeight: "500", cursor: "pointer", transition: "background 0.15s" }}
-                          onMouseEnter={e => e.currentTarget.style.background = "#F8FAFC"}
-                          onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                          <Icon size={14} /> {a.label}
-                        </button>
-                      );
+                      <button key={i} 
+                       onClick={() => a.to && navigate(a.to)}
+                       style={{
+                        display: "flex", alignItems: "center", gap: "9px",
+                        width: "100%", padding: "10px 13px",
+                        border: "none", background: "transparent",
+                        color: "#475569", fontSize: "12px", fontWeight: "500",
+                        cursor: "pointer", transition: "background 0.15s",
+                      }}
+                        onMouseEnter={e => e.currentTarget.style.background = "#F8FAFC"}
+                        onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                      >
+                        <Icon size={14} /> {a.label}
+                      </button>
+                    );
                     })}
                     <button onClick={handleLogout} style={{ display: "flex", alignItems: "center", gap: "9px", width: "100%", padding: "10px 13px", border: "none", borderTop: "1px solid #F1F5F9", background: "transparent", color: "#EF4444", fontSize: "12px", fontWeight: "600", cursor: "pointer", transition: "background 0.15s" }}
                       onMouseEnter={e => e.currentTarget.style.background = "#FEF2F2"}

@@ -1,6 +1,7 @@
 // GroupsTab.js
 import { useState, useEffect } from "react";
 import { Plus, Edit3, Trash2, Shield, X, Check } from "lucide-react";
+import PermissionGuard from "../components/PermissionGuard";
 
 // Design tokens
 const T = {
@@ -643,6 +644,7 @@ export default function GroupsTab({ groups, users, setGroups }) {
           marginBottom: 20,
         }}
       >
+      <PermissionGuard permission="create_group">
         <button
           onClick={() => {
             setEditTarget(null);
@@ -665,6 +667,7 @@ export default function GroupsTab({ groups, users, setGroups }) {
         >
           <Plus size={16} /> New Group
         </button>
+      </PermissionGuard>
       </div>
 
       <div
@@ -724,7 +727,9 @@ export default function GroupsTab({ groups, users, setGroups }) {
                       {g.description}
                     </div>
                   </div>
+
                   <div style={{ display: "flex", gap: 6 }}>
+                  <PermissionGuard permission="manage_groups">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -742,6 +747,9 @@ export default function GroupsTab({ groups, users, setGroups }) {
                     >
                       <Edit3 size={14} />
                     </button>
+
+                  </PermissionGuard>
+                  <PermissionGuard permission="delete_group">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -758,6 +766,7 @@ export default function GroupsTab({ groups, users, setGroups }) {
                     >
                       <Trash2 size={14} />
                     </button>
+                  </PermissionGuard>
                   </div>
                 </div>
 

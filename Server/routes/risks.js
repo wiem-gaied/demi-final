@@ -1,9 +1,11 @@
 import express from "express";
 import db from "../db.js";
 import { activityLogger } from "../middlewares/activityLogger.js";
+import {requirePermission} from "../middlewares/rbac.js";
+import { authMiddleware } from "../middlewares/rbac.js";
 
 const router = express.Router();
-router.post("/", activityLogger("ADD_risk"), async (req, res) => {
+router.post("/", activityLogger("ADD_risk"), authMiddleware,requirePermission("create_risks"), async (req, res) => {
   try {
     const {
       intitule,
@@ -141,7 +143,7 @@ router.get("/getrisks", async (req, res) => {
     res.status(500).json({ error: "Erreur serveur" });
   }
 });
-router.delete("/:id", activityLogger("DELETE_risk", { table: "risks", nameColumn: "intitule" }),async (req, res) => {
+router.delete("/:id", activityLogger("DELETE_risk", { table: "risks", nameColumn: "intitule" }),authMiddleware, requirePermission("delete_risks"), async (req, res) => {
     
     try{
         const { id } = req.params;
@@ -153,7 +155,7 @@ router.delete("/:id", activityLogger("DELETE_risk", { table: "risks", nameColumn
         res.status(500).json({ error: "Erreur serveur"});
     }
 });
-router.patch("/:id/status", async(req, res) =>{
+router.patch("/:id/status", authMiddleware, requirePermission("edit_risks"), async(req, res) =>{
     const { id } = req.params;
     const { statut } = req.body;
     try{

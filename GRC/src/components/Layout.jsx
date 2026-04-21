@@ -50,7 +50,7 @@ const menuItems = [
   },
   { to: "/layout/logs", icon: FileText, label: "Logs", roles: ["user"] },
   { to: "/layout/reporting", icon: BarChart, label: "Reporting" },
-  { to: "/layout/settings", icon: Settings, label: "Settings", roles: ["user"] },
+  { to: "/layout/settings", icon: Settings, label: "Access & controls", roles: ["user"] },
 ];
 
 const handleLogout = async () => {
@@ -647,6 +647,7 @@ const Layout = () => {
   const [menuOpen, setMenuOpen] = useState(true);
   const [openMenu, setOpenMenu] = useState(null);
   const [showNotif, setShowNotif] = useState(false);
+  
 
   const toggleSubMenu = (label) => {
     setOpenMenu(openMenu === label ? null : label);
@@ -1020,12 +1021,14 @@ const Layout = () => {
 
                   {/* Actions */}
                   {[
-                    { icon: UserCircle, label: "profile" },
-                    { icon: Settings, label: "Settings" },
+                    {to: "/layout/profile", icon: UserCircle, label: "profile" },
+                    
                   ].map((a, i) => {
                     const Icon = a.icon;
                     return (
-                      <button key={i} style={{
+                      <button key={i} 
+                       onClick={() => a.to && navigate(a.to)}
+                       style={{
                         display: "flex", alignItems: "center", gap: "9px",
                         width: "100%", padding: "10px 13px",
                         border: "none", background: "transparent",

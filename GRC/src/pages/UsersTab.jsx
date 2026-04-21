@@ -24,7 +24,7 @@ const T = {
 
 // Mock data
 const ROLES = ["auditor", "user"];
-const DEPARTMENTS = ["IT Security", "Compliance", "Risk Management", "Legal", "Finance", "Operations"];
+const DEPARTMENTS = ["Information Technology (IT)", "Finance", "Healthcare", "Manufacturing", "Telecommunications", "Education"];
 
 // Utility helpers
 const avatarBg = (initials) => {

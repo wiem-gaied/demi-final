@@ -4,6 +4,8 @@ import bcrypt from "bcrypt";
 import speakeasy from "speakeasy";
 import QRCode from "qrcode";
 import { activityLogger } from "../middlewares/activityLogger.js";
+import { formatDate } from "../utils/dateFormat.js";
+
 
 const router = express.Router();
 
@@ -110,6 +112,10 @@ if (!user.mfa_secret) {
         [user.id]
       );
     }
+    await pool.query(
+  "UPDATE users SET last_login = NOW() WHERE id = ?",
+  [user.id]
+);
 
     // 7. GET USER GROUPS
     const [groupsRows] = await pool.query(
@@ -144,6 +150,7 @@ if (!user.mfa_secret) {
     // 8. SESSION
     req.session.userId = user.id;
     req.session.user = {
+      id: user.id, 
       email: user.email,
       role: user.role,
       name: `${user.first_name} ${user.last_name}`,

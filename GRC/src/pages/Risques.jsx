@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { X, ShieldAlert, TrendingUp, AlertTriangle, CheckCircle, Plus, Trash2, Edit3 } from "lucide-react";
+import PermissionGuard from "../components/PermissionGuard";
 
 const IMPACT_LEVELS = ["0", "1", "2", "3", "4"];
 const PROBA_LEVELS  = ["0", "1", "2", "3", "4"];
@@ -331,6 +332,7 @@ const handleFetchRisques = async () => {
             Identification, assessment and monitoring of risks
           </p>
         </div>
+      <PermissionGuard permission="create_risks">
         <button
           onClick={openModal}
           style={{
@@ -357,6 +359,7 @@ const handleFetchRisques = async () => {
         >
           <Plus size={15} /> Add a risk
         </button>
+      </PermissionGuard>  
       </div>
 
       {/* ── KPI CARDS ── */}
@@ -983,6 +986,7 @@ const handleFetchRisques = async () => {
                             {r.statut}
                           </span>
                           <div style={{ display: "flex", gap: "4px" }}>
+                          <PermissionGuard permission="edit_risks">
                             <button
                               onClick={() => setEditingStatus(r.id)}
                               className="action-btn"
@@ -1010,6 +1014,8 @@ const handleFetchRisques = async () => {
                             >
                               <Edit3 size={14} />
                             </button>
+                          </PermissionGuard>
+                          <PermissionGuard permission="delete_risks">
                             <button
                               onClick={() => handleDelete(r.id)}
                               className="action-btn"
@@ -1037,6 +1043,7 @@ const handleFetchRisques = async () => {
                             >
                               <Trash2 size={14} />
                             </button>
+                          </PermissionGuard>
                           </div>
                         </>
                       )}
@@ -1142,12 +1149,12 @@ const handleFetchRisques = async () => {
                   <option value="Financial">Financial</option>
                   <option value="HR">HR</option>
                   <option value="SOC">SOC</option>
-                  <option value="IT">IT</option>
-                  <option value="Information Security">
-                    Information Security
+                  <option value="IT">Information Technology (IT)</option>
+                  <option value="Healthcare">
+                    Healthcare
                   </option>
-                  <option value="Application Security">Application Security</option>
-                  <option value="Access Control">Access Control</option>
+                  <option value="Telecommunications">Telecommunications</option>
+                  <option value="Energy">Energy</option>
                 </select>
                 <div style={{ flex: 1, position: "relative" }}>
                   <div

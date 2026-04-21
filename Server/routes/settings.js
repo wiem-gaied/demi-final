@@ -234,7 +234,7 @@ router.put("/users/:id", async (req, res) => {
   }
 });
 // Route unique pour éditer complètement un groupe
-router.put("/groups/:id", async (req, res) => {
+router.put("/groups/:id",authMiddleware, requirePermission("manage_groups"), async (req, res) => {
   const groupId = req.params.id;
   const { name, description, permissions, members } = req.body;
   
@@ -344,7 +344,7 @@ router.put("/groups/:id", async (req, res) => {
     conn.release();
   }
 });
-router.delete("/groups/:id", async (req, res) => {
+router.delete("/groups/:id", authMiddleware, requirePermission("delete_group") ,async (req, res) => {
   try {
     const { id } = req.params;
 

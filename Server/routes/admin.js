@@ -1,5 +1,6 @@
 import express from "express";
 import db from "../db.js";
+import { formatDate } from "../utils/dateFormat.js";
 
 
 const router = express.Router();
@@ -14,7 +15,7 @@ router.get("/profile", async (req, res) => {
 
 
     const [rows] = await db.query(
-      "SELECT id, first_name, last_name, email, role, avatar, organization, last_login FROM users WHERE id = ?",
+      "SELECT id, first_name, last_name, email, role, avatar, organization, status, last_login FROM users WHERE id = ?",
       [userId]
     );
 
@@ -36,13 +37,16 @@ router.get("/profile", async (req, res) => {
 
     res.json({
       id: user.id,
+      firstName:user.first_name,
+      lastName:user.last_name,
       name: `${user.first_name} ${user.last_name}`,
       role: user.role,
       email: user.email,
       initials,
+      status:user.status,
       avatar: user.avatar,
       organization: user.organization,
-      lastLogin: user.last_login
+      lastLogin: formatDate(user.last_login)
         ? new Date(user.last_login).toLocaleString()
         : "Première connexion"
     });
