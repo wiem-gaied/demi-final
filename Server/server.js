@@ -26,7 +26,8 @@ import permissionsRouter from "./routes/permissions.js";
 import securitysessionRouter from "./routes/securitysession.js";
 import frameworksauditorRouter from './routes/frameworksauditor.js';
 import reportingRouter from "./routes/reporting.js";
-
+import dashboardRouter from "./routes/dashboard.js";
+import cisoRoutesRouter from "./routes/cisoRoutes.js";
 const app = express();
 
 // ============================================================
@@ -87,6 +88,9 @@ app.use("/api/permissions", permissionsRouter);
 app.use("/api/security", securitysessionRouter);
 app.use("/api/framauditor", frameworksauditorRouter);
 app.use("/api/reporting", reportingRouter);
+app.use('/api/dashboard', dashboardRouter);
+app.use('/api/cisoRoutes', cisoRoutesRouter);
+
 
 // ============================================================
 // 3. Gestion des erreurs 404

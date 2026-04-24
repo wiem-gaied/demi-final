@@ -283,12 +283,25 @@ export  default function LoginPage({ onClose, onForgotPassword}){
           )}
           <label style={LBL}>Verification code</label>
           <input
-            style={{ ...INPUT, paddingLeft: 12, textAlign: "center", letterSpacing: 6, fontSize: 18, fontWeight: 700 }}
-            placeholder="••••••"
-            value={mfaCode}
-            onChange={(e) => setMfaCode(e.target.value)}
-            onKeyDown={handleKey}
-          />
+  style={{
+    ...INPUT,
+    paddingLeft: 12,
+    textAlign: "center",
+    letterSpacing: 6,
+    fontSize: 18,
+    fontWeight: 700
+  }}
+  placeholder="••••••"
+  value={mfaCode}
+  maxLength={6}
+  inputMode="numeric"
+  pattern="[0-9]*"
+  onChange={(e) => {
+    const value = e.target.value.replace(/\D/g, ""); // supprime tout sauf chiffres
+    setMfaCode(value.slice(0, 6)); // max 6 chiffres
+  }}
+  onKeyDown={handleKey}
+/>
           <p style={{ fontSize: 11, color: "#94a3b8", margin: "6px 0 16px", textAlign: "center" }}>
             Valid for 30 seconds · Automatically renewed
           </p>

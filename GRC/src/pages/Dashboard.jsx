@@ -9,13 +9,49 @@ function useDashboardData() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // fetch("/api/dashboard").then(r=>r.json()).then(setData).finally(()=>setLoading(false));
-    setTimeout(() => { setData(EMPTY_DATA); setLoading(false); }, 500);
-  }, []);
+  async function fetchData() {
+  try {
+    const res = await fetch("http://localhost:3000/api/dashboard/priority-actions");
 
-  return { data, loading };
+    const data = await res.json();
+    console.log("API RESPONSE:", data); // 🔥 debug
+
+    // ✅ sécurité
+    if (!Array.isArray(data)) {
+      console.error("Backend error:", data);
+      return;
+    }
+
+    const formatted = data.map(a => ({
+      id: a.id,
+      title: a.action,
+      priority: a.priority,
+      owner: a.assigned_to,
+      dueDate: a.due_date,
+      
+    }));
+
+    setData(prev => ({
+      ...prev,
+      actions: formatted
+    }));
+
+  } catch (err) {
+    console.error("Fetch error:", err);
+  } finally {
+    setLoading(false);
+  }
 }
 
+  fetchData();
+
+  const interval = setInterval(fetchData, 5000);
+
+  return () => clearInterval(interval);
+
+}, []);
+return { data, loading };
+}
 // ─────────────────────────────────────────────────────────────────
 // STANDARDS
 // ─────────────────────────────────────────────────────────────────
@@ -270,7 +306,7 @@ export default function Dashboard() {
           <div style={{ fontSize:13, fontWeight:700, color:"#0F172A", textTransform:"uppercase", letterSpacing:"0.07em" }}>
             Priority actions
           </div>
-          {actions.length > 0 && (
+          {filteredActions.length > 0 && (
             <span style={{ fontSize:12, fontWeight:700, color:"#3B6FFF", background:"#EEF4FF", border:"1.5px solid #DBEAFE", borderRadius:20, padding:"3px 12px" }}>
               {actions.length} action{actions.length > 1 ? "s" : ""}
             </span>
