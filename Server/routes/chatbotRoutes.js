@@ -16,8 +16,8 @@ const pendingResponses = new Map();
 // Fonction pour créer un nouveau processus Python
 function createPythonSession(sessionId) {
     // Chemins absolus
-    const pythonScript = "C:/Users/ASUS/Desktop/PFE/chatbot_ollama.py";
-    const workingDir = "C:/Users/ASUS/Desktop/PFE";
+    const pythonScript = "C:/Users/stagiaire/Desktop/Ollama/Ollama/chatbot_ollama.py";
+    const workingDir = "C:/Users/stagiaire/Desktop/Ollama/Ollama";
     
     // Mais vérifiez que le chemin existe
     if (!fs.existsSync(workingDir)) {

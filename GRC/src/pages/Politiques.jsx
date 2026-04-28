@@ -41,20 +41,6 @@ const C = {
   chip:     "#EEF2FF",
 };
 
-// Fonction pour collecter tous les IDs des contrôles d'un chapitre
-const collectControlIds = (node) => {
-  const ids = [];
-  if (node.items) {
-    ids.push(...node.items.map(item => String(item.id)));
-  }
-  if (node.children) {
-    node.children.forEach(child => {
-      ids.push(...collectControlIds(child));
-    });
-  }
-  return ids;
-};
-
 // ── Modal pour ajouter un framework ─────────────────────────────────────────
 function AddFrameworkModal({ onClose, onConfirm }) {
   const [frameworkData, setFrameworkData] = useState({
@@ -83,16 +69,54 @@ function AddFrameworkModal({ onClose, onConfirm }) {
     setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
   };
 
-  const addControl = (chapterIndex) => {
+  const addSubChapter = (chapterIndex) => {
     const newHierarchy = [...frameworkData.hierarchy];
-    if (!newHierarchy[chapterIndex].items) newHierarchy[chapterIndex].items = [];
-    newHierarchy[chapterIndex].items.push({ ref_id: "", name: "", description: "" });
+    if (!newHierarchy[chapterIndex].children) newHierarchy[chapterIndex].children = [];
+    newHierarchy[chapterIndex].children.push({ 
+      ref_id: "", 
+      title: "", 
+      description: "", 
+      items: [] 
+    });
     setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
   };
 
-  const removeControl = (chapterIndex, controlIndex) => {
+  const removeSubChapter = (chapterIndex, subChapterIndex) => {
     const newHierarchy = [...frameworkData.hierarchy];
-    newHierarchy[chapterIndex].items = newHierarchy[chapterIndex].items.filter((_, i) => i !== controlIndex);
+    newHierarchy[chapterIndex].children = newHierarchy[chapterIndex].children.filter((_, i) => i !== subChapterIndex);
+    setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
+  };
+
+  const addControl = (chapterIndex, subChapterIndex = null) => {
+    const newHierarchy = [...frameworkData.hierarchy];
+    if (subChapterIndex !== null) {
+      if (!newHierarchy[chapterIndex].children[subChapterIndex].items) {
+        newHierarchy[chapterIndex].children[subChapterIndex].items = [];
+      }
+      newHierarchy[chapterIndex].children[subChapterIndex].items.push({ 
+        ref_id: "", 
+        name: "", 
+        description: "" 
+      });
+    } else {
+      if (!newHierarchy[chapterIndex].items) newHierarchy[chapterIndex].items = [];
+      newHierarchy[chapterIndex].items.push({ 
+        ref_id: "", 
+        name: "", 
+        description: "" 
+      });
+    }
+    setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
+  };
+
+  const removeControl = (chapterIndex, controlIndex, subChapterIndex = null) => {
+    const newHierarchy = [...frameworkData.hierarchy];
+    if (subChapterIndex !== null) {
+      newHierarchy[chapterIndex].children[subChapterIndex].items = 
+        newHierarchy[chapterIndex].children[subChapterIndex].items.filter((_, i) => i !== controlIndex);
+    } else {
+      newHierarchy[chapterIndex].items = newHierarchy[chapterIndex].items.filter((_, i) => i !== controlIndex);
+    }
     setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
   };
 
@@ -339,9 +363,122 @@ function AddFrameworkModal({ onClose, onConfirm }) {
                       style={{ width: "100%", padding: "6px 10px", border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, marginBottom: 10 }}
                     />
 
+                    {/* Sub-chapters */}
+                    <div style={{ marginTop: 10, marginLeft: 16 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: C.muted }}>Sub-chapters</span>
+                        <button onClick={() => addSubChapter(chIdx)} style={{ fontSize: 11, color: C.accent, background: "none", border: "none", cursor: "pointer" }}>+ Add Sub-chapter</button>
+                      </div>
+                      
+                      {(chapter.children || []).map((subChapter, subIdx) => (
+                        <div key={subIdx} style={{
+                          border: `1px solid ${C.border}`, borderRadius: 8,
+                          padding: 10, marginBottom: 10, background: C.card,
+                        }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                            <span style={{ fontSize: 11, fontWeight: 600, color: C.accent }}>Sub-chapter {subIdx + 1}</span>
+                            <button onClick={() => removeSubChapter(chIdx, subIdx)} style={{ fontSize: 10, color: C.danger, background: "none", border: "none", cursor: "pointer" }}>Remove</button>
+                          </div>
+                          
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 8, marginBottom: 8 }}>
+                            <input
+                              type="text"
+                              value={subChapter.ref_id}
+                              onChange={(e) => {
+                                const newHierarchy = [...frameworkData.hierarchy];
+                                newHierarchy[chIdx].children[subIdx].ref_id = e.target.value;
+                                setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
+                              }}
+                              placeholder="Ref ID"
+                              style={{ padding: "4px 8px", border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11 }}
+                            />
+                            <input
+                              type="text"
+                              value={subChapter.title}
+                              onChange={(e) => {
+                                const newHierarchy = [...frameworkData.hierarchy];
+                                newHierarchy[chIdx].children[subIdx].title = e.target.value;
+                                setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
+                              }}
+                              placeholder="Title"
+                              style={{ padding: "4px 8px", border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11 }}
+                            />
+                          </div>
+                          
+                          <textarea
+                            value={subChapter.description}
+                            onChange={(e) => {
+                              const newHierarchy = [...frameworkData.hierarchy];
+                              newHierarchy[chIdx].children[subIdx].description = e.target.value;
+                              setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
+                            }}
+                            placeholder="Description"
+                            rows={2}
+                            style={{ width: "100%", padding: "4px 8px", border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, marginBottom: 8 }}
+                          />
+
+                          {/* Controls in sub-chapter */}
+                          <div style={{ marginTop: 8 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                              <span style={{ fontSize: 10, fontWeight: 600, color: C.muted }}>Controls</span>
+                              <button onClick={() => addControl(chIdx, subIdx)} style={{ fontSize: 10, color: C.accent, background: "none", border: "none", cursor: "pointer" }}>+ Add Control</button>
+                            </div>
+                            
+                            {(subChapter.items || []).map((control, ctrlIdx) => (
+                              <div key={ctrlIdx} style={{
+                                background: C.bg, borderRadius: 4, padding: 6, marginBottom: 6,
+                                border: `1px solid ${C.border}`,
+                              }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                                  <span style={{ fontSize: 9, fontWeight: 600, color: C.accent }}>Control {ctrlIdx + 1}</span>
+                                  <button onClick={() => removeControl(chIdx, ctrlIdx, subIdx)} style={{ fontSize: 9, color: C.danger, background: "none", border: "none", cursor: "pointer" }}>Remove</button>
+                                </div>
+                                <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 6, marginBottom: 4 }}>
+                                  <input
+                                    type="text"
+                                    value={control.ref_id}
+                                    onChange={(e) => {
+                                      const newHierarchy = [...frameworkData.hierarchy];
+                                      newHierarchy[chIdx].children[subIdx].items[ctrlIdx].ref_id = e.target.value;
+                                      setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
+                                    }}
+                                    placeholder="Ref ID"
+                                    style={{ padding: "3px 6px", border: `1px solid ${C.border}`, borderRadius: 3, fontSize: 10 }}
+                                  />
+                                  <input
+                                    type="text"
+                                    value={control.name}
+                                    onChange={(e) => {
+                                      const newHierarchy = [...frameworkData.hierarchy];
+                                      newHierarchy[chIdx].children[subIdx].items[ctrlIdx].name = e.target.value;
+                                      setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
+                                    }}
+                                    placeholder="Control name"
+                                    style={{ padding: "3px 6px", border: `1px solid ${C.border}`, borderRadius: 3, fontSize: 10 }}
+                                  />
+                                </div>
+                                <textarea
+                                  value={control.description}
+                                  onChange={(e) => {
+                                    const newHierarchy = [...frameworkData.hierarchy];
+                                    newHierarchy[chIdx].children[subIdx].items[ctrlIdx].description = e.target.value;
+                                    setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
+                                  }}
+                                  placeholder="Description"
+                                  rows={1}
+                                  style={{ width: "100%", padding: "3px 6px", border: `1px solid ${C.border}`, borderRadius: 3, fontSize: 10 }}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Direct controls in chapter */}
                     <div style={{ marginTop: 10 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                        <span style={{ fontSize: 11, fontWeight: 600, color: C.muted }}>Controls</span>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: C.muted }}>Direct Controls</span>
                         <button onClick={() => addControl(chIdx)} style={{ fontSize: 11, color: C.accent, background: "none", border: "none", cursor: "pointer" }}>+ Add Control</button>
                       </div>
                       
@@ -441,8 +578,10 @@ const ControlItem = ({ item, isExcepted, onAddException, isAnnex, isParentExcept
       setShowExceptionModal(false);
       setExceptionReason("");
       
-      if (onRefresh) await onRefresh();
-      
+      if (onRefresh) {
+        await onRefresh(); // 🔥 IMPORTANT
+      }
+            
     } catch (error) {
       console.error("Error adding exception:", error);
       alert("Error adding exception: " + error.message);
@@ -859,7 +998,7 @@ const ChapterSection = ({ chapter, exceptedControlIds, onAddException, isAnnex, 
 const Level1Section = ({ section, exceptedControlIds, onAddException, standardId, onRefresh }) => {
   const [open, setOpen] = useState(true);
   
-  const isAnnex = section?.title?.toLowerCase()?.includes("annex");
+  const isAnnex = section?.title?.toLowerCase()?.includes("annex") || section?.isAnnex === true;
   const color = isAnnex ? C.purple : C.accent;
 
   return (
@@ -919,7 +1058,6 @@ const PackageCard = ({ standard, onImportFramework, onUnimportFramework, onAddEx
   const [exceptions, setExceptions] = useState([]);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // Charger les exceptions
   const loadExceptions = useCallback(async () => {
     if (!isImported || !standard?.id) return;
     try {
@@ -930,44 +1068,92 @@ const PackageCard = ({ standard, onImportFramework, onUnimportFramework, onAddEx
     }
   }, [isImported, standard?.id, refreshExceptions]);
 
-  // Charger la hiérarchie
   useEffect(() => {
-    if (!isImported) return;
+      if (!isImported) return;
 
-    const loadHierarchy = async () => {
-      setLoading(true);
-      try {
-        const isCustom = standard.source === "custom" || standard.type === "custom";
-        const url = isCustom
-          ? `http://localhost:3000/api/framauditor/custom-framework/${standard.id}/hierarchy`
-          : `http://localhost:3000/api/ciso/packages/${standard.id}/hierarchy`;
+      const loadHierarchy = async () => {
+          setLoading(true);
+          try {
+              const response = await fetch(`http://localhost:3000/api/ciso/packages/${standard.id}/hierarchy`, {
+                  credentials: "include"
+              });
+              
+              if (!response.ok) {
+                  throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+              }
+              
+              const data = await response.json();
+              console.log("Hierarchy data received:", data); // Debug
+              
+              // Vérifier si data.hierarchy existe
+              if (data && data.hierarchy) {
+                  setHierarchy(data);
+              } else if (data && (data.coreChapters || data.families)) {
+                  // Si le backend retourne un format différent, le convertir
+                  const convertedHierarchy = { hierarchy: [] };
+                  
+                  if (data.coreChapters && data.coreChapters.length > 0) {
+                      convertedHierarchy.hierarchy.push({
+                          id: "core",
+                          title: "Core Chapters",
+                          description: "Main framework chapters",
+                          isAnnex: false,
+                          children: data.coreChapters.map(ch => ({
+                              id: ch.id,
+                              ref_id: ch.ref || `CH-${ch.id}`,
+                              title: ch.title,
+                              description: ch.description || "",
+                              children: [],
+                              items: []
+                          })),
+                          items: []
+                      });
+                  }
+                  
+                  if (data.families && data.families.length > 0) {
+                      data.families.forEach(family => {
+                          convertedHierarchy.hierarchy.push({
+                              id: family.id,
+                              title: family.name,
+                              description: family.description || "",
+                              isAnnex: true,
+                              children: [],
+                              items: (family.controls || []).map(control => ({
+                                  id: control.id,
+                                  ref_id: control.ref_id,
+                                  name: control.name,
+                                  description: control.description || ""
+                              }))
+                          });
+                      });
+                  }
+                  
+                  setHierarchy(convertedHierarchy);
+              } else {
+                  console.warn("Unexpected data format:", data);
+                  setHierarchy({ hierarchy: [] });
+              }
+              
+          } catch (error) {
+              console.error("Error loading hierarchy:", error);
+              setHierarchy({ hierarchy: [] });
+          } finally {
+              setLoading(false);
+          }
+      };
 
-        const res = await fetch(url, { credentials: "include" });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        setHierarchy(data);
-      } catch (error) {
-        console.error("Error loading hierarchy:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadHierarchy();
-    loadExceptions();
+      loadHierarchy();
+      loadExceptions();
   }, [standard.id, isImported, refreshKey]);
-
-  // Rafraîchir après ajout d'exception
   const handleRefresh = useCallback(async () => {
     await loadExceptions();
     setRefreshKey(prev => prev + 1);
   }, [loadExceptions]);
 
   const exceptedControlIds = new Set(
-    exceptions.map(e =>
-      String(e.entity_id || e.policyId || e.controlId || e.id)
-    )
+    exceptions.map(e => String(e.policyId || e.entity_id || e.id))
   );
+  
   const totalControls = standard.controls_count || 0;
   const exceptionsCount = exceptions.length;
 
@@ -993,9 +1179,13 @@ const PackageCard = ({ standard, onImportFramework, onUnimportFramework, onAddEx
         </div>
         <div style={{ flex: 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <div style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 17, fontWeight: 800, color: C.text }}>{standard.name}</div>
+            <div style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 17, fontWeight: 800, color: C.text }}>
+              {standard.name}
+            </div>
             {isImported && (
-              <span style={{ fontSize: 10, background: C.success, color: "#fff", padding: "2px 8px", borderRadius: 12 }}>Imported</span>
+              <span style={{ fontSize: 10, background: C.success, color: "#fff", padding: "2px 8px", borderRadius: 12 }}>
+                Imported
+              </span>
             )}
           </div>
           <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>
@@ -1059,15 +1249,19 @@ export default function Policies() {
 
   const fetchAllFrameworks = async () => {
     try {
-      const scrapedRes = await fetch("http://localhost:3000/api/ciso/packages", { credentials: "include" });
-      let scrapedFrameworks = scrapedRes.ok ? await scrapedRes.json() : [];
-      scrapedFrameworks = scrapedFrameworks.map(fw => ({ ...fw, source: 'scraped', type: 'scraped', id: String(fw.id) }));
+      const response = await fetch("http://localhost:3000/api/ciso/packages", { 
+        credentials: "include" 
+      });
       
-      const customRes = await fetch("http://localhost:3000/api/framauditor/user-frameworks", { credentials: "include" });
-      let customFrameworks = customRes.ok ? await customRes.json() : [];
-      customFrameworks = customFrameworks.map(fw => ({ ...fw, source: 'custom', type: 'custom', id: String(fw.id) }));
-      
-      setAvailableFrameworks([...scrapedFrameworks, ...customFrameworks]);
+      if (response.ok) {
+        const frameworks = await response.json();
+        setAvailableFrameworks(frameworks.map(fw => ({ 
+          ...fw, 
+          source: 'scraped', 
+          type: 'scraped', 
+          id: String(fw.id) 
+        })));
+      }
     } catch (error) {
       console.error("Error fetching frameworks:", error);
     }
@@ -1075,9 +1269,12 @@ export default function Policies() {
 
   const fetchImportedFrameworks = async () => {
     try {
-      const res = await fetch("http://localhost:3000/api/framauditor/imported-policies", { credentials: "include" });
-      if (res.ok) {
-        const data = await res.json();
+      const response = await fetch("http://localhost:3000/api/framauditor/imported-policies", { 
+        credentials: "include" 
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
         setImportedFrameworkIds(new Set(data.map(pkg => String(pkg.id))));
       }
     } catch (error) {
@@ -1088,10 +1285,12 @@ export default function Policies() {
   const fetchExceptions = useCallback(async (standardId) => {
     if (!standardId) return [];
     try {
-      const res = await fetch(`http://localhost:3000/api/framauditor/exceptions/${standardId}`, { credentials: "include" });
-      if (res.ok) {
-        const data = await res.json();
-        console.log(`📋 Loaded ${data.length} exceptions for ${standardId}`);
+      const response = await fetch(`http://localhost:3000/api/framauditor/exceptions/${standardId}`, { 
+        credentials: "include" 
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
         return data;
       }
     } catch (error) {
@@ -1132,16 +1331,20 @@ export default function Policies() {
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          standardId: String(framework.id), // 🔥 IMPORTANT
-          level: "package",
+          standardId: String(framework.id),
           title: framework.name,
           version: framework.version || "1.0"
         })
       });
 
-      if (!response.ok) throw new Error("Import failed");
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Import failed");
+      }
 
       await fetchImportedFrameworks();
+      alert("Framework imported successfully!");
+      
     } catch (error) {
       console.error("Import error:", error);
       alert(error.message);
@@ -1151,11 +1354,17 @@ export default function Policies() {
   const handleUnimportFramework = async (framework) => {
     try {
       const response = await fetch("http://localhost:3000/api/framauditor/unimport-policy", {
-        method: "DELETE", headers: { "Content-Type": "application/json" }, credentials: "include",
-        body: JSON.stringify({ policyId: framework.id, level: "package" })
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ policyId: framework.id })
       });
+      
       if (!response.ok) throw new Error("Unimport failed");
+      
       await fetchImportedFrameworks();
+      alert("Framework removed successfully!");
+      
     } catch (error) {
       console.error("Unimport error:", error);
       alert("Error removing framework: " + error.message);
@@ -1163,31 +1372,71 @@ export default function Policies() {
   };
 
   const handleAddFramework = async (frameworkData) => {
-    const response = await fetch("http://localhost:3000/api/framauditor/add-custom-framework", {
-      method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
-      body: JSON.stringify(frameworkData)
-    });
-    if (!response.ok) throw new Error("Failed to add framework");
-    await refreshAllData();
-  };
-
-  const handleAddException = async (item, reason, standardId) => {
     try {
-        let level = "item";
-
-        if (item.children) level = "chapter";
-        if (item.items && !item.children) level = "control";      const response = await fetch("http://localhost:3000/api/framauditor/add-exception", {
-        method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
-        body: JSON.stringify({ policyId: String(item.id), level, title: item.title || item.name, reason, standardId })
+      const response = await fetch("http://localhost:3000/api/framauditor/add-custom-framework", {
+        method: "POST", 
+        headers: { "Content-Type": "application/json" }, 
+        credentials: "include",
+        body: JSON.stringify(frameworkData)
       });
-      if (!response.ok) throw new Error("Failed to add exception");
+      
+      if (!response.ok) throw new Error("Failed to add framework");
+      
+      const result = await response.json();
+      console.log("Framework added successfully:", result);
+      
+      await refreshAllData();
+      
+      if (result.id) {
+        await handleImportFramework({ 
+          id: result.id, 
+          name: frameworkData.name, 
+          version: frameworkData.version,
+          source: 'custom',
+          type: 'custom'
+        });
+      }
     } catch (error) {
-      console.error("Error adding exception:", error);
+      console.error("Error adding framework:", error);
       throw error;
     }
   };
 
-  const filteredFrameworks = availableFrameworks.filter(fw => fw.name?.toLowerCase().includes(search.toLowerCase()));
+  const handleAddException = async (item, reason, standardId) => {
+    try {
+      let level = "control";
+      if (item.children) level = "chapter";
+      
+      const response = await fetch("http://localhost:3000/api/framauditor/add-exception", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          policyId: String(item.id),
+          level,
+          title: item.title || item.name,
+          reason,
+          standardId
+        })
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to add exception");
+      }
+      
+      alert("Exception added successfully!");
+      
+    } catch (error) {
+      console.error("Error adding exception:", error);
+      alert(error.message);
+      throw error;
+    }
+  };
+
+  const filteredFrameworks = availableFrameworks.filter(fw => 
+    fw.name?.toLowerCase().includes(search.toLowerCase())
+  );
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "DM Sans, sans-serif" }}>
@@ -1197,25 +1446,70 @@ export default function Policies() {
         input:focus, textarea:focus { border-color: #3B6FFF !important; box-shadow: 0 0 0 3px rgba(59,111,241,.13); }
       `}</style>
 
-      <div style={{ padding: "0 36px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 64, position: "sticky", top: 0, zIndex: 100, background: C.bg, borderBottom: `1px solid ${C.border}` }}>
+      <div style={{ 
+        padding: "0 36px", display: "flex", alignItems: "center", 
+        justifyContent: "space-between", height: 64, position: "sticky", 
+        top: 0, zIndex: 100, background: C.bg, borderBottom: `1px solid ${C.border}`
+      }}>
         <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
-          <span style={{ color: "#0F172A", fontSize: "26px", fontWeight: "800" }}>Policies Library</span>
+          <span style={{ color: "#0F172A", fontSize: "26px", fontWeight: "800" }}>
+            Policies Library
+          </span>
           <div style={{ position: "relative" }}>
-            <Search size={16} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: C.muted }} />
-            <input placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} style={{ padding: "8px 12px 8px 32px", borderRadius: 10, border: `1.5px solid ${C.border}`, width: 250, fontSize: 13, background: C.card }} />
+            <Search size={16} style={{ 
+              position: "absolute", left: 10, top: "50%", 
+              transform: "translateY(-50%)", color: C.muted 
+            }} />
+            <input 
+              placeholder="Search frameworks..." 
+              value={search} 
+              onChange={(e) => setSearch(e.target.value)} 
+              style={{ 
+                padding: "8px 12px 8px 32px", borderRadius: 10, 
+                border: `1.5px solid ${C.border}`, width: 250, 
+                fontSize: 13, background: C.card 
+              }} 
+            />
           </div>
         </div>
         <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-          <button onClick={refreshAllData} disabled={refreshing} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 8, border: `1px solid ${C.border}`, background: "transparent", cursor: refreshing ? "wait" : "pointer", fontSize: 13, color: C.muted }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: refreshing ? "spin 1s linear infinite" : "none" }}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          <button 
+            onClick={refreshAllData} 
+            disabled={refreshing} 
+            style={{ 
+              display: "flex", alignItems: "center", gap: 6, 
+              padding: "6px 12px", borderRadius: 8, border: `1px solid ${C.border}`, 
+              background: "transparent", cursor: refreshing ? "wait" : "pointer", 
+              fontSize: 13, color: C.muted 
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" 
+              stroke="currentColor" strokeWidth="2" 
+              style={{ animation: refreshing ? "spin 1s linear infinite" : "none" }}>
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
             Refresh
           </button>
-          <button onClick={() => setAddFrameworkModal(true)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 18px", borderRadius: 10, border: "none", background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+          <button 
+            onClick={() => setAddFrameworkModal(true)} 
+            style={{ 
+              display: "flex", alignItems: "center", gap: 8, 
+              padding: "8px 18px", borderRadius: 10, border: "none", 
+              background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`, 
+              color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" 
+            }}
+          >
             <Plus size={16} /> Add Framework
           </button>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, background: C.chip, padding: "4px 12px", borderRadius: 20 }}>
+          <div style={{ 
+            display: "flex", alignItems: "center", gap: 8, 
+            background: C.chip, padding: "4px 12px", borderRadius: 20 
+          }}>
             <CheckCircle size={12} color={C.success} />
-            <span style={{ fontSize: 12, fontWeight: 600, color: C.accent }}>{importedFrameworkIds.size} imported</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: C.accent }}>
+              {importedFrameworkIds.size} imported
+            </span>
           </div>
         </div>
       </div>
@@ -1223,7 +1517,19 @@ export default function Policies() {
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "32px 24px" }}>
         {loading && (
           <div style={{ textAlign: "center", padding: 60 }}>
-            <div style={{ width: 48, height: 48, border: `3px solid ${C.border}`, borderTopColor: C.accent, borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto" }} />
+            <div style={{ 
+              width: 48, height: 48, 
+              border: `3px solid ${C.border}`, borderTopColor: C.accent, 
+              borderRadius: "50%", animation: "spin 0.8s linear infinite", 
+              margin: "0 auto" 
+            }} />
+          </div>
+        )}
+
+        {!loading && filteredFrameworks.length === 0 && (
+          <div style={{ textAlign: "center", padding: 60, color: C.muted }}>
+            <Database size={48} style={{ marginBottom: 16, opacity: 0.5 }} />
+            <p>No frameworks found</p>
           </div>
         )}
 
@@ -1240,18 +1546,55 @@ export default function Policies() {
         ))}
       </div>
 
-      {addFrameworkModal && <AddFrameworkModal onClose={() => setAddFrameworkModal(false)} onConfirm={handleAddFramework} />}
+      {addFrameworkModal && (
+        <AddFrameworkModal 
+          onClose={() => setAddFrameworkModal(false)} 
+          onConfirm={handleAddFramework} 
+        />
+      )}
+      
       {removeModal && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(10,20,50,.45)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setRemoveModal(null)}>
-          <div style={{ background: C.card, borderRadius: 16, width: 440, maxWidth: "95vw", boxShadow: "0 24px 60px rgba(59,111,255,.18)", border: `1px solid ${C.border}` }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ 
+          position: "fixed", inset: 0, zIndex: 1000, 
+          background: "rgba(10,20,50,.45)", backdropFilter: "blur(4px)", 
+          display: "flex", alignItems: "center", justifyContent: "center" 
+        }} onClick={() => setRemoveModal(null)}>
+          <div style={{ 
+            background: C.card, borderRadius: 16, width: 440, maxWidth: "95vw", 
+            boxShadow: "0 24px 60px rgba(59,111,255,.18)", border: `1px solid ${C.border}` 
+          }} onClick={(e) => e.stopPropagation()}>
             <div style={{ padding: "20px 24px 16px", borderBottom: `1px solid ${C.border}` }}>
-              <span style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 18, fontWeight: 700, color: C.danger }}>Remove Framework</span>
+              <span style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 18, fontWeight: 700, color: C.danger }}>
+                Remove Framework
+              </span>
             </div>
             <div style={{ padding: 24 }}>
               <p>Remove <strong>{removeModal.target?.name}</strong> from your library?</p>
+              <p style={{ fontSize: 12, color: C.muted, marginTop: 8 }}>
+                This will also remove all exceptions for this framework.
+              </p>
               <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 20 }}>
-                <button onClick={() => setRemoveModal(null)} style={{ padding: "8px 16px", borderRadius: 8, border: `1px solid ${C.border}`, background: "transparent", cursor: "pointer" }}>Cancel</button>
-                <button onClick={async () => { await handleUnimportFramework(removeModal.target); setRemoveModal(null); }} style={{ padding: "8px 20px", borderRadius: 8, border: "none", background: C.danger, color: "#fff", cursor: "pointer" }}>Confirm Remove</button>
+                <button 
+                  onClick={() => setRemoveModal(null)} 
+                  style={{ 
+                    padding: "8px 16px", borderRadius: 8, border: `1px solid ${C.border}`, 
+                    background: "transparent", cursor: "pointer" 
+                  }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={async () => { 
+                    await handleUnimportFramework(removeModal.target); 
+                    setRemoveModal(null); 
+                  }} 
+                  style={{ 
+                    padding: "8px 20px", borderRadius: 8, border: "none", 
+                    background: C.danger, color: "#fff", cursor: "pointer" 
+                  }}
+                >
+                  Confirm Remove
+                </button>
               </div>
             </div>
           </div>

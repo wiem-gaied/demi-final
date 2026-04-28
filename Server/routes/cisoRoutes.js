@@ -10,7 +10,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Configuration
-const DATA_DIR = path.resolve("C:/Users/ASUS/Desktop/PFE/data/standards");
+const DATA_DIR = path.resolve("C:/Users/stagiaire/Desktop/Ollama/Ollama/data/standards");
 
 // Éviter les imports multiples
 let isImporting = false;

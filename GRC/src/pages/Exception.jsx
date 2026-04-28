@@ -17,14 +17,22 @@ const C = {
 };
 const F = { display: "'Fraunces', Georgia, serif", body: "'DM Sans', system-ui, sans-serif" };
 
-// Composant pour afficher un contrôle enfant (imbriqué dans le chapitre)
+// Composant pour afficher un contrôle enfant
 function ChildControl({ control, level = 2 }) {
   const [open, setOpen] = useState(false);
   const hasDesc = control.description?.length > 0;
   const indent = level * 20;
 
-  const displayId = control.ref_id || control.id?.split('__').pop() || control.name?.substring(0, 15) || 'N/A';
+  const displayId = (() => {
+    if (control.ref_id) return control.ref_id;
 
+    if (control.id?.includes("__")) {
+      const ref = control.id.split("__").pop();
+      if (/^[A-Z]\.[0-9]+/.test(ref)) return ref;
+    }
+
+    return null;
+  })();
   return (
     <div style={{ marginLeft: indent, marginBottom: 8 }}>
       <div
@@ -50,7 +58,7 @@ function ChildControl({ control, level = 2 }) {
             </svg>
           )}
           <span style={{ fontSize: 11, fontWeight: 700, color: C.accent, fontFamily: "monospace" }}>
-            {displayId}
+            {displayId || "—"}
           </span>
           <span style={{ fontSize: 12, fontWeight: 600 }}>{control.name}</span>
           <span style={{ fontSize: 9, background: C.warning, color: "#fff", padding: "1px 6px", borderRadius: 10 }}>
@@ -67,25 +75,31 @@ function ChildControl({ control, level = 2 }) {
   );
 }
 
-// ExceptionCard pour les chapitres avec contrôles enfants imbriqués
+// ExceptionCard pour les chapitres
 function ChapterExceptionCard({ exception, onRemove, childControls = [] }) {
   const [hov, setHov] = useState(false);
   const [showChildren, setShowChildren] = useState(false);
   
   const getDisplayTitle = () => {
-    if (exception.ref_id) {
-      return `${exception.ref_id} - ${exception.title}`;
+    // 1. priorité au ref_id propre
+    if (exception.ref_id && exception.ref_id !== exception.title) {
+      return `${exception.ref_id} ${exception.title}`;
     }
-    
-    if (exception.level === 'chapter' && exception.id) {
-      const parts = exception.id.split('__');
-      if (parts.length > 1) {
-        const lastPart = parts[parts.length - 1];
-        const cleanId = lastPart.replace(/_/g, '.');
-        return `${cleanId} - ${exception.title}`;
+
+    // 2. essayer d'extraire depuis id (ex: "chapter__A.5")
+    if (exception.id && exception.id.includes("__")) {
+      const ref = exception.id.split("__").pop();
+      if (/^[A-Z]\.[0-9]+/.test(ref)) {
+        return `${ref} ${exception.title}`;
       }
     }
-    
+
+    // 3. si le titre contient déjà A.5
+    if (/^[A-Z]\.[0-9]+/.test(exception.title)) {
+      return exception.title;
+    }
+
+    // 4. fallback → éviter duplication
     return exception.title;
   };
 
@@ -201,29 +215,17 @@ function ChapterExceptionCard({ exception, onRemove, childControls = [] }) {
   );
 }
 
-// ExceptionCard pour les items (contrôles) individuels
+// ExceptionCard pour les items (contrôles)
 function ItemExceptionCard({ exception, onRemove }) {
   const [hov, setHov] = useState(false);
   const [open, setOpen] = useState(false);
   const hasDesc = exception.description?.length > 0;
 
   const getDisplayTitle = () => {
+    // Si on a un ref_id du contrôle
     if (exception.ref_id) {
       return `${exception.ref_id} - ${exception.title}`;
     }
-    
-    if (exception.level === 'item' && exception.id) {
-      const parts = exception.id.split('__');
-      if (parts.length > 1) {
-        const lastPart = parts[parts.length - 1];
-        const cleanId = lastPart.replace(/_/g, '.');
-        return `${cleanId} - ${exception.title}`;
-      }
-      if (/^\d+$/.test(exception.id)) {
-        return `CTRL-${exception.id} - ${exception.title}`;
-      }
-    }
-    
     return exception.title;
   };
 
@@ -271,7 +273,7 @@ function ItemExceptionCard({ exception, onRemove }) {
               padding:"2px 8px", borderRadius:12,
               border:`1px solid ${C.accent}40`
             }}>
-              item
+              control
             </span>
             <span style={{ 
               fontFamily:F.body, fontSize:10, fontWeight:600, 
@@ -366,7 +368,7 @@ function PackageExceptionCard({ exception, onRemove }) {
               padding:"2px 8px", borderRadius:12,
               border:`1px solid #EA580C40`
             }}>
-              package
+              framework
             </span>
             <span style={{ 
               fontFamily:F.body, fontSize:10, fontWeight:600, 
@@ -427,13 +429,20 @@ export default function Exceptions() {
   useEffect(() => {
     const fetchExceptions = async () => {
       try {
-        const res = await fetch("http://localhost:3000/api/framauditor/exceptions", {
+        const res = await fetch("http://localhost:3000/api/framauditor/all-exceptions", {
           credentials: "include"
         });
-        const data = await res.json();
-        setExceptions(data);
+        
+        if (res.ok) {
+          const data = await res.json();
+          setExceptions(data);
+        } else {
+          console.error("Failed to fetch exceptions:", res.status);
+          setExceptions([]);
+        }
       } catch (err) {
-        console.error(err);
+        console.error("Error fetching exceptions:", err);
+        setExceptions([]);
       } finally {
         setLoading(false);
       }
@@ -444,63 +453,47 @@ export default function Exceptions() {
 
   const handleRemoveException = async (exception) => {
     try {
-      if (exception.level === "chapter" && exception.childIds && exception.childIds.length > 0) {
-        // Supprimer d'abord tous les contrôles enfants
-        for (const controlId of exception.childIds) {
-          await fetch("http://localhost:3000/api/framauditor/remove-exception", {
-            method: "POST",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              policyId: controlId,
-              level: "item",
-            }),
-          });
-        }
-      }
-      
-      const res = await fetch("http://localhost:3000/api/framauditor/remove-exception", {
-        method: "POST",
+      const response = await fetch("http://localhost:3000/api/framauditor/remove-exception", {
+        method: "DELETE",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          policyId: exception.id,
-          level: exception.level,
+          entity_id: exception.id,
+          standardId: exception.standardId,
+          entity_type: exception.level,
         }),
       });
 
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to delete");
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to remove exception");
       }
 
       // Mettre à jour l'état local
       if (exception.level === "chapter" && exception.childIds) {
         const allIdsToRemove = new Set([exception.id, ...exception.childIds]);
-        const newExceptions = exceptions.filter(e => !allIdsToRemove.has(e.id));
+        const newExceptions = exceptions.filter(e => !allIdsToRemove.has(String(e.id)));
         setExceptions(newExceptions);
       } else {
-        const newExceptions = exceptions.filter(e => !(e.id === exception.id && e.level === exception.level));
+        const newExceptions = exceptions.filter(e => !(String(e.id) === String(exception.id) && e.level === exception.level));
         setExceptions(newExceptions);
       }
       
     } catch (err) {
-      console.error(err);
-      alert("Error removing exception");
+      console.error("Error removing exception:", err);
+      alert("Error removing exception: " + err.message);
     }
   };
 
-  // Organiser les exceptions : les chapitres avec leurs contrôles enfants
+  // Organiser les exceptions
   const getOrganizedExceptions = () => {
-    const chapterExceptions = exceptions.filter(e => e.level === "chapter");
-    const itemExceptions = exceptions.filter(e => e.level === "item");
-    const packageExceptions = exceptions.filter(e => e.level === "package");
+  const chapterExceptions = exceptions.filter(e => e.level === "chapter" || e.level === "family");    const itemExceptions = exceptions.filter(e => e.level === "control" || e.level === "item");
+  const packageExceptions = exceptions.filter(e => e.level === "package");
     
     const result = [];
     
-    // Pour chaque chapitre, trouver ses contrôles enfants via childIds
+    // Pour chaque chapitre, trouver ses contrôles enfants
     for (const chapter of chapterExceptions) {
-      // Récupérer les contrôles enfants de ce chapitre
       const childControls = itemExceptions
         .filter(item => chapter.childIds && chapter.childIds.includes(String(item.id)))
         .map(item => ({
@@ -525,7 +518,7 @@ export default function Exceptions() {
       }
     }
     
-    // Items sans chapitre parent (contrôles individuels)
+    // Items sans chapitre parent
     const standaloneItems = itemExceptions.filter(item => !allChildIds.has(String(item.id)));
     for (const item of standaloneItems) {
       result.push({
@@ -550,14 +543,20 @@ export default function Exceptions() {
   const organizedExceptions = getOrganizedExceptions();
 
   const filteredExceptions = organizedExceptions
-    .filter(item => filterLevel === "all" || item.data.level === filterLevel)
+    .filter(item => {
+      if (filterLevel === "all") return true;
+      if (filterLevel === "package") return item.type === "package";
+      if (filterLevel === "chapter") return item.type === "chapter";
+      if (filterLevel === "item") return item.type === "item";
+      return true;
+    })
     .filter(item => item.data.title?.toLowerCase().includes(search.toLowerCase()));
 
   const stats = {
     total: exceptions.length,
     packages: exceptions.filter(e => e.level === "package").length,
     chapters: exceptions.filter(e => e.level === "chapter").length,
-    items: exceptions.filter(e => e.level === "item").length,
+    items: exceptions.filter(e => e.level === "control" || e.level === "item").length,
   };
 
   if (loading) {
@@ -648,7 +647,7 @@ export default function Exceptions() {
                 transition:"all .15s"
               }}
             >
-              {level === "all" ? "All" : level.charAt(0).toUpperCase() + level.slice(1) + (level === "item" ? "s" : "s")}
+              {level === "all" ? "All" : level === "item" ? "Controls" : level.charAt(0).toUpperCase() + level.slice(1) + "s"}
             </button>
           ))}
         </div>

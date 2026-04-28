@@ -5,7 +5,7 @@ import Layout from "./components/Layout";
 import Home from "./pages/Home";
 import Politiques from "./pages/Politiques";
 import Risques from "./pages/Risques";
-import Conformité from "./pages/Conformité";
+import Conformité from "./pages/Conformite";
 import AdminLayout from "./components/admin/AdminLayout";
 import DashboardPage from "./pages/admin/DashboardPage";
 import AccessPage from "./pages/admin/AccessPage";
