@@ -1,497 +1,155 @@
-// PolicyLibrary.jsx
-import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
-import { 
-  Package, BookOpen, FileText, Shield, Search, Plus, X, 
-  AlertCircle, CheckCircle, ChevronRight, ChevronDown, Trash2, Edit3
-} from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Shield, Search, ChevronDown, ChevronRight, Plus, CheckCircle, X, AlertCircle, Database } from "lucide-react";
 
-/* ─── Theme Constants ───────────────── */
-const THEME = {
-  colors: {
-    primary: "#6366F1",
-    primaryDark: "#4F46E5",
-    primaryLight: "#818CF8",
-    primaryBg: "#EEF2FF",
-    textDark: "#0F172A",
-    textGray: "#64748B",
-    textLight: "#94A3B8",
-    white: "#fff",
-    background: "#F8FAFC",
-    border: "#E2E8F0",
-    borderLight: "#F1F5F9",
-    success: "#10B981",
-    successLight: "#D1FAE5",
-    warning: "#F59E0B",
-    warningLight: "#FEF3C7",
-    error: "#EF4444",
-    errorLight: "#FEF2F2",
-    info: "#3B82F6",
-    infoLight: "#EFF6FF",
-  },
-  gradients: {
-    button: "linear-gradient(135deg, #6366F1, #4F46E5)",
-    cardHover: "linear-gradient(135deg, rgba(99,102,241,0.02), rgba(139,92,246,0.02))",
-  },
-  shadows: {
-    card: "0 2px 12px rgba(0,0,0,0.04)",
-    cardHover: "0 8px 24px rgba(0,0,0,0.08)",
-    modal: "0 32px 80px rgba(0,0,0,0.18)",
-    button: "0 4px 16px rgba(99,102,241,0.3)",
-  },
-  animation: {
-    fadeUp: {
-      hidden: { opacity: 0, y: 20 },
-      visible: { opacity: 1, y: 0 },
-    },
-    staggerContainer: {
-      hidden: { opacity: 0 },
-      visible: {
-        opacity: 1,
-        transition: { staggerChildren: 0.05 },
-      },
-    },
-  },
+// ── Icons ──────────────────────────────────────────────────────────────────
+const Icon = ({ d, size = 16, color = "currentColor" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+    stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <path d={d} />
+  </svg>
+);
+
+const icons = {
+  package:   "M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z",
+  chapter:   "M4 19.5A2.5 2.5 0 016.5 17H20",
+  policy:    "M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z",
+  plus:      "M12 5v14M5 12h14",
+  chevron:   "M6 9l6 6 6-6",
+  trash:     "M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6",
+  edit:      "M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7",
+  shield:    "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
+  check:     "M20 6L9 17l-5-5",
+  close:     "M18 6L6 18M6 6l12 12",
+  upload:    "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12",
+  database:  "M4 7c0 1.657 3.582 3 8 3s8-1.343 8-3M4 7v10c0 1.657 3.582 3 8 3s8-1.343 8-3V7M4 7c0-1.657 3.582-3 8-3s8 1.343 8 3",
 };
 
-const STATUS_CONFIG = {
-  mandatory: { bg: THEME.colors.errorLight, text: THEME.colors.error, label: "Mandatory" },
-  recommended: { bg: THEME.colors.primaryBg, text: THEME.colors.primary, label: "Recommended" },
-  optional: { bg: THEME.colors.borderLight, text: THEME.colors.textGray, label: "Optional" },
+// ── Palette ──────────────────────────────────────────────────────────────────
+const C = {
+  accent:   "#3B6FFF",
+  purple:   "#6D28D9",
+  bg:       "#F8FAFF",
+  card:     "#FFFFFF",
+  border:   "#E2E8F8",
+  text:     "#1E2A4A",
+  muted:    "#64748B",
+  success:  "#10B981",
+  warning:  "#F59E0B",
+  danger:   "#EF4444",
+  tag_pol:  "#EFF6FF",
+  tag_prf:  "#F5F3FF",
+  chip:     "#EEF2FF",
 };
 
-/* ─── Badge Component ───────────────────────────── */
-const Badge = ({ variant = "default", children }) => {
-  const variants = {
-    primary: { bg: THEME.colors.primaryBg, text: THEME.colors.primary },
-    error: { bg: THEME.colors.errorLight, text: THEME.colors.error },
-    default: { bg: THEME.colors.borderLight, text: THEME.colors.textGray },
-  };
-  const style = variants[variant] || variants.default;
-
-  return (
-    <span style={{
-      display: "inline-flex",
-      alignItems: "center",
-      padding: "2px 8px",
-      borderRadius: "20px",
-      fontSize: "11px",
-      fontWeight: "700",
-      backgroundColor: style.bg,
-      color: style.text,
-      fontFamily: "inherit",
-    }}>
-      {children}
-    </span>
-  );
-};
-
-/* ─── Exception Badge Component ───────────────────────────── */
-const ExceptionBadge = ({ onAddException, isExcluded }) => {
-  const [isHovered, setIsHovered] = useState(false);
-
-  if (isExcluded) {
-    return (
-      <span style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: "4px",
-        padding: "2px 8px",
-        borderRadius: "20px",
-        fontSize: "10px",
-        fontWeight: "600",
-        background: THEME.colors.errorLight,
-        color: THEME.colors.error,
-        border: `1px solid ${THEME.colors.error}40`,
-      }}>
-        <AlertCircle size={10} />
-        Excluded
-      </span>
-    );
-  }
-
-  return (
-    <button
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      onClick={onAddException}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: "4px",
-        padding: "2px 8px",
-        borderRadius: "20px",
-        border: `1px solid ${isHovered ? THEME.colors.error : THEME.colors.border}`,
-        cursor: "pointer",
-        background: isHovered ? THEME.colors.errorLight : THEME.colors.white,
-        color: isHovered ? THEME.colors.error : THEME.colors.textGray,
-        fontFamily: "inherit",
-        fontSize: "10px",
-        fontWeight: "600",
-        transition: "all 0.15s",
-      }}
-    >
-      <Plus size={10} />
-      Add exception
-    </button>
-  );
-};
-
-/* ─── Toggle Switch Component ───────────────────────────── */
-const ToggleSwitch = ({ onImport, onUnimport, size = "md", isImported }) => {
-  const [isHovered, setIsHovered] = useState(false);
-  const isSmall = size === "sm";
-  const trackWidth = isSmall ? 36 : 44;
-  const trackHeight = isSmall ? 20 : 24;
-  const knobSize = isSmall ? 14 : 18;
-  const knobTranslate = isSmall ? 16 : 20;
-  const color = THEME.colors.primary;
-
-  const trackColor = isImported
-    ? (isHovered ? color : color)
-    : (isHovered ? `${color}30` : THEME.colors.borderLight);
-
-  const trackBorder = isImported
-    ? `1.5px solid ${color}`
-    : `1.5px solid ${isHovered ? color + "60" : THEME.colors.border}`;
-
-  return (
-    <button
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      onClick={isImported ? onUnimport : onImport}
-      title={isImported ? "Remove from library" : "Import to library"}
-      style={{
-        position: "relative",
-        width: trackWidth,
-        height: trackHeight,
-        borderRadius: trackHeight,
-        border: trackBorder,
-        background: trackColor,
-        cursor: "pointer",
-        padding: 0,
-        transition: "background 0.22s, border-color 0.22s, box-shadow 0.22s",
-        boxShadow: isImported ? `0 0 0 3px ${color}22` : (isHovered ? `0 0 0 2px ${color}18` : "none"),
-        flexShrink: 0,
-        outline: "none",
-      }}
-    >
-      <span
-        style={{
-          position: "absolute",
-          top: "50%",
-          left: 3,
-          transform: `translateY(-50%) translateX(${isImported ? knobTranslate : 0}px)`,
-          width: knobSize,
-          height: knobSize,
-          borderRadius: "50%",
-          background: isImported ? "#fff" : (isHovered ? color : THEME.colors.border),
-          transition: "transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.18s",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          boxShadow: isImported ? `0 1px 4px ${color}40` : "0 1px 3px rgba(0,0,0,0.12)",
-          pointerEvents: "none",
-        }}
-      >
-        {isImported && (
-          <CheckCircle size={isSmall ? 7 : 9} color={color} />
-        )}
-      </span>
-    </button>
-  );
-};
-
-/* ─── Import Modal ───────────────────────────── */
-const ImportModal = ({ target, onClose, onConfirm }) => {
-  const [isImporting, setIsImporting] = useState(false);
-  const color = THEME.colors.primary;
-
-  const handleImport = async () => {
-    if (!target) return;
-    setIsImporting(true);
-    try {
-      await onConfirm(target);
-    } catch (error) {
-      console.error("Import error:", error);
-    } finally {
-      setIsImporting(false);
-      onClose();
-    }
-  };
-
-  return (
-    <div style={{
-      position: "fixed",
-      inset: 0,
-      background: "rgba(15,23,42,0.6)",
-      backdropFilter: "blur(8px)",
-      zIndex: 1000,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-    }} onClick={onClose}>
-      <motion.div
-        initial={{ scale: 0.95, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.95, opacity: 0 }}
-        style={{
-          background: THEME.colors.white,
-          borderRadius: "24px",
-          width: "480px",
-          maxWidth: "90vw",
-          boxShadow: THEME.shadows.modal,
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div style={{ padding: "24px 28px 0 28px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <div>
-            <h2 style={{ fontSize: "20px", fontWeight: "700", color: THEME.colors.textDark, marginBottom: "4px" }}>Import Policy</h2>
-            <p style={{ fontSize: "13px", color: THEME.colors.textGray }}>
-              Import <span style={{ color, fontWeight: 700 }}>{target?.title || "this policy"}</span> to your library
-            </p>
-          </div>
-          <button onClick={onClose} style={{
-            background: THEME.colors.borderLight,
-            border: "none",
-            borderRadius: "10px",
-            width: "32px",
-            height: "32px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            cursor: "pointer",
-            color: THEME.colors.textGray,
-          }}>
-            <X size={16} />
-          </button>
-        </div>
-
-        <div style={{ padding: "0 28px" }}>
-          <div style={{
-            display: "flex",
-            gap: "8px",
-            alignItems: "center",
-            flexWrap: "wrap",
-            padding: "12px 16px",
-            borderRadius: "12px",
-            background: `${color}08`,
-            marginBottom: "20px",
-            border: `1px solid ${color}20`,
-          }}>
-            <span style={{ fontSize: "13px", fontWeight: "600", color: THEME.colors.textDark }}>Version:</span>
-            <span style={{ fontSize: "12px", color }}>v{target?.version || "1.0"}</span>
-            {target?.level === "package" && target?.chaptersCount && (
-              <>
-                <span style={{ fontSize: "13px", fontWeight: "600", color: THEME.colors.textDark }}>Contains:</span>
-                <span style={{ fontSize: "12px", color }}>{target.chaptersCount} chapters, {target.itemsCount} items</span>
-              </>
-            )}
-          </div>
-
-          <div style={{ fontSize: "13px", color: THEME.colors.textGray, marginBottom: "20px" }}>
-            {target?.level === "package"
-              ? `This will import the entire package "${target.title}" including all its chapters and items.`
-              : `This policy will be added to your imported policies library.`}
-          </div>
-        </div>
-
-        <div style={{ padding: "0 28px 28px 28px" }}>
-          <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
-            <button onClick={onClose} style={{
-              padding: "8px 18px",
-              borderRadius: "10px",
-              border: `1.5px solid ${THEME.colors.border}`,
-              background: THEME.colors.white,
-              cursor: "pointer",
-              fontSize: "13px",
-              fontWeight: "600",
-              color: THEME.colors.textGray,
-            }}>
-              Cancel
-            </button>
-            <button onClick={handleImport} disabled={isImporting} style={{
-              padding: "8px 22px",
-              borderRadius: "10px",
-              border: "none",
-              cursor: isImporting ? "wait" : "pointer",
-              background: isImporting ? THEME.colors.border : THEME.gradients.button,
-              color: THEME.colors.white,
-              fontSize: "13px",
-              fontWeight: "600",
-              boxShadow: isImporting ? "none" : THEME.shadows.button,
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-            }}>
-              {isImporting ? (
-                <>
-                  <div style={{ width: 14, height: 14, border: `2px solid ${THEME.colors.white}`, borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-                  Importing...
-                </>
-              ) : "Confirm Import"}
-            </button>
-          </div>
-        </div>
-      </motion.div>
-    </div>
-  );
-};
-
-/* ─── Unimport Modal ───────────────────────────── */
-const UnimportModal = ({ target, onClose, onConfirm }) => {
-  const [isUnimporting, setIsUnimporting] = useState(false);
-
-  const handleUnimport = async () => {
-    if (!target) return;
-    setIsUnimporting(true);
-    try {
-      await onConfirm(target);
-    } catch (error) {
-      console.error("Unimport error:", error);
-    } finally {
-      setIsUnimporting(false);
-      onClose();
-    }
-  };
-
-  return (
-    <div style={{
-      position: "fixed",
-      inset: 0,
-      background: "rgba(15,23,42,0.6)",
-      backdropFilter: "blur(8px)",
-      zIndex: 1000,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-    }} onClick={onClose}>
-      <motion.div
-        initial={{ scale: 0.95, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.95, opacity: 0 }}
-        style={{
-          background: THEME.colors.white,
-          borderRadius: "24px",
-          width: "480px",
-          maxWidth: "90vw",
-          boxShadow: THEME.shadows.modal,
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div style={{ padding: "24px 28px 0 28px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <div>
-            <h2 style={{ fontSize: "20px", fontWeight: "700", color: THEME.colors.textDark, marginBottom: "4px" }}>Remove Imported Policy</h2>
-            <p style={{ fontSize: "13px", color: THEME.colors.textGray }}>
-              Remove <span style={{ color: THEME.colors.error, fontWeight: 700 }}>{target?.title || "this policy"}</span> from your library
-            </p>
-          </div>
-          <button onClick={onClose} style={{
-            background: THEME.colors.borderLight,
-            border: "none",
-            borderRadius: "10px",
-            width: "32px",
-            height: "32px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            cursor: "pointer",
-            color: THEME.colors.textGray,
-          }}>
-            <X size={16} />
-          </button>
-        </div>
-
-        <div style={{ padding: "0 28px" }}>
-          <div style={{
-            display: "flex",
-            gap: "8px",
-            alignItems: "center",
-            flexWrap: "wrap",
-            padding: "12px 16px",
-            borderRadius: "12px",
-            background: `${THEME.colors.error}08`,
-            marginBottom: "20px",
-            border: `1px solid ${THEME.colors.error}20`,
-          }}>
-            <span style={{ fontSize: "13px", fontWeight: "600", color: THEME.colors.textDark }}>Version:</span>
-            <span style={{ fontSize: "12px", color: THEME.colors.error }}>v{target?.version || "1.0"}</span>
-          </div>
-
-          <div style={{ fontSize: "13px", color: THEME.colors.textGray, marginBottom: "16px" }}>
-            {target?.level === "package"
-              ? `This will remove the entire package "${target.title}" including all chapters and items.`
-              : `This policy will be removed from your imported policies library.`}
-          </div>
-
-          <div style={{
-            fontSize: "12px",
-            color: THEME.colors.error,
-            background: THEME.colors.errorLight,
-            padding: "8px 12px",
-            borderRadius: "8px",
-            marginBottom: "20px",
-          }}>
-            ⚠️ This action cannot be undone.
-          </div>
-        </div>
-
-        <div style={{ padding: "0 28px 28px 28px" }}>
-          <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
-            <button onClick={onClose} style={{
-              padding: "8px 18px",
-              borderRadius: "10px",
-              border: `1.5px solid ${THEME.colors.border}`,
-              background: THEME.colors.white,
-              cursor: "pointer",
-              fontSize: "13px",
-              fontWeight: "600",
-              color: THEME.colors.textGray,
-            }}>
-              Cancel
-            </button>
-            <button onClick={handleUnimport} disabled={isUnimporting} style={{
-              padding: "8px 22px",
-              borderRadius: "10px",
-              border: "none",
-              cursor: isUnimporting ? "wait" : "pointer",
-              background: isUnimporting ? THEME.colors.border : THEME.colors.error,
-              color: THEME.colors.white,
-              fontSize: "13px",
-              fontWeight: "600",
-              boxShadow: isUnimporting ? "none" : `0 2px 8px ${THEME.colors.error}40`,
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-            }}>
-              {isUnimporting ? (
-                <>
-                  <div style={{ width: 14, height: 14, border: `2px solid ${THEME.colors.white}`, borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-                  Removing...
-                </>
-              ) : "Confirm Remove"}
-            </button>
-          </div>
-        </div>
-      </motion.div>
-    </div>
-  );
-};
-
-/* ─── Exception Modal ───────────────────────────── */
-const ExceptionModal = ({ target, onClose, onConfirm }) => {
-  const [reason, setReason] = useState("");
+// ── Modal pour ajouter un framework ─────────────────────────────────────────
+function AddFrameworkModal({ onClose, onConfirm }) {
+  const [frameworkData, setFrameworkData] = useState({
+    name: "",
+    version: "1.0",
+    description: "",
+    provider: "",
+    hierarchy: []
+  });
   const [isAdding, setIsAdding] = useState(false);
+  const [jsonInput, setJsonInput] = useState("");
+  const [useJsonMode, setUseJsonMode] = useState(false);
+
+  const addChapter = () => {
+    setFrameworkData({
+      ...frameworkData,
+      hierarchy: [
+        ...frameworkData.hierarchy,
+        { ref_id: "", title: "", description: "", children: [], items: [] }
+      ]
+    });
+  };
+
+  const removeChapter = (index) => {
+    const newHierarchy = frameworkData.hierarchy.filter((_, i) => i !== index);
+    setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
+  };
+
+  const addSubChapter = (chapterIndex) => {
+    const newHierarchy = [...frameworkData.hierarchy];
+    if (!newHierarchy[chapterIndex].children) newHierarchy[chapterIndex].children = [];
+    newHierarchy[chapterIndex].children.push({ 
+      ref_id: "", 
+      title: "", 
+      description: "", 
+      items: [] 
+    });
+    setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
+  };
+
+  const removeSubChapter = (chapterIndex, subChapterIndex) => {
+    const newHierarchy = [...frameworkData.hierarchy];
+    newHierarchy[chapterIndex].children = newHierarchy[chapterIndex].children.filter((_, i) => i !== subChapterIndex);
+    setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
+  };
+
+  const addControl = (chapterIndex, subChapterIndex = null) => {
+    const newHierarchy = [...frameworkData.hierarchy];
+    if (subChapterIndex !== null) {
+      if (!newHierarchy[chapterIndex].children[subChapterIndex].items) {
+        newHierarchy[chapterIndex].children[subChapterIndex].items = [];
+      }
+      newHierarchy[chapterIndex].children[subChapterIndex].items.push({ 
+        ref_id: "", 
+        name: "", 
+        description: "" 
+      });
+    } else {
+      if (!newHierarchy[chapterIndex].items) newHierarchy[chapterIndex].items = [];
+      newHierarchy[chapterIndex].items.push({ 
+        ref_id: "", 
+        name: "", 
+        description: "" 
+      });
+    }
+    setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
+  };
+
+  const removeControl = (chapterIndex, controlIndex, subChapterIndex = null) => {
+    const newHierarchy = [...frameworkData.hierarchy];
+    if (subChapterIndex !== null) {
+      newHierarchy[chapterIndex].children[subChapterIndex].items = 
+        newHierarchy[chapterIndex].children[subChapterIndex].items.filter((_, i) => i !== controlIndex);
+    } else {
+      newHierarchy[chapterIndex].items = newHierarchy[chapterIndex].items.filter((_, i) => i !== controlIndex);
+    }
+    setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
+  };
+
+  const handleJsonImport = () => {
+    try {
+      const parsed = JSON.parse(jsonInput);
+      setFrameworkData({
+        name: parsed.name || parsed.framework?.name || "",
+        version: parsed.version || parsed.framework?.version || "1.0",
+        description: parsed.description || parsed.framework?.description || "",
+        provider: parsed.provider || parsed.framework?.provider || "",
+        hierarchy: parsed.hierarchy || parsed.framework?.hierarchy || []
+      });
+      setUseJsonMode(false);
+      setJsonInput("");
+    } catch (error) {
+      alert("Invalid JSON format: " + error.message);
+    }
+  };
 
   const handleSubmit = async () => {
-    if (!reason.trim()) return;
+    if (!frameworkData.name.trim()) {
+      alert("Framework name is required");
+      return;
+    }
+    
     setIsAdding(true);
     try {
-      await onConfirm(reason);
+      await onConfirm(frameworkData);
       onClose();
-    } catch (err) {
-      console.error(err);
+    } catch (error) {
+      console.error("Error adding framework:", error);
+      alert("Error adding framework: " + error.message);
     } finally {
       setIsAdding(false);
     }
@@ -499,385 +157,891 @@ const ExceptionModal = ({ target, onClose, onConfirm }) => {
 
   return (
     <div style={{
-      position: "fixed",
-      inset: 0,
-      background: "rgba(15,23,42,0.6)",
-      backdropFilter: "blur(8px)",
-      zIndex: 1000,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
+      position: "fixed", inset: 0, zIndex: 1000,
+      background: "rgba(10,20,50,.45)", backdropFilter: "blur(4px)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      overflow: "auto", padding: 20,
     }} onClick={onClose}>
-      <motion.div
-        initial={{ scale: 0.95, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.95, opacity: 0 }}
-        style={{
-          background: THEME.colors.white,
-          borderRadius: "24px",
-          width: "480px",
-          maxWidth: "90vw",
-          boxShadow: THEME.shadows.modal,
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div style={{ padding: "24px 28px 0 28px" }}>
-          <h2 style={{ fontSize: "20px", fontWeight: "700", color: THEME.colors.textDark, marginBottom: "4px" }}>Add Exception</h2>
-          <p style={{ fontSize: "13px", color: THEME.colors.textGray, marginBottom: "20px" }}>
-            Exclude <strong>{target?.title}</strong> from compliance scope
-          </p>
-        </div>
-
-        <div style={{ padding: "0 28px" }}>
-          <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: THEME.colors.textGray, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "8px" }}>Reason *</label>
-          <textarea
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            placeholder="Please provide a reason for this exception..."
-            style={{
-              width: "100%",
-              minHeight: "100px",
-              padding: "10px 14px",
-              border: `1.5px solid ${THEME.colors.border}`,
-              borderRadius: "12px",
-              fontSize: "14px",
-              color: THEME.colors.textDark,
-              outline: "none",
-              fontFamily: "inherit",
-              resize: "vertical",
-              marginBottom: "20px",
-            }}
-          />
-        </div>
-
-        <div style={{ padding: "0 28px 28px 28px" }}>
-          <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
-            <button onClick={onClose} style={{
-              padding: "8px 18px",
-              borderRadius: "10px",
-              border: `1.5px solid ${THEME.colors.border}`,
-              background: THEME.colors.white,
-              cursor: "pointer",
-              fontSize: "13px",
-              fontWeight: "600",
-              color: THEME.colors.textGray,
-            }}>
-              Cancel
-            </button>
-            <button onClick={handleSubmit} disabled={!reason.trim() || isAdding} style={{
-              padding: "8px 22px",
-              borderRadius: "10px",
-              border: "none",
-              cursor: (!reason.trim() || isAdding) ? "not-allowed" : "pointer",
-              background: (!reason.trim() || isAdding) ? THEME.colors.border : THEME.colors.error,
-              color: THEME.colors.white,
-              fontSize: "13px",
-              fontWeight: "600",
-              opacity: (!reason.trim() || isAdding) ? 0.6 : 1,
-            }}>
-              {isAdding ? "Adding..." : "Confirm Exception"}
-            </button>
-          </div>
-        </div>
-      </motion.div>
-    </div>
-  );
-};
-
-/* ─── Item Row Component ───────────────────────────── */
-const ItemRow = ({ item, isImported, isExcluded, onImport, onUnimport, onAddException }) => {
-  const [isHovered, setIsHovered] = useState(false);
-  const status = STATUS_CONFIG[item.type] || STATUS_CONFIG.optional;
-
-  return (
-    <div
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      style={{
-        borderRadius: "10px",
-        border: `1px solid ${isHovered ? THEME.colors.primary + "44" : THEME.colors.borderLight}`,
-        background: isExcluded ? THEME.colors.errorLight : THEME.colors.white,
-        padding: "11px 14px",
-        transition: "all 0.18s",
-        boxShadow: isHovered ? `0 3px 12px ${THEME.colors.primary}12` : "none",
-        transform: isHovered ? "translateY(-1px)" : "none",
-      }}
-    >
-      <div style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
+      <div style={{
+        background: C.card, borderRadius: 16, width: 700, maxWidth: "95vw",
+        maxHeight: "90vh", overflow: "auto",
+        boxShadow: "0 24px 60px rgba(59,111,255,.18)",
+        border: `1px solid ${C.border}`,
+      }} onClick={(e) => e.stopPropagation()}>
         <div style={{
-          width: "7px",
-          height: "7px",
-          borderRadius: "50%",
-          marginTop: "6px",
-          flexShrink: 0,
-          backgroundColor: isExcluded ? THEME.colors.error : (isImported ? THEME.colors.primary : THEME.colors.border),
-          transition: "all 0.2s",
-        }} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "3px" }}>
-            <span style={{ fontSize: "13px", fontWeight: "700", color: isExcluded ? THEME.colors.error : THEME.colors.textDark }}>{item.title}</span>
-            <span style={{ fontSize: "10px", color: THEME.colors.textLight, background: THEME.colors.borderLight, padding: "1px 6px", borderRadius: "5px", fontWeight: "600" }}>v{item.version || "1.0"}</span>
-            <Badge variant={item.type === "mandatory" ? "error" : "primary"}>{status.label}</Badge>
-            <ExceptionBadge isExcluded={isExcluded} onAddException={onAddException} />
-          </div>
-          <p style={{ fontSize: "12px", color: THEME.colors.textGray, margin: "0 0 7px", lineHeight: 1.5 }}>{item.description}</p>
-        </div>
-        {!isExcluded && (
-          <ToggleSwitch
-            size="sm"
-            isImported={isImported}
-            onImport={() => onImport({
-              id: item.id,
-              title: item.title,
-              level: "item",
-              version: item.version || "1.0",
-              chapter_id: item.chapter_id,
-              package_id: item.package_id
-            })}
-            onUnimport={() => onUnimport({
-              id: item.id,
-              title: item.title,
-              level: "item",
-              version: item.version || "1.0"
-            })}
-          />
-        )}
-      </div>
-    </div>
-  );
-};
-
-/* ─── Chapter Card Component ───────────────────────────── */
-const ChapterCard = ({ chapter, importedItems, excludedItems, onImport, onUnimport, onAddException, packageId }) => {
-  const [isOpen, setIsOpen] = useState(true);
-  const chapterId = chapter.id;
-
-  const importedChapter = importedItems.find(i => i.id === chapterId && i.level === "chapter");
-  const isStructureChanged = importedChapter && importedChapter.itemsCount !== (chapter.items?.length || 0);
-  const chapterImported = importedChapter && !isStructureChanged;
-  const chapterExcluded = excludedItems.some(i => i.id === chapterId && i.level === "chapter");
-  const allItemsImported = chapter.items?.length > 0 && chapter.items.every(item =>
-    importedItems.some(i => i.id === item.id && i.level === "item")
-  );
-
-  return (
-    <div style={{
-      borderRadius: "12px",
-      border: `1.5px solid ${isOpen ? THEME.colors.primary + "28" : THEME.colors.borderLight}`,
-      overflow: "hidden",
-      background: THEME.colors.white,
-    }}>
-      <div style={{
-        display: "flex",
-        alignItems: "center",
-        background: isOpen ? `${THEME.colors.primary}07` : THEME.colors.borderLight,
-        borderBottom: isOpen ? `1px solid ${THEME.colors.borderLight}` : "none",
-      }}>
-        <button onClick={() => setIsOpen(!isOpen)} style={{
-          flex: 1,
-          display: "flex",
-          alignItems: "center",
-          gap: "9px",
-          padding: "10px 14px",
-          background: "transparent",
-          border: "none",
-          cursor: "pointer",
-          textAlign: "left",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "20px 24px 16px", borderBottom: `1px solid ${C.border}`,
         }}>
-          <ChevronRight size={13} style={{
-            transform: isOpen ? "rotate(90deg)" : "none",
-            transition: "transform 0.2s",
-            flexShrink: 0,
-          }} color={THEME.colors.primary} />
-          <div style={{ flex: 1 }}>
-            <span style={{ fontSize: "13px", fontWeight: "700", color: THEME.colors.textDark }}>{chapter.title}</span>
-            {chapter.description && (
-              <div style={{ fontSize: "12px", color: THEME.colors.textGray, marginTop: "2px" }}>{chapter.description}</div>
-            )}
-          </div>
-          {allItemsImported && !chapterExcluded && (
-            <span style={{ fontSize: "10px", fontWeight: "600", padding: "2px 8px", borderRadius: "12px", background: THEME.colors.primaryBg, color: THEME.colors.primary }}>
-              All imported
-            </span>
-          )}
-          {chapterExcluded && (
-            <span style={{ fontSize: "10px", fontWeight: "600", padding: "2px 8px", borderRadius: "12px", background: THEME.colors.errorLight, color: THEME.colors.error }}>
-              Excluded
-            </span>
-          )}
-        </button>
-        {!chapterExcluded && (
-          <div style={{ padding: "0 12px" }}>
-            <ToggleSwitch
-              size="sm"
-              isImported={chapterImported || allItemsImported}
-              onImport={() => onImport({
-                id: chapterId,
-                title: chapter.title,
-                level: "chapter",
-                version: chapter.version || "1.0",
-                package_id: packageId,
-                items: chapter.items || []
-              })}
-              onUnimport={() => onUnimport({
-                id: chapterId,
-                title: chapter.title,
-                level: "chapter",
-                version: chapter.version || "1.0",
-                items: chapter.items || []
-              })}
-            />
-          </div>
-        )}
-      </div>
-      {isOpen && chapter.items && (
-        <div style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: "7px" }}>
-          {chapter.items.map((item) => (
-            <ItemRow
-              key={item.id}
-              item={item}
-              isImported={importedItems.some(i => i.id === item.id && i.level === "item")}
-              isExcluded={excludedItems.some(i => i.id === item.id && i.level === "item")}
-              onImport={onImport}
-              onUnimport={onUnimport}
-              onAddException={() => onAddException({ ...item, id: item.id, level: "item" })}
-            />
-          ))}
+          <span style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 18, fontWeight: 700, color: C.text }}>
+            <Database size={18} style={{ display: "inline", marginRight: 8, verticalAlign: "middle" }} />
+            Add Security Framework
+          </span>
+          <button onClick={onClose} style={{
+            background: "none", border: "none", cursor: "pointer",
+            color: C.muted, padding: 4, borderRadius: 8,
+          }}><Icon d={icons.close} size={18} /></button>
         </div>
-      )}
-    </div>
-  );
-};
+        
+        <div style={{ padding: 24 }}>
+          <div style={{ display: "flex", gap: 12, marginBottom: 20, borderBottom: `1px solid ${C.border}`, paddingBottom: 12 }}>
+            <button
+              onClick={() => setUseJsonMode(false)}
+              style={{
+                padding: "6px 16px", borderRadius: 20, border: "none",
+                background: !useJsonMode ? C.accent : "transparent",
+                color: !useJsonMode ? "#fff" : C.muted,
+                cursor: "pointer", fontSize: 13, fontWeight: 600,
+              }}
+            >
+              Manual Entry
+            </button>
+            <button
+              onClick={() => setUseJsonMode(true)}
+              style={{
+                padding: "6px 16px", borderRadius: 20, border: "none",
+                background: useJsonMode ? C.accent : "transparent",
+                color: useJsonMode ? "#fff" : C.muted,
+                cursor: "pointer", fontSize: 13, fontWeight: 600,
+              }}
+            >
+              Import JSON
+            </button>
+          </div>
 
-/* ─── Package Panel Component ───────────────────────────── */
-const PackagePanel = ({ pkg, importedItems, excludedItems, onImport, onUnimport, onAddException, isNew }) => {
-  const [isOpen, setIsOpen] = useState(true);
-  const pkgId = pkg.id;
-  const allItems = pkg.chapters?.flatMap(c => c.items) || [];
-  const allChapters = pkg.chapters || [];
-
-  const importedPkg = importedItems.find(i => i.id === pkgId && i.level === "package");
-  const allItemsImported = allItems.length > 0 && allItems.every(item =>
-    importedItems.some(i => i.id === item.id && i.level === "item")
-  );
-  const allChaptersImported = allChapters.length > 0 && allChapters.every(ch =>
-    importedItems.some(i => i.id === ch.id && i.level === "chapter")
-  );
-  const pkgImported = importedPkg || (allItemsImported && allChaptersImported);
-  const pkgExcluded = excludedItems.some(i => i.id === pkgId && i.level === "package");
-
-  const importedCount = allItems.filter(item => importedItems.some(i => i.id === item.id && i.level === "item")).length;
-  const importedChaptersCount = allChapters.filter(ch => {
-    return importedItems.some(i => i.id === ch.id && i.level === "chapter") ||
-      ch.items?.every(item => importedItems.some(i => i.id === item.id && i.level === "item"));
-  }).length;
-
-  return (
-    <div style={{
-      borderRadius: "20px",
-      border: `1.5px solid ${isOpen ? THEME.colors.primary + "50" : THEME.colors.borderLight}`,
-      background: pkgExcluded ? THEME.colors.errorLight : THEME.colors.white,
-      boxShadow: isOpen ? `0 4px 22px ${THEME.colors.primary}14` : THEME.shadows.card,
-      overflow: "hidden",
-      transition: "box-shadow 0.2s, border-color 0.2s",
-    }}>
-      <div style={{
-        display: "flex",
-        alignItems: "center",
-        background: isOpen ? `linear-gradient(to right, ${THEME.colors.primary}10, transparent)` : THEME.colors.borderLight,
-        borderBottom: isOpen ? `1px solid ${THEME.colors.borderLight}` : "none",
-      }}>
-        <button onClick={() => setIsOpen(!isOpen)} style={{
-          flex: 1,
-          display: "flex",
-          alignItems: "center",
-          gap: "13px",
-          padding: "15px 18px",
-          background: "transparent",
-          border: "none",
-          cursor: "pointer",
-          textAlign: "left",
-        }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px", flexWrap: "wrap" }}>
-              <span style={{ fontSize: "20px", fontWeight: "900", color: pkgExcluded ? THEME.colors.error : THEME.colors.textDark }}>{pkg.title}</span>
-              {isNew && !pkgImported && !pkgExcluded && (
-                <span style={{ fontSize: "10px", fontWeight: "700", background: THEME.colors.primaryBg, color: THEME.colors.primary, padding: "2px 8px", borderRadius: "12px", border: `1px solid ${THEME.colors.primary}40` }}>New</span>
-              )}
-              {pkgExcluded && (
-                <span style={{ fontSize: "10px", fontWeight: "700", background: THEME.colors.errorLight, color: THEME.colors.error, padding: "2px 8px", borderRadius: "12px", border: `1px solid ${THEME.colors.error}40` }}>Excluded</span>
-              )}
-              <span style={{ fontSize: "11px", color: THEME.colors.primary, background: `${THEME.colors.primary}15`, padding: "2px 8px", borderRadius: "6px", fontWeight: "700" }}>v{pkg.version || "1.0"}</span>
-              <Badge variant={pkg.type === "mandatory" ? "error" : "primary"}>
-                {pkg.type === "mandatory" ? "Mandatory" : pkg.type === "recommended" ? "Recommended" : "Optional"}
-              </Badge>
+          {useJsonMode ? (
+            <div>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: C.muted, marginBottom: 8 }}>
+                Paste Framework JSON
+              </label>
+              <textarea
+                value={jsonInput}
+                onChange={(e) => setJsonInput(e.target.value)}
+                placeholder='{"name": "ISO 27001:2022", "version": "2022", "hierarchy": [...]}'
+                style={{
+                  width: "100%", height: 300,
+                  padding: 12, border: `1.5px solid ${C.border}`,
+                  borderRadius: 10, fontSize: 12, fontFamily: "monospace",
+                  resize: "vertical", outline: "none",
+                }}
+              />
+              <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 16 }}>
+                <button onClick={() => setUseJsonMode(false)} style={{
+                  padding: "8px 16px", borderRadius: 8, border: `1px solid ${C.border}`,
+                  background: "transparent", cursor: "pointer",
+                }}>Cancel</button>
+                <button onClick={handleJsonImport} style={{
+                  padding: "8px 20px", borderRadius: 8, border: "none",
+                  background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
+                  color: "#fff", cursor: "pointer",
+                }}>Import JSON</button>
+              </div>
             </div>
-            {pkg.description && (
-              <div style={{ fontSize: "12px", color: THEME.colors.textGray, marginTop: "4px" }}>{pkg.description}</div>
-            )}
-            {allItems.length > 0 && !pkgExcluded && (
-              <div style={{ marginTop: "8px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <div style={{ width: "120px", height: "4px", background: THEME.colors.borderLight, borderRadius: "99px", overflow: "hidden" }}>
-                    <div style={{ height: "100%", width: `${(importedCount / allItems.length) * 100}%`, background: THEME.gradients.button, borderRadius: "99px", transition: "width 0.4s" }} />
-                  </div>
-                  <span style={{ fontSize: "10px", color: THEME.colors.textLight }}>
-                    {importedChaptersCount}/{allChapters.length} chapters · {importedCount}/{allItems.length} items imported
-                  </span>
+          ) : (
+            <>
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: C.muted, marginBottom: 6 }}>
+                  Framework Name *
+                </label>
+                <input
+                  type="text"
+                  value={frameworkData.name}
+                  onChange={(e) => setFrameworkData({ ...frameworkData, name: e.target.value })}
+                  placeholder="e.g., ISO 27001:2022, NIST CSF 2.0"
+                  style={{
+                    width: "100%", padding: "10px 14px",
+                    border: `1.5px solid ${C.border}`, borderRadius: 10,
+                    fontSize: 14, outline: "none",
+                  }}
+                />
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
+                <div>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: C.muted, marginBottom: 6 }}>Version</label>
+                  <input
+                    type="text"
+                    value={frameworkData.version}
+                    onChange={(e) => setFrameworkData({ ...frameworkData, version: e.target.value })}
+                    placeholder="1.0"
+                    style={{
+                      width: "100%", padding: "10px 14px",
+                      border: `1.5px solid ${C.border}`, borderRadius: 10,
+                      fontSize: 14, outline: "none",
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: C.muted, marginBottom: 6 }}>Provider</label>
+                  <input
+                    type="text"
+                    value={frameworkData.provider}
+                    onChange={(e) => setFrameworkData({ ...frameworkData, provider: e.target.value })}
+                    placeholder="ISO, NIST, CIS, etc."
+                    style={{
+                      width: "100%", padding: "10px 14px",
+                      border: `1.5px solid ${C.border}`, borderRadius: 10,
+                      fontSize: 14, outline: "none",
+                    }}
+                  />
                 </div>
               </div>
-            )}
-            {pkgExcluded && (
-              <div style={{ fontSize: "11px", color: THEME.colors.error, marginTop: "4px" }}>
-                This package is excluded from compliance scope
+
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: C.muted, marginBottom: 6 }}>Description</label>
+                <textarea
+                  value={frameworkData.description}
+                  onChange={(e) => setFrameworkData({ ...frameworkData, description: e.target.value })}
+                  placeholder="Framework description..."
+                  rows={2}
+                  style={{
+                    width: "100%", padding: "10px 14px",
+                    border: `1.5px solid ${C.border}`, borderRadius: 10,
+                    fontSize: 14, outline: "none", resize: "vertical",
+                  }}
+                />
               </div>
+
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                  <label style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Hierarchy</label>
+                  <button
+                    onClick={addChapter}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 6,
+                      padding: "4px 12px", borderRadius: 6, border: `1px dashed ${C.accent}`,
+                      background: "transparent", color: C.accent, fontSize: 12, cursor: "pointer",
+                    }}
+                  >
+                    <Plus size={12} /> Add Chapter
+                  </button>
+                </div>
+
+                {frameworkData.hierarchy.map((chapter, chIdx) => (
+                  <div key={chIdx} style={{
+                    border: `1px solid ${C.border}`, borderRadius: 10,
+                    padding: 12, marginBottom: 12, background: C.bg,
+                  }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: C.purple }}>Chapter {chIdx + 1}</span>
+                      <button onClick={() => removeChapter(chIdx)} style={{ color: C.danger, background: "none", border: "none", cursor: "pointer", fontSize: 12 }}>Remove</button>
+                    </div>
+                    
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10, marginBottom: 10 }}>
+                      <input
+                        type="text"
+                        value={chapter.ref_id}
+                        onChange={(e) => {
+                          const newHierarchy = [...frameworkData.hierarchy];
+                          newHierarchy[chIdx].ref_id = e.target.value;
+                          setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
+                        }}
+                        placeholder="Ref ID"
+                        style={{ padding: "6px 10px", border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12 }}
+                      />
+                      <input
+                        type="text"
+                        value={chapter.title}
+                        onChange={(e) => {
+                          const newHierarchy = [...frameworkData.hierarchy];
+                          newHierarchy[chIdx].title = e.target.value;
+                          setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
+                        }}
+                        placeholder="Title"
+                        style={{ padding: "6px 10px", border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12 }}
+                      />
+                    </div>
+                    
+                    <textarea
+                      value={chapter.description}
+                      onChange={(e) => {
+                        const newHierarchy = [...frameworkData.hierarchy];
+                        newHierarchy[chIdx].description = e.target.value;
+                        setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
+                      }}
+                      placeholder="Description"
+                      rows={2}
+                      style={{ width: "100%", padding: "6px 10px", border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, marginBottom: 10 }}
+                    />
+
+                    {/* Sub-chapters */}
+                    <div style={{ marginTop: 10, marginLeft: 16 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: C.muted }}>Sub-chapters</span>
+                        <button onClick={() => addSubChapter(chIdx)} style={{ fontSize: 11, color: C.accent, background: "none", border: "none", cursor: "pointer" }}>+ Add Sub-chapter</button>
+                      </div>
+                      
+                      {(chapter.children || []).map((subChapter, subIdx) => (
+                        <div key={subIdx} style={{
+                          border: `1px solid ${C.border}`, borderRadius: 8,
+                          padding: 10, marginBottom: 10, background: C.card,
+                        }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                            <span style={{ fontSize: 11, fontWeight: 600, color: C.accent }}>Sub-chapter {subIdx + 1}</span>
+                            <button onClick={() => removeSubChapter(chIdx, subIdx)} style={{ fontSize: 10, color: C.danger, background: "none", border: "none", cursor: "pointer" }}>Remove</button>
+                          </div>
+                          
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 8, marginBottom: 8 }}>
+                            <input
+                              type="text"
+                              value={subChapter.ref_id}
+                              onChange={(e) => {
+                                const newHierarchy = [...frameworkData.hierarchy];
+                                newHierarchy[chIdx].children[subIdx].ref_id = e.target.value;
+                                setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
+                              }}
+                              placeholder="Ref ID"
+                              style={{ padding: "4px 8px", border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11 }}
+                            />
+                            <input
+                              type="text"
+                              value={subChapter.title}
+                              onChange={(e) => {
+                                const newHierarchy = [...frameworkData.hierarchy];
+                                newHierarchy[chIdx].children[subIdx].title = e.target.value;
+                                setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
+                              }}
+                              placeholder="Title"
+                              style={{ padding: "4px 8px", border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11 }}
+                            />
+                          </div>
+                          
+                          <textarea
+                            value={subChapter.description}
+                            onChange={(e) => {
+                              const newHierarchy = [...frameworkData.hierarchy];
+                              newHierarchy[chIdx].children[subIdx].description = e.target.value;
+                              setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
+                            }}
+                            placeholder="Description"
+                            rows={2}
+                            style={{ width: "100%", padding: "4px 8px", border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, marginBottom: 8 }}
+                          />
+
+                          {/* Controls in sub-chapter */}
+                          <div style={{ marginTop: 8 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                              <span style={{ fontSize: 10, fontWeight: 600, color: C.muted }}>Controls</span>
+                              <button onClick={() => addControl(chIdx, subIdx)} style={{ fontSize: 10, color: C.accent, background: "none", border: "none", cursor: "pointer" }}>+ Add Control</button>
+                            </div>
+                            
+                            {(subChapter.items || []).map((control, ctrlIdx) => (
+                              <div key={ctrlIdx} style={{
+                                background: C.bg, borderRadius: 4, padding: 6, marginBottom: 6,
+                                border: `1px solid ${C.border}`,
+                              }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                                  <span style={{ fontSize: 9, fontWeight: 600, color: C.accent }}>Control {ctrlIdx + 1}</span>
+                                  <button onClick={() => removeControl(chIdx, ctrlIdx, subIdx)} style={{ fontSize: 9, color: C.danger, background: "none", border: "none", cursor: "pointer" }}>Remove</button>
+                                </div>
+                                <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 6, marginBottom: 4 }}>
+                                  <input
+                                    type="text"
+                                    value={control.ref_id}
+                                    onChange={(e) => {
+                                      const newHierarchy = [...frameworkData.hierarchy];
+                                      newHierarchy[chIdx].children[subIdx].items[ctrlIdx].ref_id = e.target.value;
+                                      setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
+                                    }}
+                                    placeholder="Ref ID"
+                                    style={{ padding: "3px 6px", border: `1px solid ${C.border}`, borderRadius: 3, fontSize: 10 }}
+                                  />
+                                  <input
+                                    type="text"
+                                    value={control.name}
+                                    onChange={(e) => {
+                                      const newHierarchy = [...frameworkData.hierarchy];
+                                      newHierarchy[chIdx].children[subIdx].items[ctrlIdx].name = e.target.value;
+                                      setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
+                                    }}
+                                    placeholder="Control name"
+                                    style={{ padding: "3px 6px", border: `1px solid ${C.border}`, borderRadius: 3, fontSize: 10 }}
+                                  />
+                                </div>
+                                <textarea
+                                  value={control.description}
+                                  onChange={(e) => {
+                                    const newHierarchy = [...frameworkData.hierarchy];
+                                    newHierarchy[chIdx].children[subIdx].items[ctrlIdx].description = e.target.value;
+                                    setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
+                                  }}
+                                  placeholder="Description"
+                                  rows={1}
+                                  style={{ width: "100%", padding: "3px 6px", border: `1px solid ${C.border}`, borderRadius: 3, fontSize: 10 }}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Direct controls in chapter */}
+                    <div style={{ marginTop: 10 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: C.muted }}>Direct Controls</span>
+                        <button onClick={() => addControl(chIdx)} style={{ fontSize: 11, color: C.accent, background: "none", border: "none", cursor: "pointer" }}>+ Add Control</button>
+                      </div>
+                      
+                      {(chapter.items || []).map((control, ctrlIdx) => (
+                        <div key={ctrlIdx} style={{
+                          background: C.card, borderRadius: 6, padding: 8, marginBottom: 8,
+                          border: `1px solid ${C.border}`,
+                        }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                            <span style={{ fontSize: 10, fontWeight: 600, color: C.accent }}>Control {ctrlIdx + 1}</span>
+                            <button onClick={() => removeControl(chIdx, ctrlIdx)} style={{ fontSize: 10, color: C.danger, background: "none", border: "none", cursor: "pointer" }}>Remove</button>
+                          </div>
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 8, marginBottom: 6 }}>
+                            <input
+                              type="text"
+                              value={control.ref_id}
+                              onChange={(e) => {
+                                const newHierarchy = [...frameworkData.hierarchy];
+                                newHierarchy[chIdx].items[ctrlIdx].ref_id = e.target.value;
+                                setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
+                              }}
+                              placeholder="Ref ID"
+                              style={{ padding: "4px 8px", border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11 }}
+                            />
+                            <input
+                              type="text"
+                              value={control.name}
+                              onChange={(e) => {
+                                const newHierarchy = [...frameworkData.hierarchy];
+                                newHierarchy[chIdx].items[ctrlIdx].name = e.target.value;
+                                setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
+                              }}
+                              placeholder="Control name"
+                              style={{ padding: "4px 8px", border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11 }}
+                            />
+                          </div>
+                          <textarea
+                            value={control.description}
+                            onChange={(e) => {
+                              const newHierarchy = [...frameworkData.hierarchy];
+                              newHierarchy[chIdx].items[ctrlIdx].description = e.target.value;
+                              setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
+                            }}
+                            placeholder="Description"
+                            rows={2}
+                            style={{ width: "100%", padding: "4px 8px", border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11 }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 20 }}>
+                <button onClick={onClose} style={{
+                  padding: "10px 20px", borderRadius: 8, border: `1.5px solid ${C.border}`,
+                  background: "transparent", cursor: "pointer", fontSize: 13,
+                }}>Cancel</button>
+                <button onClick={handleSubmit} disabled={isAdding} style={{
+                  padding: "10px 24px", borderRadius: 8, border: "none",
+                  background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
+                  color: "#fff", cursor: isAdding ? "wait" : "pointer", fontSize: 13, fontWeight: 600,
+                }}>
+                  {isAdding ? "Adding..." : "Add Framework"}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Control Item ──
+const ControlItem = ({ item, isExcepted, onAddException, isAnnex, isParentExcepted, standardId, onRefresh }) => {
+  const [open, setOpen] = useState(false);
+  const [showExceptionModal, setShowExceptionModal] = useState(false);
+  const [exceptionReason, setExceptionReason] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const hasDesc = item.description?.length > 0;
+  const effectivelyExcepted = isParentExcepted || isExcepted;
+
+  const handleAddException = async () => {
+    if (!exceptionReason.trim()) return;
+    
+    setIsSubmitting(true);
+    try {
+      await onAddException({
+        id: String(item.id),
+        ref_id: item.ref_id,
+        name: item.name,
+        title: item.name
+      }, exceptionReason, standardId);
+      
+      setShowExceptionModal(false);
+      setExceptionReason("");
+      
+      if (onRefresh) {
+        await onRefresh(); // 🔥 IMPORTANT
+      }
+            
+    } catch (error) {
+      console.error("Error adding exception:", error);
+      alert("Error adding exception: " + error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <>
+      <div style={{ marginLeft: 40, marginBottom: 6 }}>
+        <div style={{
+          padding: "6px 10px",
+          borderLeft: `3px solid ${effectivelyExcepted ? C.warning : C.success}`,
+          background: effectivelyExcepted ? "#FEFCE8" : "#F0FDF4",
+          borderRadius: 6,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: 8,
+        }}>
+          <div style={{ display: "flex", gap: 6, alignItems: "center", flex: 1, cursor: hasDesc ? "pointer" : "default" }}
+            onClick={() => hasDesc && setOpen(!open)}>
+            {hasDesc && (
+              <ChevronRight size={12} style={{ transform: open ? "rotate(90deg)" : "rotate(0)", transition: "0.2s" }} />
+            )}
+            <span style={{ fontSize: 11, fontWeight: 700, color: C.accent, fontFamily: "monospace" }}>
+              {item.ref_id}
+            </span>
+            <span style={{ fontSize: 12, fontWeight: 600 }}>{item.name}</span>
+            {!effectivelyExcepted && (
+              <span style={{ fontSize: 9, background: C.success, color: "#fff", padding: "1px 6px", borderRadius: 10 }}>Imported</span>
+            )}
+            {effectivelyExcepted && (
+              <span style={{ fontSize: 9, background: C.warning, color: "#fff", padding: "1px 6px", borderRadius: 10 }}>Exception</span>
             )}
           </div>
-          <ChevronDown size={14} style={{
-            transform: isOpen ? "rotate(180deg)" : "none",
-            transition: "transform 0.2s",
-            flexShrink: 0,
-            marginRight: "4px",
-            color: THEME.colors.textLight,
-          }} />
-        </button>
-        {!pkgExcluded && (
-          <div style={{ padding: "0 16px" }}>
-            <ToggleSwitch
-              size="md"
-              isImported={pkgImported}
-              onImport={() => onImport({
-                id: pkgId,
-                title: pkg.title,
-                level: "package",
-                version: pkg.version || "1.0",
-                chapters: pkg.chapters,
-                chaptersCount: allChapters.length,
-                itemsCount: allItems.length
-              })}
-              onUnimport={() => onUnimport({
-                id: pkgId,
-                title: pkg.title,
-                level: "package",
-                version: pkg.version || "1.0",
-                chapters: pkg.chapters
-              })}
-            />
+          <div style={{ display: "flex", gap: 6 }}>
+            {isAnnex && !effectivelyExcepted && !isParentExcepted && (
+              <button onClick={() => setShowExceptionModal(true)} style={{
+                padding: "2px 8px", borderRadius: 4, border: `1px solid ${C.warning}`,
+                background: "transparent", color: C.warning, fontSize: 10, cursor: "pointer",
+              }}>
+                Add Exception
+              </button>
+            )}
+            {effectivelyExcepted && !isParentExcepted && (
+              <span style={{ fontSize: 10, color: C.warning, fontStyle: "italic" }}>Excepted</span>
+            )}
+            {isParentExcepted && (
+              <span style={{ fontSize: 10, color: C.muted, fontStyle: "italic" }}>Inherited from chapter</span>
+            )}
+          </div>
+        </div>
+        {open && hasDesc && (
+          <p style={{ marginTop: 6, fontSize: 12, color: C.muted, lineHeight: 1.5, paddingLeft: 20 }}>
+            {item.description}
+          </p>
+        )}
+      </div>
+
+      {showExceptionModal && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 1100,
+          background: "rgba(10,20,50,.45)", backdropFilter: "blur(4px)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }} onClick={() => setShowExceptionModal(false)}>
+          <div style={{
+            background: C.card, borderRadius: 16, width: 440, maxWidth: "95vw",
+            boxShadow: "0 24px 60px rgba(59,111,255,.18)",
+            border: `1px solid ${C.border}`,
+          }} onClick={(e) => e.stopPropagation()}>
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "20px 24px 16px", borderBottom: `1px solid ${C.border}`,
+            }}>
+              <span style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 18, fontWeight: 700, color: C.warning }}>Add Exception</span>
+              <button onClick={() => setShowExceptionModal(false)} style={{
+                background: "none", border: "none", cursor: "pointer",
+                color: C.muted, padding: 4, borderRadius: 8,
+              }}><Icon d={icons.close} size={18} /></button>
+            </div>
+            <div style={{ padding: 24 }}>
+              <p style={{ marginBottom: 16, fontSize: 14, color: C.text }}>
+                Add exception for <strong>{item.name}</strong>
+              </p>
+              <textarea
+                value={exceptionReason}
+                onChange={(e) => setExceptionReason(e.target.value)}
+                placeholder="Reason for exception..."
+                rows={4}
+                style={{
+                  width: "100%", padding: "10px 14px",
+                  border: `1.5px solid ${C.border}`, borderRadius: 10,
+                  fontSize: 14, outline: "none", resize: "vertical",
+                  marginBottom: 16,
+                }}
+              />
+              <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
+                <button onClick={() => setShowExceptionModal(false)} style={{
+                  padding: "8px 16px", borderRadius: 8, border: `1px solid ${C.border}`,
+                  background: "transparent", cursor: "pointer", fontSize: 13,
+                }}>Cancel</button>
+                <button onClick={handleAddException} disabled={isSubmitting} style={{
+                  padding: "8px 20px", borderRadius: 8, border: "none",
+                  background: C.warning, color: "#fff", cursor: isSubmitting ? "wait" : "pointer", fontSize: 13,
+                }}>
+                  {isSubmitting ? "Adding..." : "Add Exception"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
+// ── Sub Chapter ──
+const SubChapter = ({ sub, exceptedControlIds, onAddException, isAnnex, isParentExcepted, standardId, onRefresh }) => {
+  const [open, setOpen] = useState(false);
+  const [showExceptionModal, setShowExceptionModal] = useState(false);
+  const [exceptionReason, setExceptionReason] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const hasDesc = sub.description?.length > 0;
+  const isExcepted = exceptedControlIds.has(String(sub.id));
+  const effectivelyExcepted = isParentExcepted || isExcepted;
+
+  const handleAddException = async () => {
+    if (!exceptionReason.trim()) return;
+    
+    setIsSubmitting(true);
+    try {
+      await onAddException({
+        id: String(sub.id),
+        ref_id: sub.ref_id,
+        title: sub.title,
+        items: sub.items
+      }, exceptionReason, standardId);
+      
+      setShowExceptionModal(false);
+      setExceptionReason("");
+      if (onRefresh) await onRefresh();
+      
+    } catch (error) {
+      console.error("Error adding exception:", error);
+      alert("Error adding exception: " + error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <>
+      <div style={{ marginLeft: 20, marginBottom: 8 }}>
+        <div onClick={() => setOpen(!open)} style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          gap: 6, fontWeight: 600, fontSize: 13, color: C.text,
+          cursor: "pointer", padding: "4px 0",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
+            <ChevronRight size={12} style={{ transform: open ? "rotate(90deg)" : "rotate(0)" }} />
+            <span style={{ fontWeight: 700, color: effectivelyExcepted ? C.warning : C.purple }}>{sub.ref_id}</span>
+            <span>{sub.title}</span>
+            {effectivelyExcepted && (
+              <span style={{ fontSize: 9, background: C.warning, color: "#fff", padding: "1px 6px", borderRadius: 10 }}>Exception</span>
+            )}
+          </div>
+          {isAnnex && !effectivelyExcepted && !isParentExcepted && (
+            <button onClick={(e) => { e.stopPropagation(); setShowExceptionModal(true); }} style={{
+              padding: "2px 8px", borderRadius: 4, border: `1px solid ${C.warning}`,
+              background: "transparent", color: C.warning, fontSize: 10, cursor: "pointer",
+            }}>Add Exception</button>
+          )}
+        </div>
+
+        {open && (
+          <div style={{ marginLeft: 16 }}>
+            {hasDesc && (
+              <p style={{ fontSize: 11, color: C.muted, marginBottom: 8, paddingLeft: 8, borderLeft: `2px solid ${C.border}` }}>
+                {sub.description}
+              </p>
+            )}
+            {sub.items?.map((item) => (
+              <ControlItem
+                key={item.id}
+                item={item}
+                isExcepted={exceptedControlIds.has(String(item.id))}
+                onAddException={onAddException}
+                isAnnex={isAnnex}
+                isParentExcepted={effectivelyExcepted}
+                standardId={standardId}
+                onRefresh={onRefresh}
+              />
+            ))}
           </div>
         )}
       </div>
-      {isOpen && pkg.chapters && !pkgExcluded && (
-        <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: "10px" }}>
-          {pkg.chapters.map((ch) => (
-            <ChapterCard
+
+      {showExceptionModal && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 1100,
+          background: "rgba(10,20,50,.45)", backdropFilter: "blur(4px)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }} onClick={() => setShowExceptionModal(false)}>
+          <div style={{
+            background: C.card, borderRadius: 16, width: 440, maxWidth: "95vw",
+            boxShadow: "0 24px 60px rgba(59,111,255,.18)",
+            border: `1px solid ${C.border}`,
+          }} onClick={(e) => e.stopPropagation()}>
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "20px 24px 16px", borderBottom: `1px solid ${C.border}`,
+            }}>
+              <span style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 18, fontWeight: 700, color: C.warning }}>Add Exception for Sub-Chapter</span>
+              <button onClick={() => setShowExceptionModal(false)} style={{
+                background: "none", border: "none", cursor: "pointer",
+                color: C.muted, padding: 4, borderRadius: 8,
+              }}><Icon d={icons.close} size={18} /></button>
+            </div>
+            <div style={{ padding: 24 }}>
+              <p style={{ marginBottom: 16, fontSize: 14, color: C.text }}>
+                Add exception for <strong>{sub.title}</strong>
+              </p>
+              <p style={{ marginBottom: 16, fontSize: 12, color: C.muted }}>
+                This will also add exceptions for all {sub.items?.length || 0} controls.
+              </p>
+              <textarea
+                value={exceptionReason}
+                onChange={(e) => setExceptionReason(e.target.value)}
+                placeholder="Reason for exception..."
+                rows={4}
+                style={{
+                  width: "100%", padding: "10px 14px",
+                  border: `1.5px solid ${C.border}`, borderRadius: 10,
+                  fontSize: 14, outline: "none", resize: "vertical",
+                  marginBottom: 16,
+                }}
+              />
+              <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
+                <button onClick={() => setShowExceptionModal(false)} style={{
+                  padding: "8px 16px", borderRadius: 8, border: `1px solid ${C.border}`,
+                  background: "transparent", cursor: "pointer", fontSize: 13,
+                }}>Cancel</button>
+                <button onClick={handleAddException} disabled={isSubmitting} style={{
+                  padding: "8px 20px", borderRadius: 8, border: "none",
+                  background: C.warning, color: "#fff", cursor: isSubmitting ? "wait" : "pointer", fontSize: 13,
+                }}>
+                  {isSubmitting ? "Adding..." : "Add Exception"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
+// ── Chapter Section ──
+const ChapterSection = ({ chapter, exceptedControlIds, onAddException, isAnnex, isParentExcepted, standardId, onRefresh }) => {
+  const [open, setOpen] = useState(false);
+  const [showExceptionModal, setShowExceptionModal] = useState(false);
+  const [exceptionReason, setExceptionReason] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const hasDesc = chapter.description?.length > 0;
+  const isExcepted = exceptedControlIds.has(String(chapter.id));
+  const effectivelyExcepted = isParentExcepted || isExcepted;
+
+  const handleAddException = async () => {
+    if (!exceptionReason.trim()) return;
+
+    setIsSubmitting(true);
+    try {
+      await onAddException({
+        id: String(chapter.id),
+        ref_id: chapter.ref_id,
+        title: chapter.title,
+        children: chapter.children,
+        items: chapter.items
+      }, exceptionReason, standardId);
+
+      setShowExceptionModal(false);
+      setExceptionReason("");
+      if (onRefresh) await onRefresh();
+      
+    } catch (error) {
+      console.error("Error adding chapter exception:", error);
+      alert("Error adding chapter exception: " + error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <>
+      <div style={{ marginBottom: 12 }}>
+        <div onClick={() => setOpen(!open)} style={{
+          padding: "8px 12px",
+          background: open ? "#E9EEFF" : "#F3F6FF",
+          borderRadius: 8, cursor: "pointer", fontWeight: 700, fontSize: 13,
+          display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
+            <ChevronRight size={12} style={{ transform: open ? "rotate(90deg)" : "rotate(0)" }} />
+            <span style={{ fontWeight: 700, color: effectivelyExcepted ? C.warning : C.purple }}>{chapter.ref_id}</span>
+            <span>{chapter.title}</span>
+            {effectivelyExcepted && (
+              <span style={{ fontSize: 9, background: C.warning, color: "#fff", padding: "1px 6px", borderRadius: 10 }}>Exception</span>
+            )}
+          </div>
+          {isAnnex && !effectivelyExcepted && !isParentExcepted && (
+            <button onClick={(e) => { e.stopPropagation(); setShowExceptionModal(true); }} style={{
+              padding: "2px 8px", borderRadius: 4, border: `1px solid ${C.warning}`,
+              background: "transparent", color: C.warning, fontSize: 10, cursor: "pointer",
+            }}>Add Exception</button>
+          )}
+        </div>
+
+        {open && (
+          <div style={{ marginLeft: 16, marginTop: 8 }}>
+            {hasDesc && (
+              <p style={{ fontSize: 12, color: C.muted, marginBottom: 12, paddingLeft: 8, borderLeft: `2px solid ${C.accent}30` }}>
+                {chapter.description}
+              </p>
+            )}
+            {chapter.children?.map((sub) => (
+              <SubChapter
+                key={sub.id}
+                sub={sub}
+                exceptedControlIds={exceptedControlIds}
+                onAddException={onAddException}
+                isAnnex={isAnnex}
+                isParentExcepted={effectivelyExcepted}
+                standardId={standardId}
+                onRefresh={onRefresh}
+              />
+            ))}
+            {chapter.items?.map((item) => (
+              <ControlItem
+                key={item.id}
+                item={item}
+                isExcepted={exceptedControlIds.has(String(item.id))}
+                onAddException={onAddException}
+                isAnnex={isAnnex}
+                isParentExcepted={effectivelyExcepted}
+                standardId={standardId}
+                onRefresh={onRefresh}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {showExceptionModal && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 1100,
+          background: "rgba(10,20,50,.45)", backdropFilter: "blur(4px)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }} onClick={() => setShowExceptionModal(false)}>
+          <div style={{
+            background: C.card, borderRadius: 16, width: 440, maxWidth: "95vw",
+            boxShadow: "0 24px 60px rgba(59,111,255,.18)",
+            border: `1px solid ${C.border}`,
+          }} onClick={(e) => e.stopPropagation()}>
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "20px 24px 16px", borderBottom: `1px solid ${C.border}`,
+            }}>
+              <span style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 18, fontWeight: 700, color: C.warning }}>Add Exception for Chapter</span>
+              <button onClick={() => setShowExceptionModal(false)} style={{
+                background: "none", border: "none", cursor: "pointer",
+                color: C.muted, padding: 4, borderRadius: 8,
+              }}><Icon d={icons.close} size={18} /></button>
+            </div>
+            <div style={{ padding: 24 }}>
+              <p style={{ marginBottom: 16, fontSize: 14, color: C.text }}>
+                Add exception for chapter <strong>{chapter.title}</strong>
+              </p>
+              <textarea
+                value={exceptionReason}
+                onChange={(e) => setExceptionReason(e.target.value)}
+                placeholder="Reason for exception..."
+                rows={4}
+                style={{
+                  width: "100%", padding: "10px 14px",
+                  border: `1.5px solid ${C.border}`, borderRadius: 10,
+                  fontSize: 14, outline: "none", resize: "vertical",
+                  marginBottom: 16,
+                }}
+              />
+              <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
+                <button onClick={() => setShowExceptionModal(false)} style={{
+                  padding: "8px 16px", borderRadius: 8, border: `1px solid ${C.border}`,
+                  background: "transparent", cursor: "pointer", fontSize: 13,
+                }}>Cancel</button>
+                <button onClick={handleAddException} disabled={isSubmitting} style={{
+                  padding: "8px 20px", borderRadius: 8, border: "none",
+                  background: C.warning, color: "#fff", cursor: isSubmitting ? "wait" : "pointer", fontSize: 13,
+                }}>
+                  {isSubmitting ? "Adding..." : "Add Exception"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
+// ── Level 1 Section ──
+const Level1Section = ({ section, exceptedControlIds, onAddException, standardId, onRefresh }) => {
+  const [open, setOpen] = useState(true);
+  
+  const isAnnex = section?.title?.toLowerCase()?.includes("annex") || section?.isAnnex === true;
+  const color = isAnnex ? C.purple : C.accent;
+
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div onClick={() => setOpen(!open)} style={{
+        padding: "10px 14px", borderRadius: 8, cursor: "pointer",
+        display: "flex", alignItems: "center", gap: 10,
+        background: `linear-gradient(135deg, ${color}15, ${color}05)`,
+      }}>
+        <ChevronDown size={14} color={color} style={{ transform: open ? "rotate(0)" : "rotate(-90deg)" }} />
+        <Shield size={14} color={color} />
+        <span style={{ fontWeight: 800 }}>{section.title}</span>
+        {isAnnex && (
+          <span style={{ fontSize: 9, background: C.warning, color: "#fff", padding: "1px 8px", borderRadius: 12, marginLeft: 8 }}>
+            Exceptions allowed
+          </span>
+        )}
+      </div>
+
+      {open && (
+        <div style={{ paddingLeft: 12, marginTop: 6 }}>
+          {section.children?.map((ch) => (
+            <ChapterSection
               key={ch.id}
-              chapter={{ ...ch, id: ch.id }}
-              importedItems={importedItems}
-              excludedItems={excludedItems}
-              onImport={onImport}
-              onUnimport={onUnimport}
+              chapter={ch}
+              exceptedControlIds={exceptedControlIds}
               onAddException={onAddException}
-              packageId={pkgId}
+              isAnnex={isAnnex}
+              isParentExcepted={false}
+              standardId={standardId}
+              onRefresh={onRefresh}
+            />
+          ))}
+          {section.items?.map((item) => (
+            <ControlItem
+              key={item.id}
+              item={item}
+              isExcepted={exceptedControlIds.has(String(item.id))}
+              onAddException={onAddException}
+              isAnnex={isAnnex}
+              isParentExcepted={false}
+              standardId={standardId}
+              onRefresh={onRefresh}
             />
           ))}
         </div>
@@ -886,399 +1050,556 @@ const PackagePanel = ({ pkg, importedItems, excludedItems, onImport, onUnimport,
   );
 };
 
-/* ─── Helper Functions ───────────────────────────── */
-const resolveId = (obj) => {
-  if (!obj) return undefined;
-  return obj.id ?? obj.item_id ?? obj.chapter_id ?? obj.package_id ?? obj.policy_id ?? undefined;
+// ── Package Card ──
+const PackageCard = ({ standard, onImportFramework, onUnimportFramework, onAddException, isImported, refreshExceptions }) => {
+  const [open, setOpen] = useState(isImported);
+  const [hierarchy, setHierarchy] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [exceptions, setExceptions] = useState([]);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const loadExceptions = useCallback(async () => {
+    if (!isImported || !standard?.id) return;
+    try {
+      const data = await refreshExceptions();
+      setExceptions(data || []);
+    } catch (error) {
+      console.error("Error loading exceptions:", error);
+    }
+  }, [isImported, standard?.id, refreshExceptions]);
+
+  useEffect(() => {
+      if (!isImported) return;
+
+      const loadHierarchy = async () => {
+          setLoading(true);
+          try {
+              const response = await fetch(`http://localhost:3000/api/ciso/packages/${standard.id}/hierarchy`, {
+                  credentials: "include"
+              });
+              
+              if (!response.ok) {
+                  throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+              }
+              
+              const data = await response.json();
+              console.log("Hierarchy data received:", data); // Debug
+              
+              // Vérifier si data.hierarchy existe
+              if (data && data.hierarchy) {
+                  setHierarchy(data);
+              } else if (data && (data.coreChapters || data.families)) {
+                  // Si le backend retourne un format différent, le convertir
+                  const convertedHierarchy = { hierarchy: [] };
+                  
+                  if (data.coreChapters && data.coreChapters.length > 0) {
+                      convertedHierarchy.hierarchy.push({
+                          id: "core",
+                          title: "Core Chapters",
+                          description: "Main framework chapters",
+                          isAnnex: false,
+                          children: data.coreChapters.map(ch => ({
+                              id: ch.id,
+                              ref_id: ch.ref || `CH-${ch.id}`,
+                              title: ch.title,
+                              description: ch.description || "",
+                              children: [],
+                              items: []
+                          })),
+                          items: []
+                      });
+                  }
+                  
+                  if (data.families && data.families.length > 0) {
+                      data.families.forEach(family => {
+                          convertedHierarchy.hierarchy.push({
+                              id: family.id,
+                              title: family.name,
+                              description: family.description || "",
+                              isAnnex: true,
+                              children: [],
+                              items: (family.controls || []).map(control => ({
+                                  id: control.id,
+                                  ref_id: control.ref_id,
+                                  name: control.name,
+                                  description: control.description || ""
+                              }))
+                          });
+                      });
+                  }
+                  
+                  setHierarchy(convertedHierarchy);
+              } else {
+                  console.warn("Unexpected data format:", data);
+                  setHierarchy({ hierarchy: [] });
+              }
+              
+          } catch (error) {
+              console.error("Error loading hierarchy:", error);
+              setHierarchy({ hierarchy: [] });
+          } finally {
+              setLoading(false);
+          }
+      };
+
+      loadHierarchy();
+      loadExceptions();
+  }, [standard.id, isImported, refreshKey]);
+  const handleRefresh = useCallback(async () => {
+    await loadExceptions();
+    setRefreshKey(prev => prev + 1);
+  }, [loadExceptions]);
+
+  const exceptedControlIds = new Set(
+    exceptions.map(e => String(e.policyId || e.entity_id || e.id))
+  );
+  
+  const totalControls = standard.controls_count || 0;
+  const exceptionsCount = exceptions.length;
+
+  return (
+    <div style={{
+      background: C.card, borderRadius: 14,
+      border: `1.5px solid ${C.border}`,
+      boxShadow: "0 2px 16px rgba(59,111,255,.07)",
+      marginBottom: 20, overflow: "hidden",
+    }}>
+      <div onClick={() => isImported && setOpen(!open)} style={{
+        background: `linear-gradient(135deg, ${C.accent}14, ${C.purple}0d)`,
+        borderBottom: open ? `1.5px solid ${C.border}` : "none",
+        padding: "16px 20px", display: "flex", alignItems: "center", gap: 12,
+        cursor: isImported ? "pointer" : "default",
+      }}>
+        <div style={{
+          width: 40, height: 40, borderRadius: 10,
+          background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
+          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+        }}>
+          <Shield size={18} color="#fff" />
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <div style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 17, fontWeight: 800, color: C.text }}>
+              {standard.name}
+            </div>
+            {isImported && (
+              <span style={{ fontSize: 10, background: C.success, color: "#fff", padding: "2px 8px", borderRadius: 12 }}>
+                Imported
+              </span>
+            )}
+          </div>
+          <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>
+            {standard.version && <span>v{standard.version} · </span>}
+            {standard.provider && <span>{standard.provider} · </span>}
+            {totalControls} controls
+            {isImported && exceptionsCount > 0 && (
+              <span style={{ marginLeft: 8, color: C.warning }}>· {exceptionsCount} exceptions</span>
+            )}
+          </div>
+        </div>
+        <button onClick={(e) => { e.stopPropagation(); isImported ? onUnimportFramework(standard) : onImportFramework(standard); }} style={{
+          padding: "6px 14px", borderRadius: 8, border: isImported ? `1px solid ${C.danger}` : "none",
+          background: isImported ? "transparent" : `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
+          color: isImported ? C.danger : "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer",
+        }}>
+          {isImported ? "Remove" : "+ Import"}
+        </button>
+        {isImported && (
+          <ChevronDown size={16} style={{ transform: open ? "rotate(180deg)" : "rotate(0)", transition: "transform .2s", color: C.muted }} />
+        )}
+      </div>
+
+      {isImported && open && (
+        <div style={{ padding: "16px 20px" }}>
+          {loading ? (
+            <div style={{ textAlign: "center", padding: 40 }}>
+              <div style={{ width: 32, height: 32, border: `3px solid ${C.border}`, borderTopColor: C.accent, borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto" }} />
+            </div>
+          ) : hierarchy?.hierarchy?.length > 0 ? (
+            hierarchy.hierarchy.map((section) => (
+              <Level1Section
+                key={section.id}
+                section={section}
+                exceptedControlIds={exceptedControlIds}
+                onAddException={onAddException}
+                standardId={standard.id}
+                onRefresh={handleRefresh}
+              />
+            ))
+          ) : (
+            <div style={{ textAlign: "center", padding: "24px 0", color: "#A0AEC0", fontSize: 14 }}>
+              No hierarchy data available
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 };
 
-const formatImportedItems = (data) =>
-  data.map(i => ({
-    id: i.policyId ?? i.id,
-    level: i.level,
-    title: i.title,
-    version: i.version
-  })).filter(item => item.id != null);
-
-/* ─── Main Policy Library Page ───────────────────────────── */
-export default function PolicyLibrary() {
-  const navigate = useNavigate();
-  const [importModal, setImportModal] = useState(null);
-  const [unimportModal, setUnimportModal] = useState(null);
-  const [exceptionModal, setExceptionModal] = useState(null);
-  const [filterPackage, setFilterPackage] = useState("all");
-  const [search, setSearch] = useState("");
-  const [importedItems, setImportedItems] = useState([]);
-  const [excludedItems, setExcludedItems] = useState([]);
-  const [showImportedOnly, setShowImportedOnly] = useState(false);
-  const [policies, setPolicies] = useState([]);
+// ── Main Page ──
+export default function Policies() {
+  const [availableFrameworks, setAvailableFrameworks] = useState([]);
+  const [importedFrameworkIds, setImportedFrameworkIds] = useState(new Set());
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [search, setSearch] = useState("");
+  const [removeModal, setRemoveModal] = useState(null);
+  const [addFrameworkModal, setAddFrameworkModal] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const refreshImportedItems = async () => {
+  const fetchAllFrameworks = async () => {
     try {
-      const res = await fetch("http://localhost:3000/api/framauditor/imported-policies", { credentials: "include" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      setImportedItems(formatImportedItems(data));
-    } catch (err) {
-      console.error("Failed to refresh imported items:", err);
-    }
-  };
-
-  const refreshExcludedItems = async () => {
-    try {
-      const res = await fetch("http://localhost:3000/api/framauditor/exceptions", { credentials: "include" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      const formatted = (Array.isArray(data) ? data : data.exceptions || data.data || []).map(ex => ({
-        id: resolveId(ex),
-        level: ex.level,
-        title: ex.title,
-        reason: ex.reason
-      })).filter(ex => ex.id != null);
-      setExcludedItems(formatted);
-    } catch (err) {
-      console.error("Failed to refresh excluded items:", err);
-    }
-  };
-
-  useEffect(() => {
-    const fetchPolicies = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const res = await fetch("http://localhost:3000/api/frameworks/policies");
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        const data = await res.json();
-        setPolicies(data);
-      } catch (err) {
-        console.error("Error loading policies:", err);
-        setError(err.message || "Failed to load policies");
-      } finally {
-        setLoading(false);
+      const response = await fetch("http://localhost:3000/api/ciso/packages", { 
+        credentials: "include" 
+      });
+      
+      if (response.ok) {
+        const frameworks = await response.json();
+        setAvailableFrameworks(frameworks.map(fw => ({ 
+          ...fw, 
+          source: 'scraped', 
+          type: 'scraped', 
+          id: String(fw.id) 
+        })));
       }
-    };
-    fetchPolicies();
+    } catch (error) {
+      console.error("Error fetching frameworks:", error);
+    }
+  };
+
+  const fetchImportedFrameworks = async () => {
+    try {
+      const response = await fetch("http://localhost:3000/api/framauditor/imported-policies", { 
+        credentials: "include" 
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setImportedFrameworkIds(new Set(data.map(pkg => String(pkg.id))));
+      }
+    } catch (error) {
+      console.error("Error fetching imported frameworks:", error);
+    }
+  };
+
+  const fetchExceptions = useCallback(async (standardId) => {
+    if (!standardId) return [];
+    try {
+      const response = await fetch(`http://localhost:3000/api/framauditor/exceptions/${standardId}`, { 
+        credentials: "include" 
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        return data;
+      }
+    } catch (error) {
+      console.error("Error fetching exceptions:", error);
+    }
+    return [];
+  }, []);
+
+  const refreshAllData = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await fetchAllFrameworks();
+      await fetchImportedFrameworks();
+    } catch (error) {
+      console.error("Error refreshing data:", error);
+    } finally {
+      setRefreshing(false);
+    }
   }, []);
 
   useEffect(() => {
-    refreshImportedItems();
-    refreshExcludedItems();
-  }, []);
+    const loadAllData = async () => {
+      setLoading(true);
+      await refreshAllData();
+      setLoading(false);
+    };
+    loadAllData();
+  }, [refreshAllData]);
 
-  const handleImport = async (target) => {
-    if (!target || target.id == null) return;
-
-    let imports = [];
-
-    if (target.level === "package") {
-      imports.push({ policyId: target.id, level: "package", title: target.title, version: target.version || "1.0", chaptersCount: target.chaptersCount, itemsCount: target.itemsCount });
-      target.chapters?.forEach(ch => {
-        const chId = resolveId(ch);
-        if (chId == null) return;
-        imports.push({ policyId: chId, level: "chapter", title: ch.title, version: ch.version || "1.0" });
-        ch.items?.forEach(item => {
-          const itemId = resolveId(item);
-          if (itemId == null) return;
-          imports.push({ policyId: itemId, level: "item", title: item.title, version: item.version || "1.0" });
-        });
-      });
-    } else if (target.level === "chapter") {
-      imports.push({ policyId: target.id, level: "chapter", title: target.title, version: target.version || "1.0", itemsCount: target.items?.length || 0 });
-      target.items?.forEach(item => {
-        const itemId = resolveId(item);
-        if (itemId == null) return;
-        imports.push({ policyId: itemId, level: "item", title: item.title, version: item.version || "1.0" });
-      });
-    } else {
-      imports.push({ policyId: target.id, level: "item", title: target.title, version: target.version || "1.0" });
-    }
-
-    const optimisticItems = imports.map(imp => ({ id: imp.policyId, level: imp.level, title: imp.title, version: imp.version }));
-    setImportedItems(prev => {
-      const existingKeys = new Set(prev.map(i => `${i.id}-${i.level}`));
-      const newItems = optimisticItems.filter(i => !existingKeys.has(`${i.id}-${i.level}`));
-      return [...prev, ...newItems];
-    });
-
+  const handleImportFramework = async (framework) => {
     try {
-      const promises = imports.map(imp =>
-        fetch("http://localhost:3000/api/framauditor/import-policy", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(imp)
-        }).then(res => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json(); })
-      );
-      await Promise.allSettled(promises);
-      await refreshImportedItems();
-    } catch (err) {
-      console.error("Import error:", err);
-      await refreshImportedItems();
-      throw err;
-    }
-  };
+      if (!framework?.id) {
+        throw new Error("Invalid framework ID");
+      }
 
-  const handleUnimport = async (target) => {
-    if (!target || target.id == null) return;
-
-    let deletions = [];
-
-    if (target.level === "package") {
-      deletions.push({ policyId: target.id, level: "package" });
-      target.chapters?.forEach(ch => {
-        const chId = resolveId(ch);
-        if (chId == null) return;
-        deletions.push({ policyId: chId, level: "chapter" });
-        ch.items?.forEach(item => {
-          const itemId = resolveId(item);
-          if (itemId == null) return;
-          deletions.push({ policyId: itemId, level: "item" });
-        });
-      });
-    } else if (target.level === "chapter") {
-      deletions.push({ policyId: target.id, level: "chapter" });
-      target.items?.forEach(item => {
-        const itemId = resolveId(item);
-        if (itemId == null) return;
-        deletions.push({ policyId: itemId, level: "item" });
-      });
-    } else {
-      deletions.push({ policyId: target.id, level: "item" });
-    }
-
-    const deletionKeys = new Set(deletions.map(d => `${d.policyId}-${d.level}`));
-    setImportedItems(prev => prev.filter(i => !deletionKeys.has(`${resolveId(i)}-${i.level}`)));
-
-    try {
-      const promises = deletions.map(del =>
-        fetch("http://localhost:3000/api/framauditor/unimport-policy", {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ policyId: del.policyId, level: del.level })
-        })
-      );
-      await Promise.allSettled(promises);
-      await refreshImportedItems();
-    } catch (err) {
-      console.error("Unimport error:", err);
-      await refreshImportedItems();
-    }
-  };
-
-  const handleAddException = async (target, reason) => {
-    if (!target || target.id == null || excludedItems.some(i => i.id === target.id && i.level === target.level)) return;
-    try {
-      await fetch("http://localhost:3000/api/framauditor/add-exception", {
+      const response = await fetch("http://localhost:3000/api/framauditor/import-policy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ policyId: target.id, level: target.level, title: target.title, reason })
+        body: JSON.stringify({
+          standardId: String(framework.id),
+          title: framework.name,
+          version: framework.version || "1.0"
+        })
       });
-      await refreshExcludedItems();
-    } catch (err) {
-      console.error("Error saving exception:", err);
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Import failed");
+      }
+
+      await fetchImportedFrameworks();
+      alert("Framework imported successfully!");
+      
+    } catch (error) {
+      console.error("Import error:", error);
+      alert(error.message);
     }
   };
 
-  const allPolicies = policies;
-  const displayed = (allPolicies || [])
-    .filter(p => filterPackage === "all" || resolveId(p) === parseInt(filterPackage))
-    .filter(p => {
-      if (showImportedOnly) return importedItems.some(i => i.id === resolveId(p) && i.level === "package");
-      return true;
-    })
-    .filter(p => {
-      if (!search) return true;
-      const s = search.toLowerCase();
-      return p.title?.toLowerCase().includes(s) ||
-        p.chapters?.some(c => c.title?.toLowerCase().includes(s) || c.items?.some(i => i.title?.toLowerCase().includes(s)));
-    });
+  const handleUnimportFramework = async (framework) => {
+    try {
+      const response = await fetch("http://localhost:3000/api/framauditor/unimport-policy", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ policyId: framework.id })
+      });
+      
+      if (!response.ok) throw new Error("Unimport failed");
+      
+      await fetchImportedFrameworks();
+      alert("Framework removed successfully!");
+      
+    } catch (error) {
+      console.error("Unimport error:", error);
+      alert("Error removing framework: " + error.message);
+    }
+  };
 
-  if (loading) {
-    return (
-      <div style={{ fontFamily: "Inter, system-ui, sans-serif", background: THEME.colors.background, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ textAlign: "center" }}>
-          <div style={{ width: 40, height: 40, border: `3px solid ${THEME.colors.border}`, borderTopColor: THEME.colors.primary, borderRadius: "50%", animation: "spin 1s linear infinite", marginBottom: 16 }} />
-          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-          <p style={{ color: THEME.colors.textGray }}>Loading policies...</p>
-        </div>
-      </div>
-    );
-  }
+  const handleAddFramework = async (frameworkData) => {
+    try {
+      const response = await fetch("http://localhost:3000/api/framauditor/add-custom-framework", {
+        method: "POST", 
+        headers: { "Content-Type": "application/json" }, 
+        credentials: "include",
+        body: JSON.stringify(frameworkData)
+      });
+      
+      if (!response.ok) throw new Error("Failed to add framework");
+      
+      const result = await response.json();
+      console.log("Framework added successfully:", result);
+      
+      await refreshAllData();
+      
+      if (result.id) {
+        await handleImportFramework({ 
+          id: result.id, 
+          name: frameworkData.name, 
+          version: frameworkData.version,
+          source: 'custom',
+          type: 'custom'
+        });
+      }
+    } catch (error) {
+      console.error("Error adding framework:", error);
+      throw error;
+    }
+  };
 
-  if (error) {
-    return (
-      <div style={{ fontFamily: "Inter, system-ui, sans-serif", background: THEME.colors.background, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ textAlign: "center", background: THEME.colors.white, padding: 32, borderRadius: 20, border: `1px solid ${THEME.colors.border}` }}>
-          <AlertCircle size={48} style={{ marginBottom: 16, color: THEME.colors.error }} />
-          <p style={{ color: THEME.colors.error, marginBottom: 16 }}>{error}</p>
-          <button onClick={() => window.location.reload()} style={{ padding: "8px 20px", borderRadius: "10px", background: THEME.gradients.button, color: THEME.colors.white, border: "none", cursor: "pointer" }}>
-            Retry
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const handleAddException = async (item, reason, standardId) => {
+    try {
+      let level = "control";
+      if (item.children) level = "chapter";
+      
+      const response = await fetch("http://localhost:3000/api/framauditor/add-exception", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          policyId: String(item.id),
+          level,
+          title: item.title || item.name,
+          reason,
+          standardId
+        })
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to add exception");
+      }
+      
+      alert("Exception added successfully!");
+      
+    } catch (error) {
+      console.error("Error adding exception:", error);
+      alert(error.message);
+      throw error;
+    }
+  };
+
+  const filteredFrameworks = availableFrameworks.filter(fw => 
+    fw.name?.toLowerCase().includes(search.toLowerCase())
+  );
 
   return (
-    <div style={{ fontFamily: "Inter, system-ui, sans-serif", background: THEME.colors.background, minHeight: "100vh", padding: "26px 30px" }}>
+    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "DM Sans, sans-serif" }}>
       <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@700;800&family=DM+Sans:wght@400;500;600;700&display=swap');
         @keyframes spin { to { transform: rotate(360deg); } }
-        input:focus, textarea:focus { 
-          border-color: ${THEME.colors.primary} !important; 
-          box-shadow: 0 0 0 3px rgba(99,102,241,0.1); 
-        }
+        input:focus, textarea:focus { border-color: #3B6FFF !important; box-shadow: 0 0 0 3px rgba(59,111,241,.13); }
       `}</style>
 
-      <div style={{ marginBottom: "22px" }}>
-        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", flexWrap: "wrap", gap: "16px", marginBottom: "14px" }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ color: THEME.colors.primary, fontSize: "11px", letterSpacing: "0.12em", textTransform: "uppercase", fontWeight: "700", marginBottom: "8px" }}>Compliance Library</div>
-            <h1 style={{ fontSize: "25px", fontWeight: "900", color: THEME.colors.textDark, margin: 0 }}>
-              Policy Library
-              <span style={{ fontSize: "12px", background: THEME.colors.primaryBg, color: THEME.colors.primary, padding: "3px 8px", borderRadius: "20px", marginLeft: "10px" }}>{importedItems.length} imported</span>
-            </h1>
-            <p style={{ fontSize: "13px", color: THEME.colors.textGray, marginTop: "8px" }}>
-              Import policies from admin to your library. Importing a package imports all its chapters and items automatically.
-              Click "Add exception" to exclude policies from compliance scope.
-            </p>
-          </div>
-          <button onClick={() => navigate("/layout/exception")} style={{
-            padding: "8px 16px",
-            borderRadius: "10px",
-            border: `1.5px solid ${THEME.colors.primary}`,
-            cursor: "pointer",
-            fontSize: "13px",
-            fontWeight: "600",
-            color: THEME.colors.primary,
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            background: THEME.colors.white,
-            transition: "all 0.2s",
-          }} onMouseEnter={(e) => e.currentTarget.style.background = THEME.colors.primaryBg} onMouseLeave={(e) => e.currentTarget.style.background = THEME.colors.white}>
-            <AlertCircle size={14} />
-            View Exceptions ({excludedItems.length})
-          </button>
-        </div>
-      </div>
-
-      <div style={{ display: "flex", gap: "8px", marginBottom: "18px", flexWrap: "wrap", alignItems: "center" }}>
-        <button onClick={() => setFilterPackage("all")} style={{
-          padding: "5px 13px",
-          borderRadius: "20px",
-          border: "none",
-          cursor: "pointer",
-          background: filterPackage === "all" ? THEME.gradients.button : THEME.colors.borderLight,
-          color: filterPackage === "all" ? THEME.colors.white : THEME.colors.textGray,
-          fontSize: "12px",
-          fontWeight: "600",
-          transition: "all 0.15s",
-          boxShadow: filterPackage === "all" ? THEME.shadows.button : "none",
-        }}>All</button>
-        {allPolicies?.map(p => {
-          const pId = resolveId(p);
-          return (
-            <button key={pId} onClick={() => setFilterPackage(pId?.toString() || "")} style={{
-              padding: "5px 13px",
-              borderRadius: "20px",
-              border: "none",
-              cursor: "pointer",
-              background: filterPackage === pId?.toString() ? THEME.gradients.button : THEME.colors.borderLight,
-              color: filterPackage === pId?.toString() ? THEME.colors.white : THEME.colors.textGray,
-              fontSize: "12px",
-              fontWeight: "600",
-              transition: "all 0.15s",
-              boxShadow: filterPackage === pId?.toString() ? THEME.shadows.button : "none",
-            }}>
-              {p.title.length > 20 ? p.title.substring(0, 20) + "..." : p.title}
-            </button>
-          );
-        })}
-        <div style={{ marginLeft: "auto", display: "flex", gap: "10px", alignItems: "center" }}>
-          <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}>
-            <input type="checkbox" checked={showImportedOnly} onChange={e => setShowImportedOnly(e.target.checked)} />
-            <span style={{ fontSize: "12px", color: THEME.colors.textGray }}>Show only imported</span>
-          </label>
+      <div style={{ 
+        padding: "0 36px", display: "flex", alignItems: "center", 
+        justifyContent: "space-between", height: 64, position: "sticky", 
+        top: 0, zIndex: 100, background: C.bg, borderBottom: `1px solid ${C.border}`
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
+          <span style={{ color: "#0F172A", fontSize: "26px", fontWeight: "800" }}>
+            Policies Library
+          </span>
           <div style={{ position: "relative" }}>
-            <Search size={13} style={{ position: "absolute", left: "9px", top: "50%", transform: "translateY(-50%)", color: THEME.colors.textLight }} />
-            <input
-              placeholder="Search policies..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              style={{
-                width: "190px",
-                padding: "7px 12px 7px 30px",
-                border: `1.5px solid ${THEME.colors.border}`,
-                borderRadius: "10px",
-                fontSize: "13px",
-                color: THEME.colors.textDark,
-                background: THEME.colors.white,
-                outline: "none",
-                transition: "all 0.2s",
-              }}
-              onFocus={(e) => e.target.style.borderColor = THEME.colors.primary}
-              onBlur={(e) => e.target.style.borderColor = THEME.colors.border}
+            <Search size={16} style={{ 
+              position: "absolute", left: 10, top: "50%", 
+              transform: "translateY(-50%)", color: C.muted 
+            }} />
+            <input 
+              placeholder="Search frameworks..." 
+              value={search} 
+              onChange={(e) => setSearch(e.target.value)} 
+              style={{ 
+                padding: "8px 12px 8px 32px", borderRadius: 10, 
+                border: `1.5px solid ${C.border}`, width: 250, 
+                fontSize: 13, background: C.card 
+              }} 
             />
           </div>
         </div>
-      </div>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-        {displayed.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "50px 0", color: THEME.colors.textLight, fontSize: "14px" }}>
-            No policies match your search.
+        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+          <button 
+            onClick={refreshAllData} 
+            disabled={refreshing} 
+            style={{ 
+              display: "flex", alignItems: "center", gap: 6, 
+              padding: "6px 12px", borderRadius: 8, border: `1px solid ${C.border}`, 
+              background: "transparent", cursor: refreshing ? "wait" : "pointer", 
+              fontSize: 13, color: C.muted 
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" 
+              stroke="currentColor" strokeWidth="2" 
+              style={{ animation: refreshing ? "spin 1s linear infinite" : "none" }}>
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+            Refresh
+          </button>
+          <button 
+            onClick={() => setAddFrameworkModal(true)} 
+            style={{ 
+              display: "flex", alignItems: "center", gap: 8, 
+              padding: "8px 18px", borderRadius: 10, border: "none", 
+              background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`, 
+              color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" 
+            }}
+          >
+            <Plus size={16} /> Add Framework
+          </button>
+          <div style={{ 
+            display: "flex", alignItems: "center", gap: 8, 
+            background: C.chip, padding: "4px 12px", borderRadius: 20 
+          }}>
+            <CheckCircle size={12} color={C.success} />
+            <span style={{ fontSize: 12, fontWeight: 600, color: C.accent }}>
+              {importedFrameworkIds.size} imported
+            </span>
           </div>
-        ) : (
-          <motion.div variants={THEME.animation.staggerContainer} initial="hidden" animate="visible">
-            {displayed.map((pkg, idx) => {
-              const pkgId = resolveId(pkg);
-              const isNew = !importedItems.some(i => i.id === pkgId && i.level === "package") &&
-                            !excludedItems.some(i => i.id === pkgId && i.level === "package");
-              return (
-                <motion.div key={pkgId ?? idx} variants={THEME.animation.fadeUp} custom={idx}>
-                  <PackagePanel
-                    pkg={{ ...pkg, id: pkgId }}
-                    isNew={isNew}
-                    importedItems={importedItems}
-                    excludedItems={excludedItems}
-                    onImport={target => setImportModal({ target })}
-                    onUnimport={target => setUnimportModal({ target })}
-                    onAddException={target => setExceptionModal({ target })}
-                  />
-                </motion.div>
-              );
-            })}
-          </motion.div>
-        )}
+        </div>
       </div>
 
-      <AnimatePresence>
-        {importModal && (
-          <ImportModal
-            target={importModal.target}
-            onClose={() => setImportModal(null)}
-            onConfirm={handleImport}
-          />
+      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "32px 24px" }}>
+        {loading && (
+          <div style={{ textAlign: "center", padding: 60 }}>
+            <div style={{ 
+              width: 48, height: 48, 
+              border: `3px solid ${C.border}`, borderTopColor: C.accent, 
+              borderRadius: "50%", animation: "spin 0.8s linear infinite", 
+              margin: "0 auto" 
+            }} />
+          </div>
         )}
-        {unimportModal && (
-          <UnimportModal
-            target={unimportModal.target}
-            onClose={() => setUnimportModal(null)}
-            onConfirm={handleUnimport}
-          />
+
+        {!loading && filteredFrameworks.length === 0 && (
+          <div style={{ textAlign: "center", padding: 60, color: C.muted }}>
+            <Database size={48} style={{ marginBottom: 16, opacity: 0.5 }} />
+            <p>No frameworks found</p>
+          </div>
         )}
-        {exceptionModal && (
-          <ExceptionModal
-            target={exceptionModal.target}
-            onClose={() => setExceptionModal(null)}
-            onConfirm={reason => handleAddException(exceptionModal.target, reason)}
+
+        {!loading && filteredFrameworks.map(fw => (
+          <PackageCard
+            key={fw.id}
+            standard={fw}
+            isImported={importedFrameworkIds.has(fw.id)}
+            onImportFramework={handleImportFramework}
+            onUnimportFramework={(fw) => setRemoveModal({ target: fw })}
+            onAddException={handleAddException}
+            refreshExceptions={async () => fetchExceptions(fw.id)}
           />
-        )}
-      </AnimatePresence>
+        ))}
+      </div>
+
+      {addFrameworkModal && (
+        <AddFrameworkModal 
+          onClose={() => setAddFrameworkModal(false)} 
+          onConfirm={handleAddFramework} 
+        />
+      )}
+      
+      {removeModal && (
+        <div style={{ 
+          position: "fixed", inset: 0, zIndex: 1000, 
+          background: "rgba(10,20,50,.45)", backdropFilter: "blur(4px)", 
+          display: "flex", alignItems: "center", justifyContent: "center" 
+        }} onClick={() => setRemoveModal(null)}>
+          <div style={{ 
+            background: C.card, borderRadius: 16, width: 440, maxWidth: "95vw", 
+            boxShadow: "0 24px 60px rgba(59,111,255,.18)", border: `1px solid ${C.border}` 
+          }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ padding: "20px 24px 16px", borderBottom: `1px solid ${C.border}` }}>
+              <span style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 18, fontWeight: 700, color: C.danger }}>
+                Remove Framework
+              </span>
+            </div>
+            <div style={{ padding: 24 }}>
+              <p>Remove <strong>{removeModal.target?.name}</strong> from your library?</p>
+              <p style={{ fontSize: 12, color: C.muted, marginTop: 8 }}>
+                This will also remove all exceptions for this framework.
+              </p>
+              <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 20 }}>
+                <button 
+                  onClick={() => setRemoveModal(null)} 
+                  style={{ 
+                    padding: "8px 16px", borderRadius: 8, border: `1px solid ${C.border}`, 
+                    background: "transparent", cursor: "pointer" 
+                  }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={async () => { 
+                    await handleUnimportFramework(removeModal.target); 
+                    setRemoveModal(null); 
+                  }} 
+                  style={{ 
+                    padding: "8px 20px", borderRadius: 8, border: "none", 
+                    background: C.danger, color: "#fff", cursor: "pointer" 
+                  }}
+                >
+                  Confirm Remove
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

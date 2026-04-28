@@ -18,3 +18,18 @@ body {
 *{
   font-family: "Outfit", sans-serif;
 }
+/* Empêche les blocs d’être coupés */
+.avoid-break {
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+/* Force nouvelle page */
+.page-break {
+  page-break-before: always;
+}
+
+/* Stabilise le rendu */
+h1, h2, h3, p, div {
+  page-break-inside: avoid;
+}

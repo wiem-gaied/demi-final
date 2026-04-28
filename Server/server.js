@@ -1,11 +1,13 @@
 import express from 'express';
 import cors from 'cors';
 import 'dotenv/config';
-import pool from "./db.js";
+import db from "./db.js";
 import session from "express-session";
 import cookieParser from "cookie-parser";
 
 // Import des routes
+import { importStandardsToDB } from "./routes/cisoRoutes.js";
+import cisoRoutes from "./routes/cisoRoutes.js";
 import risksRoutes from './routes/risks.js';
 import chatbotRoutes from './routes/chatbotRoutes.js';
 import aiRoutes from "./routes/aiRoutes.js";
@@ -24,8 +26,10 @@ import businessRisksRouter from "./routes/businessRisks.js";
 import settingsRouter from "./routes/settings.js";
 import permissionsRouter from "./routes/permissions.js";
 import securitysessionRouter from "./routes/securitysession.js";
-import frameworksauditorRouter from './routes/frameworksauditor.js';
+import framauditorRoutes from './routes/frameworksauditor.js';
 import reportingRouter from "./routes/reporting.js";
+import analysisRoutes from "./routes/analysisRoutes.js"
+import dashboardRouter from "./routes/dashboard.js"
 
 const app = express();
 
@@ -67,6 +71,8 @@ app.use(session({
 app.get('/', (req, res) => res.send('Server is live!'));
 
 // Routes API
+app.use("/api/ciso", cisoRoutes);
+app.use("/api/dashboard", dashboardRouter);
 app.use('/api/risks', risksRoutes);
 app.use("/api", chatbotRoutes);
 app.use("/api/ai", aiRoutes);  
@@ -85,8 +91,9 @@ app.use("/api/businessrisks", businessRisksRouter);
 app.use("/api/settings", settingsRouter);
 app.use("/api/permissions", permissionsRouter);
 app.use("/api/security", securitysessionRouter);
-app.use("/api/framauditor", frameworksauditorRouter);
+app.use("/api/framauditor", framauditorRoutes);
 app.use("/api/reporting", reportingRouter);
+app.use("/api/analyses", analysisRoutes);
 
 // ============================================================
 // 3. Gestion des erreurs 404
@@ -111,10 +118,12 @@ app.use((err, req, res, next) => {
 // ============================================================
 // 5. DÉMARRAGE DU SERVEUR
 // ============================================================
-
 const PORT = process.env.PORT || 3000;
+
+// Appel unique de importStandardsToDB
+importStandardsToDB().catch(err => console.error("Import error:", err));
 
 app.listen(PORT, () => {
     console.log(`🚀 Server running on http://localhost:${PORT}`);
     console.log(`📁 Environment: ${process.env.NODE_ENV || 'development'}`);
-});   
+});

@@ -40,3 +40,8 @@
 .read-the-docs {
   color: #888;
 }
+@media print {
+  body {
+    overflow: visible !important;
+  }
+}

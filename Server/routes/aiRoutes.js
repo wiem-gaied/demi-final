@@ -1,275 +1,306 @@
-// backend/routes/aiRoutes.js - Version corrigée
-
-import express from 'express';
-import multer from 'multer';
-import { analyzePDFWithPython } from '../services/pythonClient.js';
+// backend/routes/aiRoutes.js
+// =====================================================================
+//  Changements vs version précédente :
+//   ✅ Le champ `comment` est maintenant propagé jusqu'au frontend
+//   ✅ Les fallbacks ne produisent plus jamais de phrases comme
+//      "No mention of X" ou "Add a documented procedure for X"
+//   ✅ Si Python échoue, on dit honnêtement "Manual review required"
+// =====================================================================
+import express from "express";
+import multer from "multer";
+import fs from "fs";
+import path from "path";
+import os from "os";
+import { fileURLToPath } from "url";
+import db from "../db.js";
+import { analyzeDocumentWithPython } from "../services/pythonClient.js";
 
 const router = express.Router();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-const storage = multer.memoryStorage();
-const upload = multer({ 
-    storage: storage,
-    limits: { fileSize: 50 * 1024 * 1024 },
-    fileFilter: (req, file, cb) => {
-        console.log(`✅ Fichier accepté: ${file.originalname}`);
-        cb(null, true);
-    }
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, os.tmpdir()),
+    filename: (req, file, cb) => {
+      const safe = file.originalname.replace(/[^\w.\-]/g, "_");
+      cb(null, `${Date.now()}_${safe}`);
+    },
+  }),
+  limits: { fileSize: 50 * 1024 * 1024 },
 });
+
+const log = (type, msg, data = null) => {
+  const ts = new Date().toISOString();
+  console.log(`[${ts}] [${type}] ${msg}`);
+  if (data !== null) console.log(JSON.stringify(data, null, 2));
+};
 
 function mapStatus(status) {
-    if (!status) return "Not covered";
-    const clean = status.toString().trim().toLowerCase();
-    if (clean === "covered") return "Covered";
-    if (clean === "partial") return "Partial";
-    if (clean === "not covered") return "Not covered";
-    if (clean.includes("cover") && !clean.includes("not")) return "Covered";
-    if (clean.includes("partial")) return "Partial";
-    if (clean.includes("not")) return "Not covered";
-    return "Not covered";
+  if (!status) return "Not covered";
+  const v = status.toString().trim().toLowerCase();
+  if (v === "covered" || (v.includes("cover") && !v.includes("not"))) return "Covered";
+  if (v.includes("partial")) return "Partial";
+  if (v.includes("not")) return "Not covered";
+  return "Not covered";
 }
 
-// ============================================================
-// ENDPOINT: Analyser un PDF
-// ============================================================
-router.post("/analyze-pdf", upload.single('pdf'), async (req, res) => {
+// ───── filtering (unchanged from your existing code) ─────────────────────
+async function buildItemsForStandard(standardId) {
+  const [exRows] = await db.query(
+    `SELECT entity_id, entity_type FROM policy_exceptions
+     WHERE standard_id = ? AND is_active = 1`, [standardId]);
+  const exceptedFamilies = new Set(exRows.filter(r => r.entity_type === "chapter").map(r => r.entity_id));
+  const exceptedControls = new Set(exRows.filter(r => r.entity_type === "control").map(r => r.entity_id));
+
+  const [stdRows] = await db.query(
+    `SELECT id, name, version, description FROM ciso_standards WHERE id = ?`, [standardId]);
+  const standard = stdRows[0] || { id: standardId, name: standardId };
+
+  const [coreRows] = await db.query(
+    `SELECT id, ref_id, title, description FROM ciso_core_chapters
+     WHERE standard_id = ? ORDER BY display_order ASC, ref_id ASC`, [standardId]);
+  const coreItems = coreRows.map(c => ({
+    id: c.id, type: "core_chapter", standard_id: standardId,
+    ref_id: c.ref_id, title: c.title, description: c.description || "",
+    mandatory: true,
+  }));
+
+  const [familyRows] = await db.query(
+    `SELECT id, ref_id, name, description FROM ciso_families
+     WHERE standard_id = ? ORDER BY display_order ASC, ref_id ASC`, [standardId]);
+  const keptFamilies = familyRows.filter(f => !exceptedFamilies.has(f.id));
+  const keptFamilyIds = new Set(keptFamilies.map(f => f.id));
+
+  const [controlRows] = await db.query(
+    `SELECT id, ref_id, name, description, family_id FROM ciso_controls
+     WHERE standard_id = ? ORDER BY ref_id ASC`, [standardId]);
+  const keptControls = controlRows.filter(
+    c => keptFamilyIds.has(c.family_id) && !exceptedControls.has(c.id));
+
+  const familyItems = keptFamilies.map(f => ({
+    id: f.id, type: "annex_family", standard_id: standardId,
+    ref_id: f.ref_id, title: f.name, description: f.description || "",
+    mandatory: false,
+  }));
+  const controlItems = keptControls.map(c => ({
+    id: c.id, type: "annex_control", standard_id: standardId,
+    family_id: c.family_id, ref_id: c.ref_id, title: c.name,
+    description: c.description || "", mandatory: false,
+  }));
+
+  return {
+    standard,
+    items: [...coreItems, ...familyItems, ...controlItems],
+    stats: {
+      standard_id: standardId, standard_name: standard.name,
+      core_chapters_total: coreRows.length,
+      families_total: familyRows.length, families_kept: keptFamilies.length,
+      controls_total: controlRows.length, controls_kept: keptControls.length,
+    },
+  };
+}
+
+// ───── /analyze-pdf ──────────────────────────────────────────────────────
+router.post("/analyze-pdf", upload.single("pdf"), async (req, res) => {
+  let tmpFilePath = null;
+  try {
+    log("INFO", "📥 [ANALYZE-PDF] Request received");
+    if (!req.file?.path) return res.status(400).json({ error: "No file uploaded" });
+    tmpFilePath = req.file.path;
+    log("INFO", `📄 ${req.file.originalname} -> ${tmpFilePath}`);
+
+    let standardIds = [];
     try {
-        console.log("📥 Requête reçue - analyse PDF");
-        
-        if (!req.file) {
-            return res.status(400).json({ error: "Aucun fichier reçu" });
-        }
-
-        let selectedItems = [];
-        let policies = [];
-        
-        try {
-            if (req.body.selectedItems) {
-                selectedItems = JSON.parse(req.body.selectedItems);
-                console.log(`✅ ${selectedItems.length} items sélectionnés`);
-            }
-            if (req.body.policies) {
-                policies = JSON.parse(req.body.policies);
-                console.log(`✅ ${policies.length} politiques`);
-            }
-        } catch (e) {
-            return res.status(400).json({ error: "Données invalides: " + e.message });
-        }
-
-        if (selectedItems.length === 0) {
-            return res.status(400).json({ error: "Aucun item à analyser" });
-        }
-
-        const fileBase64 = req.file.buffer.toString('base64');
-        console.log("📤 Appel du service Python...");
-        
-        const result = await analyzePDFWithPython(fileBase64, selectedItems, policies);
-        console.log("📥 Résultat Python reçu");
-        
-        const formattedResults = {};
-        
-        if (result.detailed_results) {
-            for (const [itemId, itemResult] of Object.entries(result.detailed_results)) {
-                formattedResults[itemId] = {
-                    status: mapStatus(itemResult.status || itemResult.compliance_status),
-                    conf: itemResult.compliance_percentage || itemResult.conf || 50,
-                    text: itemResult.justification || itemResult.text || "Analyse complétée",
-                    risks: Array.isArray(itemResult.risks) ? itemResult.risks : 
-                           Array.isArray(itemResult.threats) ? itemResult.threats : [],
-                    gaps: Array.isArray(itemResult.gaps) ? itemResult.gaps : [],
-                    remediation: itemResult.remediation || ""
-                };
-            }
-        } else if (result.results) {
-            for (const [itemId, itemResult] of Object.entries(result.results)) {
-                formattedResults[itemId] = {
-                    status: mapStatus(itemResult.status),
-                    conf: itemResult.compliance_percentage || itemResult.conf || 50,
-                    text: itemResult.justification || itemResult.text || "",
-                    risks: itemResult.risks || [],
-                    gaps: itemResult.gaps || [],
-                    remediation: itemResult.remediation || ""
-                };
-            }
-        }
-        
-        for (const item of selectedItems) {
-            const itemId = String(item.id);
-            if (!formattedResults[itemId]) {
-                console.warn(`⚠️ Item sans résultat: ${itemId} - ${item.title}`);
-                formattedResults[itemId] = {
-                    status: "Not covered",
-                    conf: 0,
-                    text: "Non analysé par l'IA",
-                    risks: ["Document non conforme"],
-                    gaps: ["Item non couvert par le document"],
-                    remediation: "Documenter ce contrôle"
-                };
-            }
-        }
-        
-        console.log(`✅ ${Object.keys(formattedResults).length} résultats formatés`);
-        
-        const documentPolicies = result.document_policies || [];
-        console.log(`📋 ${documentPolicies.length} politiques du document à envoyer`);
-        
-        res.json({ 
-            results: formattedResults,
-            global_score: result.global_compliance_percentage || 0,
-            document_policies: documentPolicies,
-            policy_comparisons: result.policy_comparisons || []
-        });
-
-    } catch (error) {
-        console.error("❌ Erreur:", error);
-        res.status(500).json({ error: error.message });
+      if (req.body.standardIds) standardIds = JSON.parse(req.body.standardIds);
+    } catch (e) { log("WARN", "Invalid standardIds JSON"); }
+    if (!Array.isArray(standardIds) || !standardIds.length) {
+      const [imp] = await db.query(`SELECT standard_id FROM imported_policies`);
+      standardIds = imp.map(r => r.standard_id);
     }
+    if (!standardIds.length) return res.status(400).json({ error: "No imported standard found." });
+
+    const standardsPayload = [];
+    const aggregatedStats = [];
+    const allInputItems = [];
+    for (const sid of standardIds) {
+      const built = await buildItemsForStandard(sid);
+      log("INFO", `📦 ${sid} => items: ${built.items.length}`);
+      if (!built.items.length) continue;
+      standardsPayload.push({
+        standard_id: built.standard.id,
+        standard_name: built.standard.name,
+        standard_version: built.standard.version || "1.0",
+        items: built.items,
+      });
+      aggregatedStats.push(built.stats);
+      allInputItems.push(...built.items);
+    }
+    if (!standardsPayload.length) return res.status(400).json({ error: "Nothing to analyze." });
+
+    log("INFO", "🚀 Calling Python analyzer…");
+    let pyResult = null;
+    try {
+      pyResult = await analyzeDocumentWithPython({
+        documentPath: tmpFilePath,
+        documentName: req.file.originalname,
+        standards: standardsPayload,
+      });
+      log("INFO", `✅ Python: ${Object.keys(pyResult?.results || {}).length} item(s), ${pyResult?.policies?.length || 0} policy(ies)`);
+    } catch (pyErr) {
+      log("ERROR", "Python failed → fallback", pyErr.message);
+      pyResult = buildHonestFallback(req.file.originalname, allInputItems, pyErr.message);
+    }
+
+    const ensured = ensureAllItemsPresent(pyResult, allInputItems);
+
+    // Normalize statuses and propagate comment field
+    if (Array.isArray(ensured.policies)) {
+      ensured.policies = ensured.policies.map(p => ({
+        ...p,
+        assessments: (p.assessments || []).map(a => ({
+          ...a,
+          status: mapStatus(a.status),
+          comment: typeof a.comment === "string" ? a.comment : "",
+        })),
+      }));
+    }
+    for (const k of Object.keys(ensured.results || {})) {
+      ensured.results[k].status = mapStatus(ensured.results[k].status);
+      if (typeof ensured.results[k].comment !== "string") ensured.results[k].comment = "";
+    }
+
+    return res.json({
+      success: true,
+      document: req.file.originalname,
+      stats: aggregatedStats,
+      ...ensured,
+    });
+  } catch (err) {
+    log("ERROR", "analyze-pdf error", err.message || err);
+    return res.status(500).json({ error: err.message || String(err) });
+  } finally {
+    if (tmpFilePath) fs.unlink(tmpFilePath, () => {});
+  }
 });
 
-// ============================================================
-// ENDPOINT: Importer les risques depuis l'analyse IA
-// ============================================================
-router.post("/import-risks", async (req, res) => {
-    console.log("📥 Appel de /import-risks reçu");
-    
-    try {
-        const { analysisResults, sourceReport, policyId, policyName } = req.body;
-        
-        console.log(`📊 Analyse results: ${Object.keys(analysisResults || {}).length} items`);
-        console.log(`📄 Source report: ${sourceReport}`);
-        
-        if (!analysisResults || Object.keys(analysisResults).length === 0) {
-            return res.status(400).json({ error: "Aucun résultat d'analyse à importer" });
-        }
-        
-        const importedRisks = [];
-        
-        for (const [itemId, result] of Object.entries(analysisResults)) {
-            console.log(`🔄 Traitement item ${itemId}: ${result.status}`);
-            
-            if (result.status !== "Covered") {
-                
-                const category = getCategoryFromItemId(itemId);
-                const { impact, probability } = calculateRiskLevel(result.conf || 50);
-                const title = `[IA] Contrôle ${itemId} - ${result.status}`;
-                const description = buildRichDescription(result, itemId, sourceReport || "Rapport de conformité");
-                
-                const dueDate = new Date();
-                dueDate.setDate(dueDate.getDate() + (impact >= 3 ? 30 : 90));
-                
-                console.log(`📝 Création risque: ${title}`);
-                
-                const riskResponse = await fetch(`http://localhost:3000/api/risks`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        intitule: title,
-                        categorie: category,
-                        source: `IA Audit - ${sourceReport || "Rapport"}`,
-                        owner: "Security Team",
-                        description: description,
-                        dueDate: dueDate.toISOString().split('T')[0],
-                        impact: impact,
-                        probabilite: probability,
-                        threats: result.risks?.map(r => ({ name: r })) || [],
-                        vulnerabilities: result.gaps?.map(g => ({ name: g })) || [],
-                        MitigationPlan: [result.remediation || "À définir"]
-                    })
-                });
-                
-                if (riskResponse.ok) {
-                    const riskData = await riskResponse.json();
-                    importedRisks.push({
-                        id: riskData.id,
-                        itemId: itemId,
-                        status: result.status,
-                        title: title
-                    });
-                    console.log(`✅ Risque créé: ID ${riskData.id}`);
-                } else {
-                    const errorText = await riskResponse.text();
-                    console.error(`❌ Erreur création risque: ${errorText}`);
-                }
-            }
-        }
-        
-        console.log(`✅ Import terminé: ${importedRisks.length} risques créés`);
-        
-        res.json({
-            success: true,
-            message: `${importedRisks.length} risque(s) importé(s) depuis l'analyse IA`,
-            risks: importedRisks
-        });
-        
-    } catch (error) {
-        console.error("❌ Erreur import risques IA:", error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// ============================================================
-// Fonctions utilitaires
-// ============================================================
-
-function getCategoryFromItemId(itemId) {
-    const categories = {
-        "5.1": "Governance",
-        "5.2": "Policy",
-        "5.3": "Organization",
-        "6.1": "Risk Management",
-        "6.2": "Objectives",
-        "7.1": "Resources",
-        "7.2": "Competence",
-        "8.1": "Operations",
-        "9.1": "Monitoring",
-        "9.2": "Internal Audit",
-        "9.3": "Management Review",
-        "10.1": "Improvement",
-        "10.2": "Corrective Action"
+/**
+ * If Python crashed, build placeholders that are HONEST about the failure
+ * — no fake "No mention of X" / "Add a documented procedure" anymore.
+ */
+function buildHonestFallback(docName, items, errorMsg) {
+  const flat = {};
+  const truncated = (errorMsg || "unknown error").slice(0, 120);
+  for (const it of items) {
+    flat[it.id] = {
+      item_id: it.id,
+      ref_id:  it.ref_id || "",
+      title:   it.title  || "",
+      type:    it.type   || "",
+      status:  "Not covered",
+      conf:    0,
+      comment: `Automated analysis failed (${truncated}). Manual review required for this control.`,
+      evidence: [],
+      risks:    [],
+      gaps:     [],
+      remediation: "",
     };
-    
-    for (const [prefix, category] of Object.entries(categories)) {
-        if (String(itemId).startsWith(prefix)) {
-            return category;
-        }
+  }
+  return {
+    document_name: docName,
+    global_compliance_percentage: 0,
+    policies: [{
+      policy_name: "General Information Security Policy",
+      policy_summary: "Automated analysis unavailable — please review each control manually.",
+      assessments: Object.values(flat),
+    }],
+    results: flat,
+    error: errorMsg,
+  };
+}
+
+/**
+ * Make sure every imported item appears in results AND in every policy's
+ * assessments — uses HONEST placeholders, not fake "No mention of X".
+ */
+function ensureAllItemsPresent(pyResult, items) {
+  const out = pyResult || {};
+  out.policies = Array.isArray(out.policies) ? out.policies : [];
+  out.results  = (out.results && typeof out.results === "object") ? out.results : {};
+
+  const itemsById = Object.fromEntries(items.map(it => [it.id, it]));
+
+  for (const it of items) {
+    if (!out.results[it.id]) {
+      out.results[it.id] = {
+        item_id: it.id, ref_id: it.ref_id || "", title: it.title || "",
+        type: it.type || "", status: "Not covered", conf: 0,
+        comment: "AI did not return a confident assessment for this control. Manual review required.",
+        evidence: [], risks: [], gaps: [], remediation: "",
+      };
+    } else {
+      const r = out.results[it.id];
+      r.item_id = r.item_id || it.id;
+      r.ref_id  = r.ref_id  || it.ref_id || "";
+      r.title   = r.title   || it.title || "";
+      r.type    = r.type    || it.type || "";
+      if (typeof r.comment !== "string") r.comment = "";
     }
-    return "Information Security";
+  }
+
+  if (!out.policies.length) {
+    out.policies = [{
+      policy_name: "General Information Security Policy",
+      policy_summary: "Default view (no specific policy detected in the document).",
+      assessments: [],
+    }];
+  }
+
+  const allAssessments = Object.values(out.results);
+  for (const p of out.policies) {
+    if (!Array.isArray(p.assessments) || !p.assessments.length) {
+      p.assessments = allAssessments;
+    } else {
+      // ── ensure every imported item is also in this policy's assessments
+      const existingIds = new Set(p.assessments.map(a => a.item_id));
+      for (const it of items) {
+        if (!existingIds.has(it.id)) {
+          p.assessments.push(out.results[it.id]);
+        }
+      }
+      p.assessments = p.assessments.map(a => {
+        const meta = itemsById[a.item_id] || {};
+        return {
+          item_id: a.item_id,
+          ref_id:  a.ref_id || meta.ref_id || "",
+          title:   a.title  || meta.title  || "",
+          type:    a.type   || meta.type   || "",
+          status:  a.status || "Not covered",
+          conf:    typeof a.conf === "number" ? a.conf : 0,
+          comment: typeof a.comment === "string" ? a.comment : "",
+          evidence: Array.isArray(a.evidence) ? a.evidence : [],
+          risks:    Array.isArray(a.risks)    ? a.risks    : [],
+          gaps:     Array.isArray(a.gaps)     ? a.gaps     : [],
+          remediation: typeof a.remediation === "string" ? a.remediation : "",
+        };
+      });
+    }
+  }
+
+  if (!out.global_compliance_percentage) {
+    const score = { Covered: 100, Partial: 50, "Not covered": 0 };
+    const vals = Object.values(out.results);
+    if (vals.length) {
+      out.global_compliance_percentage = Math.round(
+        vals.reduce((s, v) => s + (score[mapStatus(v.status)] || 0), 0) / vals.length
+      );
+    }
+  }
+  return out;
 }
 
-function calculateRiskLevel(complianceScore) {
-    if (complianceScore < 30) return { impact: 4, probability: 4 };
-    if (complianceScore < 60) return { impact: 3, probability: 3 };
-    if (complianceScore < 80) return { impact: 2, probability: 2 };
-    return { impact: 1, probability: 1 };
-}
-
-function buildRichDescription(result, itemId, sourceReport) {
-    const parts = [
-        `**Analyse de conformité IA**`,
-        ``,
-        `**Contrôle:** ${itemId}`,
-        `**Statut:** ${result.status}`,
-        `**Score de confiance:** ${result.conf}%`,
-        ``,
-        `**Risques identifiés:**`,
-        ...(result.risks?.length ? result.risks.map(r => `- ${r}`) : ["- Aucun risque spécifique"]),
-        ``,
-        `**Écarts (gaps):**`,
-        ...(result.gaps?.length ? result.gaps.map(g => `- ${g}`) : ["- Aucun écart"]),
-        ``,
-        `**Recommandation:**`,
-        result.remediation || "À définir",
-        ``,
-        `**Source:** ${sourceReport}`,
-        `**Date analyse:** ${new Date().toLocaleString()}`
-    ];
-    return parts.join("\n");
-}
-
-// ============================================================
-// ENDPOINT: Tester la connexion
-// ============================================================
-router.get("/test", (req, res) => {
-    res.json({ message: "Route AI fonctionne" });
+router.get("/test", (_req, res) => {
+  res.json({ message: "AI route working", timestamp: new Date().toISOString() });
 });
 
 export default router;

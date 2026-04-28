@@ -9,6 +9,8 @@ import {
   Users,
   Trash2,
 } from "lucide-react";
+import PermissionGuard from "../components/PermissionGuard";
+
 
 const T = {
   primary: "#3B6FFF",
@@ -201,6 +203,7 @@ function AssignGroupDropdown({ perm, groups, onToggleGroup, saving }) {
 
   return (
     <div ref={ref} style={{ position: "relative" }}>
+    <PermissionGuard permission="manage_groups">
       <button
         onClick={() => setOpen((v) => !v)}
         style={{
@@ -225,6 +228,7 @@ function AssignGroupDropdown({ perm, groups, onToggleGroup, saving }) {
         {assignedCount === 0 ? "Assign to group" : `${assignedCount} group${assignedCount > 1 ? "s" : ""}`}
         <ChevronDown size={12} style={{ transform: open ? "rotate(180deg)" : "rotate(0)", transition: "transform 0.2s" }} />
       </button>
+    </PermissionGuard>
 
       {open && (
         <div
@@ -421,7 +425,7 @@ export default function PermissionsTab({ groups, setGroups }) {
 
   const updateGroupPermissions = async (groupId, permissionsList) => {
     try {
-      const res = await fetch(`http://localhost:3000/api/settings/groups/${groupId}/permissions`, {
+      const res = await fetch(`http://localhost:3000/api/permissions/groups/${groupId}/permissions`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ permissions: permissionsList }),
@@ -500,6 +504,7 @@ export default function PermissionsTab({ groups, setGroups }) {
     <div style={{ fontFamily: "system-ui, -apple-system, 'Inter', sans-serif" }}>
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginBottom: 28 }}>
+      <PermissionGuard permission="add_permission">
         <button
           onClick={() => setPanelOpen(true)}
           style={{
@@ -523,6 +528,7 @@ export default function PermissionsTab({ groups, setGroups }) {
           <Plus size={14} />
           Add Permission
         </button>
+      </PermissionGuard>
       </div>
 
       {/* Permissions — always visible regardless of groups */}

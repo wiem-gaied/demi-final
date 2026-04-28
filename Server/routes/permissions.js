@@ -93,6 +93,46 @@ router.post("/groups", async (req, res) => {
     conn.release();
   }
 });
+router.get("/me/permissions", authMiddleware, async (req, res) => {
+  const userId = req.user.id;
+  const userRole = req.user.role; // récupérer le rôle depuis le token/session
+
+  // Si le rôle est "user" → toutes les permissions par défaut
+  if (userRole === "user") {
+    const [allPermissions] = await db.query(`
+      SELECT key_name FROM permissions
+    `);
+
+    return res.json({
+      permissions: allPermissions.map(p => p.key_name)
+    });
+  }
+
+  // Sinon → logique normale basée sur les groupes
+  const [groups] = await db.query(`
+    SELECT g.id
+    FROM user_groups ug
+    JOIN groups_list g ON ug.group_id = g.id
+    WHERE ug.user_id = ?
+  `, [userId]);
+
+  let permissions = [];
+
+  for (const g of groups) {
+    const [perms] = await db.query(`
+      SELECT p.key_name
+      FROM group_permissions gp
+      JOIN permissions p ON gp.permission_id = p.id
+      WHERE gp.group_id = ?
+    `, [g.id]);
+
+    permissions.push(...perms.map(p => p.key_name));
+  }
+
+  res.json({
+    permissions: [...new Set(permissions)]
+  });
+});
 router.put("/groups/:id/permissions", async (req, res) => {
   const { id } = req.params;
   const { permissions } = req.body;
