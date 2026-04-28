@@ -1,5 +1,6 @@
 import express from 'express';
 import db from "../db.js";
+import { authMiddleware } from '../middlewares/rbac.js';
 
 const router = express.Router();
 

@@ -212,7 +212,7 @@ export default function Reporting() {
       finally { setLoadingAna(false); }
     })();
   }, []);
-
+ 
   // ── View an analysis ──
   const openAnalysis = async (a) => {
     setDetailAnalysis(a);
@@ -223,7 +223,6 @@ export default function Reporting() {
       setAnalysisFull(d);
     } catch (e) { alert("Failed to load analysis: " + e.message); }
   };
-
   // ── Open the generation form for a specific analysis ──
   const openGenerationForm = async (a) => {
     setLinkedAnalysis(a);
