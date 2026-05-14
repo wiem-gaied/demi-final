@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { ShieldCheck, Eye, EyeOff, Lock, Mail, AlertCircle, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext"; 
 
 
 // ─── Shared styles ────────────────────────────────────────────────────────────
@@ -147,6 +148,7 @@ export  default function LoginPage({ onClose, onForgotPassword}){
   const [setupMfa, setSetupMfa] = useState(false);
   const [requireMfa, setRequireMfa] = useState(false);
   const navigate = useNavigate();
+  const { login } = useAuth();
   
 
  const handleSubmit = async () => {
@@ -243,9 +245,12 @@ export  default function LoginPage({ onClose, onForgotPassword}){
 }
 
       // ✅ SUCCESS
-      if (data.redirect) {
-        window.location.href = data.redirect;
-      }
+      if (data.success) {
+  login(true);
+
+  // 🔥 utiliser la redirection du backend
+  navigate(data.redirect || "/");
+}
 
     } else {
       setError(data.message || "Login failed");

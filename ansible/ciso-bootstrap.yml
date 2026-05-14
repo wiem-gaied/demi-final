@@ -1,0 +1,57 @@
+# ansible/ciso-bootstrap.yml
+- hosts: localhost
+  connection: local
+  gather_facts: no
+  vars:
+    ciso_dir: "{{ lookup('env','HOME') }}/ciso-assistant"
+    admin_email: "admin@local.test"
+  tasks:
+    - name: Clone CISO Assistant
+      shell: git clone https://github.com/intuitem/ciso-assistant-community.git {{ ciso_dir }}
+      args:
+        creates: "{{ ciso_dir }}"
+
+    - name: Start docker compose
+      shell: docker compose up -d
+      args:
+        chdir: "{{ ciso_dir }}"
+
+    - name: Wait until API ready
+      uri:
+        url: "https://localhost:8443/api/"
+        validate_certs: no
+        status_code: [200, 301, 302, 401, 403]
+      register: r
+      until: r.status in [200, 301, 302, 401, 403]
+      retries: 30
+      delay: 2
+
+    - name: Create superuser
+      shell: >
+        docker compose exec -T backend
+        python manage.py createsuperuser --noinput
+        --email {{ admin_email }}
+      args:
+        chdir: "{{ ciso_dir }}"
+      environment:
+        DJANGO_SUPERUSER_PASSWORD: "{{ admin_pwd }}"
+      ignore_errors: yes
+
+    - name: Generate API token
+      uri:
+        url: "https://localhost:8443/api/iam/auth/token/"
+        method: POST
+        body_format: json
+        body:
+          email: "{{ admin_email }}"
+          password: "{{ admin_pwd }}"
+        validate_certs: no
+        status_code: [200, 201]
+      register: t
+
+    - name: Save token to backend .env
+      lineinfile:
+        path: "{{ playbook_dir }}/../.env"
+        line: "CISO_API_TOKEN={{ t.json.auth_token | default(t.json.token) }}"
+        create: yes
+        regexp: "^CISO_API_TOKEN="

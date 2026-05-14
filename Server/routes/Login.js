@@ -155,6 +155,7 @@ if (!user.mfa_secret) {
       role: user.role,
       name: `${user.first_name} ${user.last_name}`,
       organization: user.organization,
+      department: user.department,
       groups: userGroups,
     };
 
@@ -169,11 +170,24 @@ if (!user.mfa_secret) {
         redirect,
       });
     });
+    console.log(`[login] session set: userId=${req.session.user.id} role=${req.session.user.role}`);
 
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
   }
+});
+// Place-la juste avant `export default router;`
+router.post("/logout", (req, res) => {
+  if (!req.session) return res.json({ success: true });
+  req.session.destroy((err) => {
+    if (err) {
+      console.error("Logout error:", err);
+      return res.status(500).json({ success: false, message: "Logout failed" });
+    }
+    res.clearCookie("grc_sid");
+    res.json({ success: true });
+  });
 });
 
 export default router;

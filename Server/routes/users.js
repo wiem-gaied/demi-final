@@ -194,6 +194,23 @@ router.post("/verify-mfa", async (req, res) => {
     res.status(500).json({ message: "Erreur serveur" });
   }
 });
+// Backend - GET /api/users/:id
+router.get('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await db.query(
+      'SELECT id, name, email, organisation, department, role FROM users WHERE id = $1',
+      [id]
+    );
+    res.json(user.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+router.get("/me", (req, res) => {
+  if (req.session?.user) return res.json(req.session.user);
+  return res.status(401).json({ message: "Non authentifié" });
+});
 
 
 

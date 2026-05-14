@@ -55,10 +55,11 @@ const menuItems = [
 
 const handleLogout = async () => {
   try {
-    await fetch("http://localhost:3000/api/logout", {
-      method: "POST",
-      credentials: "include"
+    await fetch('http://localhost:3000/api/logout', {
+      method: 'POST',
+      credentials: 'include'
     });
+// puis redirige vers la page de login
   } catch (err) {
     console.error("Logout error:", err);
   }

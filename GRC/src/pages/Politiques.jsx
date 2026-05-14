@@ -1,7 +1,15 @@
-import { useState, useEffect, useCallback } from "react";
-import { Shield, Search, ChevronDown, ChevronRight, Plus, CheckCircle, X, AlertCircle, Database } from "lucide-react";
+// politique.jsx
+// Same visual design as before. All strings in English.
+// Renders Core (mandatory) and Annex (optional) sections strictly per framework,
+// with descriptions visible at chapter / sub-chapter / control level.
 
-// ── Icons ──────────────────────────────────────────────────────────────────
+import { useState, useEffect, useCallback } from "react";
+import {
+  Shield, Search, ChevronDown, ChevronRight, Plus,
+  CheckCircle, X, AlertCircle, Database
+} from "lucide-react";
+
+// ── Inline icons ─────────────────────────────────────────────────────────────
 const Icon = ({ d, size = 16, color = "currentColor" }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
     stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -10,148 +18,103 @@ const Icon = ({ d, size = 16, color = "currentColor" }) => (
 );
 
 const icons = {
-  package:   "M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z",
-  chapter:   "M4 19.5A2.5 2.5 0 016.5 17H20",
-  policy:    "M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z",
-  plus:      "M12 5v14M5 12h14",
-  chevron:   "M6 9l6 6 6-6",
-  trash:     "M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6",
-  edit:      "M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7",
-  shield:    "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
-  check:     "M20 6L9 17l-5-5",
-  close:     "M18 6L6 18M6 6l12 12",
-  upload:    "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12",
-  database:  "M4 7c0 1.657 3.582 3 8 3s8-1.343 8-3M4 7v10c0 1.657 3.582 3 8 3s8-1.343 8-3V7M4 7c0-1.657 3.582-3 8-3s8 1.343 8 3",
+  close: "M18 6L6 18M6 6l12 12",
 };
 
 // ── Palette ──────────────────────────────────────────────────────────────────
 const C = {
-  accent:   "#3B6FFF",
-  purple:   "#6D28D9",
-  bg:       "#F8FAFF",
-  card:     "#FFFFFF",
-  border:   "#E2E8F8",
-  text:     "#1E2A4A",
-  muted:    "#64748B",
-  success:  "#10B981",
-  warning:  "#F59E0B",
-  danger:   "#EF4444",
-  tag_pol:  "#EFF6FF",
-  tag_prf:  "#F5F3FF",
-  chip:     "#EEF2FF",
+  accent:  "#3B6FFF",
+  purple:  "#6D28D9",
+  bg:      "#F8FAFF",
+  card:    "#FFFFFF",
+  border:  "#E2E8F8",
+  text:    "#1E2A4A",
+  muted:   "#64748B",
+  success: "#10B981",
+  warning: "#F59E0B",
+  danger:  "#EF4444",
+  chip:    "#EEF2FF",
 };
 
-// ── Modal pour ajouter un framework ─────────────────────────────────────────
-function AddFrameworkModal({ onClose, onConfirm }) {
-  const [frameworkData, setFrameworkData] = useState({
-    name: "",
-    version: "1.0",
-    description: "",
-    provider: "",
-    hierarchy: []
-  });
-  const [isAdding, setIsAdding] = useState(false);
-  const [jsonInput, setJsonInput] = useState("");
-  const [useJsonMode, setUseJsonMode] = useState(false);
+// ============================================================
+// Modal — Scrape framework
+// ============================================================
+function ScrapeFrameworkModal({ onClose, onConfirm }) {
+  const [availableFrameworks, setAvailableFrameworks] = useState([]);
+  const [loadingList, setLoadingList] = useState(true);
+  const [loadError, setLoadError] = useState(null);
+  const [selectedId, setSelectedId] = useState(null);
+  const [selectedVersion, setSelectedVersion] = useState("");
+  const [search, setSearch] = useState("");
+  const [isScraping, setIsScraping] = useState(false);
 
-  const addChapter = () => {
-    setFrameworkData({
-      ...frameworkData,
-      hierarchy: [
-        ...frameworkData.hierarchy,
-        { ref_id: "", title: "", description: "", children: [], items: [] }
-      ]
-    });
-  };
-
-  const removeChapter = (index) => {
-    const newHierarchy = frameworkData.hierarchy.filter((_, i) => i !== index);
-    setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
-  };
-
-  const addSubChapter = (chapterIndex) => {
-    const newHierarchy = [...frameworkData.hierarchy];
-    if (!newHierarchy[chapterIndex].children) newHierarchy[chapterIndex].children = [];
-    newHierarchy[chapterIndex].children.push({ 
-      ref_id: "", 
-      title: "", 
-      description: "", 
-      items: [] 
-    });
-    setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
-  };
-
-  const removeSubChapter = (chapterIndex, subChapterIndex) => {
-    const newHierarchy = [...frameworkData.hierarchy];
-    newHierarchy[chapterIndex].children = newHierarchy[chapterIndex].children.filter((_, i) => i !== subChapterIndex);
-    setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
-  };
-
-  const addControl = (chapterIndex, subChapterIndex = null) => {
-    const newHierarchy = [...frameworkData.hierarchy];
-    if (subChapterIndex !== null) {
-      if (!newHierarchy[chapterIndex].children[subChapterIndex].items) {
-        newHierarchy[chapterIndex].children[subChapterIndex].items = [];
+  useEffect(() => {
+    const fetchAvailable = async () => {
+      setLoadingList(true);
+      setLoadError(null);
+      try {
+        const response = await fetch("http://localhost:3000/api/scraper/available", {
+          credentials: "include",
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        const data = await response.json();
+        const list = Array.isArray(data) ? data : (data.frameworks || []);
+        const normalized = list.map((f, idx) => ({
+          id: f.id || f.frameworkId || f.slug || `fw-${idx}`,
+          name: f.name || f.title || "Untitled",
+          provider: f.provider || f.source || "",
+          description: f.description || "",
+          versions: Array.isArray(f.versions) && f.versions.length > 0
+            ? f.versions
+            : (f.version ? [f.version] : ["1.0"]),
+        }));
+        setAvailableFrameworks(normalized);
+      } catch (err) {
+        console.error("Error fetching available frameworks:", err);
+        setLoadError(err.message);
+      } finally {
+        setLoadingList(false);
       }
-      newHierarchy[chapterIndex].children[subChapterIndex].items.push({ 
-        ref_id: "", 
-        name: "", 
-        description: "" 
-      });
-    } else {
-      if (!newHierarchy[chapterIndex].items) newHierarchy[chapterIndex].items = [];
-      newHierarchy[chapterIndex].items.push({ 
-        ref_id: "", 
-        name: "", 
-        description: "" 
-      });
-    }
-    setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
-  };
+    };
+    fetchAvailable();
+  }, []);
 
-  const removeControl = (chapterIndex, controlIndex, subChapterIndex = null) => {
-    const newHierarchy = [...frameworkData.hierarchy];
-    if (subChapterIndex !== null) {
-      newHierarchy[chapterIndex].children[subChapterIndex].items = 
-        newHierarchy[chapterIndex].children[subChapterIndex].items.filter((_, i) => i !== controlIndex);
-    } else {
-      newHierarchy[chapterIndex].items = newHierarchy[chapterIndex].items.filter((_, i) => i !== controlIndex);
-    }
-    setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
-  };
+  const selected = availableFrameworks.find(f => f.id === selectedId);
 
-  const handleJsonImport = () => {
-    try {
-      const parsed = JSON.parse(jsonInput);
-      setFrameworkData({
-        name: parsed.name || parsed.framework?.name || "",
-        version: parsed.version || parsed.framework?.version || "1.0",
-        description: parsed.description || parsed.framework?.description || "",
-        provider: parsed.provider || parsed.framework?.provider || "",
-        hierarchy: parsed.hierarchy || parsed.framework?.hierarchy || []
-      });
-      setUseJsonMode(false);
-      setJsonInput("");
-    } catch (error) {
-      alert("Invalid JSON format: " + error.message);
-    }
+  const filtered = availableFrameworks.filter(f => {
+    const q = search.toLowerCase();
+    return (
+      f.name.toLowerCase().includes(q) ||
+      (f.provider || "").toLowerCase().includes(q) ||
+      (f.description || "").toLowerCase().includes(q)
+    );
+  });
+
+  const handleSelect = (framework) => {
+    setSelectedId(framework.id);
+    setSelectedVersion(framework.versions[0] || "");
   };
 
   const handleSubmit = async () => {
-    if (!frameworkData.name.trim()) {
-      alert("Framework name is required");
+    if (!selected) {
+      alert("Please select a framework to scrape");
       return;
     }
-    
-    setIsAdding(true);
+    setIsScraping(true);
     try {
-      await onConfirm(frameworkData);
+      await onConfirm({
+        frameworkId: selected.id,
+        name: selected.name,
+        provider: selected.provider,
+        version: selectedVersion,
+        description: selected.description,
+      });
       onClose();
     } catch (error) {
-      console.error("Error adding framework:", error);
-      alert("Error adding framework: " + error.message);
+      console.error("Error scraping framework:", error);
+      alert("Error scraping framework: " + error.message);
     } finally {
-      setIsAdding(false);
+      setIsScraping(false);
     }
   };
 
@@ -163,7 +126,7 @@ function AddFrameworkModal({ onClose, onConfirm }) {
       overflow: "auto", padding: 20,
     }} onClick={onClose}>
       <div style={{
-        background: C.card, borderRadius: 16, width: 700, maxWidth: "95vw",
+        background: C.card, borderRadius: 16, width: 640, maxWidth: "95vw",
         maxHeight: "90vh", overflow: "auto",
         boxShadow: "0 24px 60px rgba(59,111,255,.18)",
         border: `1px solid ${C.border}`,
@@ -173,399 +136,534 @@ function AddFrameworkModal({ onClose, onConfirm }) {
           padding: "20px 24px 16px", borderBottom: `1px solid ${C.border}`,
         }}>
           <span style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 18, fontWeight: 700, color: C.text }}>
-            <Database size={18} style={{ display: "inline", marginRight: 8, verticalAlign: "middle" }} />
-            Add Security Framework
+            Scrape Security Framework
           </span>
           <button onClick={onClose} style={{
             background: "none", border: "none", cursor: "pointer",
             color: C.muted, padding: 4, borderRadius: 8,
-          }}><Icon d={icons.close} size={18} /></button>
+          }}><X size={18} /></button>
         </div>
-        
+
         <div style={{ padding: 24 }}>
-          <div style={{ display: "flex", gap: 12, marginBottom: 20, borderBottom: `1px solid ${C.border}`, paddingBottom: 12 }}>
-            <button
-              onClick={() => setUseJsonMode(false)}
+          <p style={{ fontSize: 13, color: C.muted, marginBottom: 16 }}>
+            Select a framework. Its full hierarchy (chapters, sub-chapters, controls)
+            will be scraped and stored under its own unique standard ID.
+          </p>
+
+          <div style={{ position: "relative", marginBottom: 16 }}>
+            <Search size={16} style={{
+              position: "absolute", left: 12, top: "50%",
+              transform: "translateY(-50%)", color: C.muted,
+            }} />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search frameworks (ISO, NIST, CIS, ...)"
+              disabled={loadingList}
               style={{
-                padding: "6px 16px", borderRadius: 20, border: "none",
-                background: !useJsonMode ? C.accent : "transparent",
-                color: !useJsonMode ? "#fff" : C.muted,
-                cursor: "pointer", fontSize: 13, fontWeight: 600,
+                width: "100%", padding: "10px 12px 10px 36px",
+                border: `1.5px solid ${C.border}`, borderRadius: 10,
+                fontSize: 13, outline: "none",
+                background: loadingList ? C.bg : C.card,
               }}
-            >
-              Manual Entry
-            </button>
-            <button
-              onClick={() => setUseJsonMode(true)}
-              style={{
-                padding: "6px 16px", borderRadius: 20, border: "none",
-                background: useJsonMode ? C.accent : "transparent",
-                color: useJsonMode ? "#fff" : C.muted,
-                cursor: "pointer", fontSize: 13, fontWeight: 600,
-              }}
-            >
-              Import JSON
-            </button>
+            />
           </div>
 
-          {useJsonMode ? (
-            <div>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: C.muted, marginBottom: 8 }}>
-                Paste Framework JSON
-              </label>
-              <textarea
-                value={jsonInput}
-                onChange={(e) => setJsonInput(e.target.value)}
-                placeholder='{"name": "ISO 27001:2022", "version": "2022", "hierarchy": [...]}'
-                style={{
-                  width: "100%", height: 300,
-                  padding: 12, border: `1.5px solid ${C.border}`,
-                  borderRadius: 10, fontSize: 12, fontFamily: "monospace",
-                  resize: "vertical", outline: "none",
-                }}
-              />
-              <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 16 }}>
-                <button onClick={() => setUseJsonMode(false)} style={{
-                  padding: "8px 16px", borderRadius: 8, border: `1px solid ${C.border}`,
-                  background: "transparent", cursor: "pointer",
-                }}>Cancel</button>
-                <button onClick={handleJsonImport} style={{
-                  padding: "8px 20px", borderRadius: 8, border: "none",
-                  background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-                  color: "#fff", cursor: "pointer",
-                }}>Import JSON</button>
+          <div style={{
+            maxHeight: 360, overflowY: "auto",
+            border: `1px solid ${C.border}`, borderRadius: 10,
+            marginBottom: 16, minHeight: 120,
+          }}>
+            {loadingList ? (
+              <div style={{ padding: 40, textAlign: "center" }}>
+                <div style={{
+                  width: 28, height: 28, margin: "0 auto",
+                  border: `3px solid ${C.border}`, borderTopColor: C.accent,
+                  borderRadius: "50%", animation: "spin 0.8s linear infinite",
+                }} />
+                <div style={{ fontSize: 12, color: C.muted, marginTop: 12 }}>
+                  Loading available frameworks...
+                </div>
               </div>
-            </div>
-          ) : (
-            <>
-              <div style={{ marginBottom: 20 }}>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: C.muted, marginBottom: 6 }}>
-                  Framework Name *
-                </label>
-                <input
-                  type="text"
-                  value={frameworkData.name}
-                  onChange={(e) => setFrameworkData({ ...frameworkData, name: e.target.value })}
-                  placeholder="e.g., ISO 27001:2022, NIST CSF 2.0"
+            ) : loadError ? (
+              <div style={{ padding: 24, textAlign: "center" }}>
+                <AlertCircle size={20} color={C.danger} style={{ marginBottom: 8 }} />
+                <div style={{ fontSize: 13, color: C.danger, fontWeight: 600 }}>
+                  Failed to load frameworks
+                </div>
+                <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>
+                  {loadError}
+                </div>
+              </div>
+            ) : filtered.length === 0 ? (
+              <div style={{ padding: 24, textAlign: "center", color: C.muted, fontSize: 13 }}>
+                {availableFrameworks.length === 0
+                  ? "No frameworks available for scraping."
+                  : "No frameworks match your search."}
+              </div>
+            ) : filtered.map((fw) => {
+              const isSelected = fw.id === selectedId;
+              return (
+                <div
+                  key={fw.id}
+                  onClick={() => handleSelect(fw)}
                   style={{
-                    width: "100%", padding: "10px 14px",
-                    border: `1.5px solid ${C.border}`, borderRadius: 10,
-                    fontSize: 14, outline: "none",
+                    padding: "12px 14px",
+                    borderBottom: `1px solid ${C.border}`,
+                    cursor: "pointer",
+                    background: isSelected ? `${C.accent}10` : "transparent",
+                    borderLeft: isSelected ? `3px solid ${C.accent}` : "3px solid transparent",
+                    display: "flex", alignItems: "center", gap: 12,
                   }}
-                />
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
-                <div>
-                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: C.muted, marginBottom: 6 }}>Version</label>
-                  <input
-                    type="text"
-                    value={frameworkData.version}
-                    onChange={(e) => setFrameworkData({ ...frameworkData, version: e.target.value })}
-                    placeholder="1.0"
-                    style={{
-                      width: "100%", padding: "10px 14px",
-                      border: `1.5px solid ${C.border}`, borderRadius: 10,
-                      fontSize: 14, outline: "none",
-                    }}
-                  />
-                </div>
-                <div>
-                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: C.muted, marginBottom: 6 }}>Provider</label>
-                  <input
-                    type="text"
-                    value={frameworkData.provider}
-                    onChange={(e) => setFrameworkData({ ...frameworkData, provider: e.target.value })}
-                    placeholder="ISO, NIST, CIS, etc."
-                    style={{
-                      width: "100%", padding: "10px 14px",
-                      border: `1.5px solid ${C.border}`, borderRadius: 10,
-                      fontSize: 14, outline: "none",
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div style={{ marginBottom: 20 }}>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: C.muted, marginBottom: 6 }}>Description</label>
-                <textarea
-                  value={frameworkData.description}
-                  onChange={(e) => setFrameworkData({ ...frameworkData, description: e.target.value })}
-                  placeholder="Framework description..."
-                  rows={2}
-                  style={{
-                    width: "100%", padding: "10px 14px",
-                    border: `1.5px solid ${C.border}`, borderRadius: 10,
-                    fontSize: 14, outline: "none", resize: "vertical",
-                  }}
-                />
-              </div>
-
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                  <label style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Hierarchy</label>
-                  <button
-                    onClick={addChapter}
-                    style={{
-                      display: "flex", alignItems: "center", gap: 6,
-                      padding: "4px 12px", borderRadius: 6, border: `1px dashed ${C.accent}`,
-                      background: "transparent", color: C.accent, fontSize: 12, cursor: "pointer",
-                    }}
-                  >
-                    <Plus size={12} /> Add Chapter
-                  </button>
-                </div>
-
-                {frameworkData.hierarchy.map((chapter, chIdx) => (
-                  <div key={chIdx} style={{
-                    border: `1px solid ${C.border}`, borderRadius: 10,
-                    padding: 12, marginBottom: 12, background: C.bg,
+                >
+                  <div style={{
+                    width: 18, height: 18, borderRadius: "50%",
+                    border: `2px solid ${isSelected ? C.accent : C.border}`,
+                    background: isSelected ? C.accent : "transparent",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    flexShrink: 0,
                   }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: C.purple }}>Chapter {chIdx + 1}</span>
-                      <button onClick={() => removeChapter(chIdx)} style={{ color: C.danger, background: "none", border: "none", cursor: "pointer", fontSize: 12 }}>Remove</button>
-                    </div>
-                    
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10, marginBottom: 10 }}>
-                      <input
-                        type="text"
-                        value={chapter.ref_id}
-                        onChange={(e) => {
-                          const newHierarchy = [...frameworkData.hierarchy];
-                          newHierarchy[chIdx].ref_id = e.target.value;
-                          setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
-                        }}
-                        placeholder="Ref ID"
-                        style={{ padding: "6px 10px", border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12 }}
-                      />
-                      <input
-                        type="text"
-                        value={chapter.title}
-                        onChange={(e) => {
-                          const newHierarchy = [...frameworkData.hierarchy];
-                          newHierarchy[chIdx].title = e.target.value;
-                          setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
-                        }}
-                        placeholder="Title"
-                        style={{ padding: "6px 10px", border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12 }}
-                      />
-                    </div>
-                    
-                    <textarea
-                      value={chapter.description}
-                      onChange={(e) => {
-                        const newHierarchy = [...frameworkData.hierarchy];
-                        newHierarchy[chIdx].description = e.target.value;
-                        setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
-                      }}
-                      placeholder="Description"
-                      rows={2}
-                      style={{ width: "100%", padding: "6px 10px", border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, marginBottom: 10 }}
-                    />
-
-                    {/* Sub-chapters */}
-                    <div style={{ marginTop: 10, marginLeft: 16 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                        <span style={{ fontSize: 11, fontWeight: 600, color: C.muted }}>Sub-chapters</span>
-                        <button onClick={() => addSubChapter(chIdx)} style={{ fontSize: 11, color: C.accent, background: "none", border: "none", cursor: "pointer" }}>+ Add Sub-chapter</button>
-                      </div>
-                      
-                      {(chapter.children || []).map((subChapter, subIdx) => (
-                        <div key={subIdx} style={{
-                          border: `1px solid ${C.border}`, borderRadius: 8,
-                          padding: 10, marginBottom: 10, background: C.card,
-                        }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                            <span style={{ fontSize: 11, fontWeight: 600, color: C.accent }}>Sub-chapter {subIdx + 1}</span>
-                            <button onClick={() => removeSubChapter(chIdx, subIdx)} style={{ fontSize: 10, color: C.danger, background: "none", border: "none", cursor: "pointer" }}>Remove</button>
-                          </div>
-                          
-                          <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 8, marginBottom: 8 }}>
-                            <input
-                              type="text"
-                              value={subChapter.ref_id}
-                              onChange={(e) => {
-                                const newHierarchy = [...frameworkData.hierarchy];
-                                newHierarchy[chIdx].children[subIdx].ref_id = e.target.value;
-                                setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
-                              }}
-                              placeholder="Ref ID"
-                              style={{ padding: "4px 8px", border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11 }}
-                            />
-                            <input
-                              type="text"
-                              value={subChapter.title}
-                              onChange={(e) => {
-                                const newHierarchy = [...frameworkData.hierarchy];
-                                newHierarchy[chIdx].children[subIdx].title = e.target.value;
-                                setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
-                              }}
-                              placeholder="Title"
-                              style={{ padding: "4px 8px", border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11 }}
-                            />
-                          </div>
-                          
-                          <textarea
-                            value={subChapter.description}
-                            onChange={(e) => {
-                              const newHierarchy = [...frameworkData.hierarchy];
-                              newHierarchy[chIdx].children[subIdx].description = e.target.value;
-                              setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
-                            }}
-                            placeholder="Description"
-                            rows={2}
-                            style={{ width: "100%", padding: "4px 8px", border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, marginBottom: 8 }}
-                          />
-
-                          {/* Controls in sub-chapter */}
-                          <div style={{ marginTop: 8 }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                              <span style={{ fontSize: 10, fontWeight: 600, color: C.muted }}>Controls</span>
-                              <button onClick={() => addControl(chIdx, subIdx)} style={{ fontSize: 10, color: C.accent, background: "none", border: "none", cursor: "pointer" }}>+ Add Control</button>
-                            </div>
-                            
-                            {(subChapter.items || []).map((control, ctrlIdx) => (
-                              <div key={ctrlIdx} style={{
-                                background: C.bg, borderRadius: 4, padding: 6, marginBottom: 6,
-                                border: `1px solid ${C.border}`,
-                              }}>
-                                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                                  <span style={{ fontSize: 9, fontWeight: 600, color: C.accent }}>Control {ctrlIdx + 1}</span>
-                                  <button onClick={() => removeControl(chIdx, ctrlIdx, subIdx)} style={{ fontSize: 9, color: C.danger, background: "none", border: "none", cursor: "pointer" }}>Remove</button>
-                                </div>
-                                <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 6, marginBottom: 4 }}>
-                                  <input
-                                    type="text"
-                                    value={control.ref_id}
-                                    onChange={(e) => {
-                                      const newHierarchy = [...frameworkData.hierarchy];
-                                      newHierarchy[chIdx].children[subIdx].items[ctrlIdx].ref_id = e.target.value;
-                                      setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
-                                    }}
-                                    placeholder="Ref ID"
-                                    style={{ padding: "3px 6px", border: `1px solid ${C.border}`, borderRadius: 3, fontSize: 10 }}
-                                  />
-                                  <input
-                                    type="text"
-                                    value={control.name}
-                                    onChange={(e) => {
-                                      const newHierarchy = [...frameworkData.hierarchy];
-                                      newHierarchy[chIdx].children[subIdx].items[ctrlIdx].name = e.target.value;
-                                      setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
-                                    }}
-                                    placeholder="Control name"
-                                    style={{ padding: "3px 6px", border: `1px solid ${C.border}`, borderRadius: 3, fontSize: 10 }}
-                                  />
-                                </div>
-                                <textarea
-                                  value={control.description}
-                                  onChange={(e) => {
-                                    const newHierarchy = [...frameworkData.hierarchy];
-                                    newHierarchy[chIdx].children[subIdx].items[ctrlIdx].description = e.target.value;
-                                    setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
-                                  }}
-                                  placeholder="Description"
-                                  rows={1}
-                                  style={{ width: "100%", padding: "3px 6px", border: `1px solid ${C.border}`, borderRadius: 3, fontSize: 10 }}
-                                />
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Direct controls in chapter */}
-                    <div style={{ marginTop: 10 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                        <span style={{ fontSize: 11, fontWeight: 600, color: C.muted }}>Direct Controls</span>
-                        <button onClick={() => addControl(chIdx)} style={{ fontSize: 11, color: C.accent, background: "none", border: "none", cursor: "pointer" }}>+ Add Control</button>
-                      </div>
-                      
-                      {(chapter.items || []).map((control, ctrlIdx) => (
-                        <div key={ctrlIdx} style={{
-                          background: C.card, borderRadius: 6, padding: 8, marginBottom: 8,
-                          border: `1px solid ${C.border}`,
-                        }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                            <span style={{ fontSize: 10, fontWeight: 600, color: C.accent }}>Control {ctrlIdx + 1}</span>
-                            <button onClick={() => removeControl(chIdx, ctrlIdx)} style={{ fontSize: 10, color: C.danger, background: "none", border: "none", cursor: "pointer" }}>Remove</button>
-                          </div>
-                          <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 8, marginBottom: 6 }}>
-                            <input
-                              type="text"
-                              value={control.ref_id}
-                              onChange={(e) => {
-                                const newHierarchy = [...frameworkData.hierarchy];
-                                newHierarchy[chIdx].items[ctrlIdx].ref_id = e.target.value;
-                                setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
-                              }}
-                              placeholder="Ref ID"
-                              style={{ padding: "4px 8px", border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11 }}
-                            />
-                            <input
-                              type="text"
-                              value={control.name}
-                              onChange={(e) => {
-                                const newHierarchy = [...frameworkData.hierarchy];
-                                newHierarchy[chIdx].items[ctrlIdx].name = e.target.value;
-                                setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
-                              }}
-                              placeholder="Control name"
-                              style={{ padding: "4px 8px", border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11 }}
-                            />
-                          </div>
-                          <textarea
-                            value={control.description}
-                            onChange={(e) => {
-                              const newHierarchy = [...frameworkData.hierarchy];
-                              newHierarchy[chIdx].items[ctrlIdx].description = e.target.value;
-                              setFrameworkData({ ...frameworkData, hierarchy: newHierarchy });
-                            }}
-                            placeholder="Description"
-                            rows={2}
-                            style={{ width: "100%", padding: "4px 8px", border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11 }}
-                          />
-                        </div>
-                      ))}
-                    </div>
+                    {isSelected && <CheckCircle size={10} color="#fff" />}
                   </div>
-                ))}
-              </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{fw.name}</span>
+                      {fw.provider && (
+                        <span style={{
+                          fontSize: 10, background: C.chip, color: C.accent,
+                          padding: "2px 8px", borderRadius: 10, fontWeight: 600,
+                        }}>{fw.provider}</span>
+                      )}
+                    </div>
+                    {fw.description && (
+                      <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{fw.description}</div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
 
-              <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 20 }}>
-                <button onClick={onClose} style={{
-                  padding: "10px 20px", borderRadius: 8, border: `1.5px solid ${C.border}`,
-                  background: "transparent", cursor: "pointer", fontSize: 13,
-                }}>Cancel</button>
-                <button onClick={handleSubmit} disabled={isAdding} style={{
-                  padding: "10px 24px", borderRadius: 8, border: "none",
-                  background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-                  color: "#fff", cursor: isAdding ? "wait" : "pointer", fontSize: 13, fontWeight: 600,
-                }}>
-                  {isAdding ? "Adding..." : "Add Framework"}
-                </button>
-              </div>
-            </>
+          {selected && selected.versions.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: C.muted, marginBottom: 6 }}>
+                Version
+              </label>
+              <select
+                value={selectedVersion}
+                onChange={(e) => setSelectedVersion(e.target.value)}
+                style={{
+                  width: "100%", padding: "10px 14px",
+                  border: `1.5px solid ${C.border}`, borderRadius: 10,
+                  fontSize: 14, outline: "none", background: C.card,
+                }}
+              >
+                {selected.versions.map(v => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+              </select>
+            </div>
           )}
+
+          <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
+            <button onClick={onClose} style={{
+              padding: "10px 20px", borderRadius: 8, border: `1.5px solid ${C.border}`,
+              background: "transparent", cursor: "pointer", fontSize: 13,
+            }}>Cancel</button>
+            <button
+              onClick={handleSubmit}
+              disabled={!selected || isScraping || loadingList}
+              style={{
+                padding: "10px 24px", borderRadius: 8, border: "none",
+                background: (!selected || isScraping) ? C.muted : `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
+                color: "#fff",
+                cursor: (!selected || isScraping || loadingList) ? "not-allowed" : "pointer",
+                fontSize: 13, fontWeight: 600,
+                opacity: (!selected || loadingList) ? 0.6 : 1,
+              }}
+            >
+              {isScraping ? "Scraping..." : "Start Scraping"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-// ── Control Item ──
+// ============================================================
+// Modal — Add custom framework
+// ============================================================
+function AddCustomFrameworkModal({ onClose, onConfirm }) {
+  const [meta, setMeta] = useState({ name: "", version: "1.0", provider: "", description: "" });
+  const [coreChapters, setCoreChapters] = useState([
+    { ref_id: "", title: "", description: "", controls: [], children: [] }
+  ]);
+  const [annexFamilies, setAnnexFamilies] = useState([]);
+  const [submitting, setSubmitting] = useState(false);
+
+  const updateAtPath = (list, path, updater) => {
+    if (path.length === 0) return updater(list);
+    const [head, ...rest] = path;
+    const next = [...list];
+    next[head] = { ...next[head], children: updateAtPath(next[head].children || [], rest, updater) };
+    return next;
+  };
+
+  const addSubChapter = (path) => {
+    setCoreChapters(prev => updateAtPath(prev, path,
+      (children) => [...children, { ref_id: "", title: "", description: "", controls: [], children: [] }]));
+  };
+  const removeChapterAt = (path) => {
+    if (path.length === 1) {
+      setCoreChapters(prev => prev.filter((_, i) => i !== path[0]));
+      return;
+    }
+    const parentPath = path.slice(0, -1);
+    const idx = path[path.length - 1];
+    setCoreChapters(prev => updateAtPath(prev, parentPath,
+      (children) => children.filter((_, i) => i !== idx)));
+  };
+  const updateChapterAt = (path, field, value) => {
+    if (path.length === 1) {
+      setCoreChapters(prev => prev.map((c, i) => i === path[0] ? { ...c, [field]: value } : c));
+      return;
+    }
+    const parentPath = path.slice(0, -1);
+    const idx = path[path.length - 1];
+    setCoreChapters(prev => updateAtPath(prev, parentPath,
+      (children) => children.map((c, i) => i === idx ? { ...c, [field]: value } : c)));
+  };
+  const addControlToChapter = (path) => {
+    if (path.length === 1) {
+      setCoreChapters(prev => prev.map((c, i) =>
+        i === path[0] ? { ...c, controls: [...(c.controls || []), { ref_id: "", name: "", description: "" }] } : c));
+      return;
+    }
+    const parentPath = path.slice(0, -1);
+    const idx = path[path.length - 1];
+    setCoreChapters(prev => updateAtPath(prev, parentPath,
+      (children) => children.map((c, i) =>
+        i === idx ? { ...c, controls: [...(c.controls || []), { ref_id: "", name: "", description: "" }] } : c)));
+  };
+  const updateControlAt = (path, ctrlIdx, field, value) => {
+    const apply = (chapter) => ({
+      ...chapter,
+      controls: chapter.controls.map((c, i) => i === ctrlIdx ? { ...c, [field]: value } : c)
+    });
+    if (path.length === 1) {
+      setCoreChapters(prev => prev.map((c, i) => i === path[0] ? apply(c) : c));
+      return;
+    }
+    const parentPath = path.slice(0, -1);
+    const idx = path[path.length - 1];
+    setCoreChapters(prev => updateAtPath(prev, parentPath,
+      (children) => children.map((c, i) => i === idx ? apply(c) : c)));
+  };
+  const removeControlAt = (path, ctrlIdx) => {
+    const apply = (chapter) => ({
+      ...chapter,
+      controls: chapter.controls.filter((_, i) => i !== ctrlIdx)
+    });
+    if (path.length === 1) {
+      setCoreChapters(prev => prev.map((c, i) => i === path[0] ? apply(c) : c));
+      return;
+    }
+    const parentPath = path.slice(0, -1);
+    const idx = path[path.length - 1];
+    setCoreChapters(prev => updateAtPath(prev, parentPath,
+      (children) => children.map((c, i) => i === idx ? apply(c) : c)));
+  };
+
+  const addFamily = () =>
+    setAnnexFamilies(prev => [...prev, { ref_id: "", name: "", description: "", controls: [] }]);
+  const removeFamily = (idx) =>
+    setAnnexFamilies(prev => prev.filter((_, i) => i !== idx));
+  const updateFamily = (idx, field, value) =>
+    setAnnexFamilies(prev => prev.map((f, i) => i === idx ? { ...f, [field]: value } : f));
+  const addAnnexControl = (idx) =>
+    setAnnexFamilies(prev => prev.map((f, i) =>
+      i === idx ? { ...f, controls: [...f.controls, { ref_id: "", name: "", description: "" }] } : f));
+  const updateAnnexControl = (idx, ctrlIdx, field, value) =>
+    setAnnexFamilies(prev => prev.map((f, i) => i === idx ? {
+      ...f, controls: f.controls.map((c, j) => j === ctrlIdx ? { ...c, [field]: value } : c)
+    } : f));
+  const removeAnnexControl = (idx, ctrlIdx) =>
+    setAnnexFamilies(prev => prev.map((f, i) => i === idx ? {
+      ...f, controls: f.controls.filter((_, j) => j !== ctrlIdx)
+    } : f));
+
+  const validateChapter = (ch) => {
+    if (!ch.title?.trim()) return "Each core chapter must have a title";
+    for (const c of ch.controls || []) {
+      if (!c.name?.trim()) return "Each control must have a name";
+    }
+    for (const sub of ch.children || []) {
+      const err = validateChapter(sub);
+      if (err) return err;
+    }
+    return null;
+  };
+
+  const handleSubmit = async () => {
+    if (!meta.name.trim()) return alert("Framework name is required");
+    if (coreChapters.length === 0) return alert("At least one core chapter is required");
+    for (const ch of coreChapters) {
+      const err = validateChapter(ch);
+      if (err) return alert(err);
+    }
+    for (const f of annexFamilies) {
+      if (!f.name?.trim()) return alert("Each annex family must have a name");
+      for (const c of f.controls) {
+        if (!c.name?.trim()) return alert("Each annex control must have a name");
+      }
+    }
+
+    setSubmitting(true);
+    try {
+      await onConfirm({
+        name: meta.name,
+        version: meta.version,
+        provider: meta.provider,
+        description: meta.description,
+        coreChapters,
+        annexFamilies,
+      });
+      onClose();
+    } catch (e) {
+      alert("Error: " + e.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const renderChapter = (ch, path, depth = 0) => (
+    <div key={path.join("-")} style={{
+      marginLeft: depth * 16, marginBottom: 10,
+      padding: 12, border: `1.5px solid ${C.border}`, borderRadius: 10,
+      background: depth === 0 ? `${C.accent}07` : C.card,
+    }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: C.purple }}>
+          {depth === 0 ? "Chapter" : `Sub-chapter L${depth}`}
+        </span>
+        <button onClick={() => removeChapterAt(path)} style={{
+          marginLeft: "auto", background: "transparent", border: `1px solid ${C.danger}`,
+          color: C.danger, padding: "2px 8px", borderRadius: 4, fontSize: 10, cursor: "pointer",
+        }}>Remove</button>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: 8, marginBottom: 6 }}>
+        <input placeholder="Ref (e.g. 4.1)" value={ch.ref_id}
+          onChange={(e) => updateChapterAt(path, "ref_id", e.target.value)}
+          style={{ padding: "6px 10px", border: `1.5px solid ${C.border}`, borderRadius: 8, fontSize: 12 }} />
+        <input placeholder="Title" value={ch.title}
+          onChange={(e) => updateChapterAt(path, "title", e.target.value)}
+          style={{ padding: "6px 10px", border: `1.5px solid ${C.border}`, borderRadius: 8, fontSize: 12 }} />
+      </div>
+      <textarea placeholder="Description (optional)" value={ch.description} rows={2}
+        onChange={(e) => updateChapterAt(path, "description", e.target.value)}
+        style={{ width: "100%", padding: "6px 10px", border: `1.5px solid ${C.border}`,
+                 borderRadius: 8, fontSize: 12, marginBottom: 8, resize: "vertical" }} />
+
+      {(ch.controls || []).map((ctrl, ci) => (
+        <div key={ci} style={{
+          display: "grid", gridTemplateColumns: "100px 1fr 1fr auto", gap: 6,
+          marginBottom: 4, padding: 6, background: "#F0FDF4", borderRadius: 6,
+        }}>
+          <input placeholder="Ref" value={ctrl.ref_id}
+            onChange={(e) => updateControlAt(path, ci, "ref_id", e.target.value)}
+            style={{ padding: "4px 8px", border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 11 }} />
+          <input placeholder="Control name" value={ctrl.name}
+            onChange={(e) => updateControlAt(path, ci, "name", e.target.value)}
+            style={{ padding: "4px 8px", border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 11 }} />
+          <input placeholder="Description" value={ctrl.description}
+            onChange={(e) => updateControlAt(path, ci, "description", e.target.value)}
+            style={{ padding: "4px 8px", border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 11 }} />
+          <button onClick={() => removeControlAt(path, ci)} style={{
+            background: "transparent", border: "none", color: C.danger,
+            cursor: "pointer", padding: "0 6px",
+          }}><X size={12} /></button>
+        </div>
+      ))}
+
+      <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+        <button onClick={() => addControlToChapter(path)} style={{
+          padding: "4px 10px", border: `1px dashed ${C.success}`, background: "transparent",
+          color: C.success, borderRadius: 6, fontSize: 11, cursor: "pointer",
+        }}>+ Control</button>
+        <button onClick={() => addSubChapter(path)} style={{
+          padding: "4px 10px", border: `1px dashed ${C.purple}`, background: "transparent",
+          color: C.purple, borderRadius: 6, fontSize: 11, cursor: "pointer",
+        }}>+ Sub-chapter</button>
+      </div>
+
+      {(ch.children || []).map((sub, i) => renderChapter(sub, [...path, i], depth + 1))}
+    </div>
+  );
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 1000,
+      background: "rgba(10,20,50,.45)", backdropFilter: "blur(4px)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      overflow: "auto", padding: 20,
+    }} onClick={onClose}>
+      <div style={{
+        background: C.card, borderRadius: 16, width: 820, maxWidth: "95vw",
+        maxHeight: "92vh", overflow: "auto",
+        boxShadow: "0 24px 60px rgba(59,111,255,.18)",
+        border: `1px solid ${C.border}`,
+      }} onClick={(e) => e.stopPropagation()}>
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "20px 24px 16px", borderBottom: `1px solid ${C.border}`,
+          position: "sticky", top: 0, background: C.card, zIndex: 1,
+        }}>
+          <span style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 18, fontWeight: 700, color: C.text }}>
+            Add Custom Framework
+          </span>
+          <button onClick={onClose} style={{
+            background: "none", border: "none", cursor: "pointer", color: C.muted, padding: 4,
+          }}><X size={18} /></button>
+        </div>
+
+        <div style={{ padding: 24 }}>
+          <p style={{ fontSize: 13, color: C.muted, marginBottom: 16 }}>
+            Build your own framework. The Core part is mandatory and cannot be excepted.
+            The Annex part is optional and supports exceptions.
+          </p>
+
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 10, marginBottom: 12 }}>
+            <input placeholder="Framework name *" value={meta.name}
+              onChange={(e) => setMeta({ ...meta, name: e.target.value })}
+              style={{ padding: "10px 12px", border: `1.5px solid ${C.border}`, borderRadius: 10, fontSize: 13 }} />
+            <input placeholder="Version" value={meta.version}
+              onChange={(e) => setMeta({ ...meta, version: e.target.value })}
+              style={{ padding: "10px 12px", border: `1.5px solid ${C.border}`, borderRadius: 10, fontSize: 13 }} />
+            <input placeholder="Provider" value={meta.provider}
+              onChange={(e) => setMeta({ ...meta, provider: e.target.value })}
+              style={{ padding: "10px 12px", border: `1.5px solid ${C.border}`, borderRadius: 10, fontSize: 13 }} />
+          </div>
+          <textarea placeholder="Description (optional)" value={meta.description} rows={2}
+            onChange={(e) => setMeta({ ...meta, description: e.target.value })}
+            style={{ width: "100%", padding: "10px 12px", border: `1.5px solid ${C.border}`,
+                     borderRadius: 10, fontSize: 13, marginBottom: 16, resize: "vertical" }} />
+
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+              <span style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 15, fontWeight: 700, color: C.accent }}>
+                Core Chapters <span style={{ fontSize: 11, color: C.danger }}>* mandatory</span>
+              </span>
+              <button onClick={() =>
+                setCoreChapters(prev => [...prev, { ref_id: "", title: "", description: "", controls: [], children: [] }])}
+                style={{
+                  padding: "6px 14px", borderRadius: 8, border: "none",
+                  background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
+                  color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer",
+                }}>+ Chapter</button>
+            </div>
+            {coreChapters.map((ch, i) => renderChapter(ch, [i], 0))}
+          </div>
+
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+              <span style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 15, fontWeight: 700, color: C.purple }}>
+                Annex Families <span style={{ fontSize: 11, color: C.muted }}>(optional, exceptions allowed)</span>
+              </span>
+              <button onClick={addFamily} style={{
+                padding: "6px 14px", borderRadius: 8, border: `1px solid ${C.purple}`,
+                background: "transparent", color: C.purple, fontSize: 12, fontWeight: 600, cursor: "pointer",
+              }}>+ Family</button>
+            </div>
+            {annexFamilies.map((fam, fi) => (
+              <div key={fi} style={{
+                marginBottom: 10, padding: 12, border: `1.5px solid ${C.border}`,
+                borderRadius: 10, background: `${C.purple}07`,
+              }}>
+                <div style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: C.purple }}>Family</span>
+                  <button onClick={() => removeFamily(fi)} style={{
+                    marginLeft: "auto", background: "transparent", border: `1px solid ${C.danger}`,
+                    color: C.danger, padding: "2px 8px", borderRadius: 4, fontSize: 10, cursor: "pointer",
+                  }}>Remove</button>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: 8, marginBottom: 6 }}>
+                  <input placeholder="Ref (e.g. A.5)" value={fam.ref_id}
+                    onChange={(e) => updateFamily(fi, "ref_id", e.target.value)}
+                    style={{ padding: "6px 10px", border: `1.5px solid ${C.border}`, borderRadius: 8, fontSize: 12 }} />
+                  <input placeholder="Family name" value={fam.name}
+                    onChange={(e) => updateFamily(fi, "name", e.target.value)}
+                    style={{ padding: "6px 10px", border: `1.5px solid ${C.border}`, borderRadius: 8, fontSize: 12 }} />
+                </div>
+                <textarea placeholder="Description (optional)" value={fam.description} rows={2}
+                  onChange={(e) => updateFamily(fi, "description", e.target.value)}
+                  style={{ width: "100%", padding: "6px 10px", border: `1.5px solid ${C.border}`,
+                           borderRadius: 8, fontSize: 12, marginBottom: 8, resize: "vertical" }} />
+                {fam.controls.map((ctrl, ci) => (
+                  <div key={ci} style={{
+                    display: "grid", gridTemplateColumns: "100px 1fr 1fr auto", gap: 6,
+                    marginBottom: 4, padding: 6, background: "#F0FDF4", borderRadius: 6,
+                  }}>
+                    <input placeholder="Ref" value={ctrl.ref_id}
+                      onChange={(e) => updateAnnexControl(fi, ci, "ref_id", e.target.value)}
+                      style={{ padding: "4px 8px", border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 11 }} />
+                    <input placeholder="Control name" value={ctrl.name}
+                      onChange={(e) => updateAnnexControl(fi, ci, "name", e.target.value)}
+                      style={{ padding: "4px 8px", border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 11 }} />
+                    <input placeholder="Description" value={ctrl.description}
+                      onChange={(e) => updateAnnexControl(fi, ci, "description", e.target.value)}
+                      style={{ padding: "4px 8px", border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 11 }} />
+                    <button onClick={() => removeAnnexControl(fi, ci)} style={{
+                      background: "transparent", border: "none", color: C.danger, cursor: "pointer", padding: "0 6px",
+                    }}><X size={12} /></button>
+                  </div>
+                ))}
+                <button onClick={() => addAnnexControl(fi)} style={{
+                  padding: "4px 10px", border: `1px dashed ${C.success}`, background: "transparent",
+                  color: C.success, borderRadius: 6, fontSize: 11, cursor: "pointer", marginTop: 6,
+                }}>+ Control</button>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
+            <button onClick={onClose} style={{
+              padding: "10px 20px", borderRadius: 8, border: `1.5px solid ${C.border}`,
+              background: "transparent", cursor: "pointer", fontSize: 13,
+            }}>Cancel</button>
+            <button onClick={handleSubmit} disabled={submitting} style={{
+              padding: "10px 24px", borderRadius: 8, border: "none",
+              background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
+              color: "#fff", cursor: submitting ? "wait" : "pointer", fontSize: 13, fontWeight: 600,
+            }}>{submitting ? "Saving..." : "Create Framework"}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Tree components
+// ============================================================
+const hasMeaningfulText = (s) => {
+  if (!s) return false;
+  const t = String(s).trim();
+  return t.length > 0 && t !== "Untitled" && t !== "No description provided";
+};
+
 const ControlItem = ({ item, isExcepted, onAddException, isAnnex, isParentExcepted, standardId, onRefresh }) => {
   const [open, setOpen] = useState(false);
   const [showExceptionModal, setShowExceptionModal] = useState(false);
   const [exceptionReason, setExceptionReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const hasDesc = item.description?.length > 0;
+
+  const hasDesc = hasMeaningfulText(item.description);
   const effectivelyExcepted = isParentExcepted || isExcepted;
 
   const handleAddException = async () => {
     if (!exceptionReason.trim()) return;
-    
     setIsSubmitting(true);
     try {
       await onAddException({
@@ -574,16 +672,10 @@ const ControlItem = ({ item, isExcepted, onAddException, isAnnex, isParentExcept
         name: item.name,
         title: item.name
       }, exceptionReason, standardId);
-      
       setShowExceptionModal(false);
       setExceptionReason("");
-      
-      if (onRefresh) {
-        await onRefresh(); // 🔥 IMPORTANT
-      }
-            
+      if (onRefresh) await onRefresh();
     } catch (error) {
-      console.error("Error adding exception:", error);
       alert("Error adding exception: " + error.message);
     } finally {
       setIsSubmitting(false);
@@ -594,40 +686,38 @@ const ControlItem = ({ item, isExcepted, onAddException, isAnnex, isParentExcept
     <>
       <div style={{ marginLeft: 40, marginBottom: 6 }}>
         <div style={{
-          padding: "6px 10px",
+          padding: "8px 12px",
           borderLeft: `3px solid ${effectivelyExcepted ? C.warning : C.success}`,
           background: effectivelyExcepted ? "#FEFCE8" : "#F0FDF4",
           borderRadius: 6,
           display: "flex",
-          alignItems: "center",
+          alignItems: "flex-start",
           justifyContent: "space-between",
           flexWrap: "wrap",
           gap: 8,
         }}>
-          <div style={{ display: "flex", gap: 6, alignItems: "center", flex: 1, cursor: hasDesc ? "pointer" : "default" }}
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flex: 1, cursor: hasDesc ? "pointer" : "default", flexWrap: "wrap" }}
             onClick={() => hasDesc && setOpen(!open)}>
             {hasDesc && (
-              <ChevronRight size={12} style={{ transform: open ? "rotate(90deg)" : "rotate(0)", transition: "0.2s" }} />
+              <ChevronRight size={12} style={{ transform: open ? "rotate(90deg)" : "rotate(0)", transition: "0.2s", flexShrink: 0 }} />
             )}
-            <span style={{ fontSize: 11, fontWeight: 700, color: C.accent, fontFamily: "monospace" }}>
-              {item.ref_id}
+            <span style={{ fontSize: 11, fontWeight: 700, color: C.accent, fontFamily: "monospace", flexShrink: 0 }}>
+              {item.ref_id || "N/A"}
             </span>
-            <span style={{ fontSize: 12, fontWeight: 600 }}>{item.name}</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{item.name}</span>
             {!effectivelyExcepted && (
-              <span style={{ fontSize: 9, background: C.success, color: "#fff", padding: "1px 6px", borderRadius: 10 }}>Imported</span>
+              <span style={{ fontSize: 9, background: C.success, color: "#fff", padding: "2px 8px", borderRadius: 10, flexShrink: 0 }}>Imported</span>
             )}
             {effectivelyExcepted && (
-              <span style={{ fontSize: 9, background: C.warning, color: "#fff", padding: "1px 6px", borderRadius: 10 }}>Exception</span>
+              <span style={{ fontSize: 9, background: C.warning, color: "#fff", padding: "2px 8px", borderRadius: 10, flexShrink: 0 }}>Exception</span>
             )}
           </div>
-          <div style={{ display: "flex", gap: 6 }}>
+          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
             {isAnnex && !effectivelyExcepted && !isParentExcepted && (
               <button onClick={() => setShowExceptionModal(true)} style={{
                 padding: "2px 8px", borderRadius: 4, border: `1px solid ${C.warning}`,
                 background: "transparent", color: C.warning, fontSize: 10, cursor: "pointer",
-              }}>
-                Add Exception
-              </button>
+              }}>Add Exception</button>
             )}
             {effectivelyExcepted && !isParentExcepted && (
               <span style={{ fontSize: 10, color: C.warning, fontStyle: "italic" }}>Excepted</span>
@@ -637,10 +727,18 @@ const ControlItem = ({ item, isExcepted, onAddException, isAnnex, isParentExcept
             )}
           </div>
         </div>
+
         {open && hasDesc && (
-          <p style={{ marginTop: 6, fontSize: 12, color: C.muted, lineHeight: 1.5, paddingLeft: 20 }}>
-            {item.description}
-          </p>
+          <div style={{
+            marginTop: 8, marginLeft: 24,
+            padding: "10px 14px",
+            background: "#F8FAFF", borderRadius: 8,
+            borderLeft: `3px solid ${C.accent}`,
+          }}>
+            <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, margin: 0, whiteSpace: "pre-wrap" }}>
+              {item.description}
+            </p>
+          </div>
         )}
       </div>
 
@@ -701,19 +799,17 @@ const ControlItem = ({ item, isExcepted, onAddException, isAnnex, isParentExcept
   );
 };
 
-// ── Sub Chapter ──
 const SubChapter = ({ sub, exceptedControlIds, onAddException, isAnnex, isParentExcepted, standardId, onRefresh }) => {
   const [open, setOpen] = useState(false);
   const [showExceptionModal, setShowExceptionModal] = useState(false);
   const [exceptionReason, setExceptionReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const hasDesc = sub.description?.length > 0;
+  const hasDesc = hasMeaningfulText(sub.description);
   const isExcepted = exceptedControlIds.has(String(sub.id));
   const effectivelyExcepted = isParentExcepted || isExcepted;
 
   const handleAddException = async () => {
     if (!exceptionReason.trim()) return;
-    
     setIsSubmitting(true);
     try {
       await onAddException({
@@ -722,13 +818,10 @@ const SubChapter = ({ sub, exceptedControlIds, onAddException, isAnnex, isParent
         title: sub.title,
         items: sub.items
       }, exceptionReason, standardId);
-      
       setShowExceptionModal(false);
       setExceptionReason("");
       if (onRefresh) await onRefresh();
-      
     } catch (error) {
-      console.error("Error adding exception:", error);
       alert("Error adding exception: " + error.message);
     } finally {
       setIsSubmitting(false);
@@ -766,7 +859,19 @@ const SubChapter = ({ sub, exceptedControlIds, onAddException, isAnnex, isParent
                 {sub.description}
               </p>
             )}
-            {sub.items?.map((item) => (
+            {(sub.children || []).map((nested) => (
+              <SubChapter
+                key={nested.id}
+                sub={nested}
+                exceptedControlIds={exceptedControlIds}
+                onAddException={onAddException}
+                isAnnex={isAnnex}
+                isParentExcepted={effectivelyExcepted}
+                standardId={standardId}
+                onRefresh={onRefresh}
+              />
+            ))}
+            {(sub.items || []).map((item) => (
               <ControlItem
                 key={item.id}
                 item={item}
@@ -842,19 +947,18 @@ const SubChapter = ({ sub, exceptedControlIds, onAddException, isAnnex, isParent
   );
 };
 
-// ── Chapter Section ──
 const ChapterSection = ({ chapter, exceptedControlIds, onAddException, isAnnex, isParentExcepted, standardId, onRefresh }) => {
   const [open, setOpen] = useState(false);
   const [showExceptionModal, setShowExceptionModal] = useState(false);
   const [exceptionReason, setExceptionReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const hasDesc = chapter.description?.length > 0;
+
+  const hasDesc = hasMeaningfulText(chapter.description);
   const isExcepted = exceptedControlIds.has(String(chapter.id));
   const effectivelyExcepted = isParentExcepted || isExcepted;
 
   const handleAddException = async () => {
     if (!exceptionReason.trim()) return;
-
     setIsSubmitting(true);
     try {
       await onAddException({
@@ -864,13 +968,10 @@ const ChapterSection = ({ chapter, exceptedControlIds, onAddException, isAnnex, 
         children: chapter.children,
         items: chapter.items
       }, exceptionReason, standardId);
-
       setShowExceptionModal(false);
       setExceptionReason("");
       if (onRefresh) await onRefresh();
-      
     } catch (error) {
-      console.error("Error adding chapter exception:", error);
       alert("Error adding chapter exception: " + error.message);
     } finally {
       setIsSubmitting(false);
@@ -881,17 +982,17 @@ const ChapterSection = ({ chapter, exceptedControlIds, onAddException, isAnnex, 
     <>
       <div style={{ marginBottom: 12 }}>
         <div onClick={() => setOpen(!open)} style={{
-          padding: "8px 12px",
+          padding: "10px 14px",
           background: open ? "#E9EEFF" : "#F3F6FF",
-          borderRadius: 8, cursor: "pointer", fontWeight: 700, fontSize: 13,
+          borderRadius: 10, cursor: "pointer", fontWeight: 700, fontSize: 13,
           display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
         }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, flexWrap: "wrap" }}>
             <ChevronRight size={12} style={{ transform: open ? "rotate(90deg)" : "rotate(0)" }} />
             <span style={{ fontWeight: 700, color: effectivelyExcepted ? C.warning : C.purple }}>{chapter.ref_id}</span>
-            <span>{chapter.title}</span>
+            <span style={{ color: C.text }}>{chapter.title}</span>
             {effectivelyExcepted && (
-              <span style={{ fontSize: 9, background: C.warning, color: "#fff", padding: "1px 6px", borderRadius: 10 }}>Exception</span>
+              <span style={{ fontSize: 9, background: C.warning, color: "#fff", padding: "2px 8px", borderRadius: 10 }}>Exception</span>
             )}
           </div>
           {isAnnex && !effectivelyExcepted && !isParentExcepted && (
@@ -903,12 +1004,21 @@ const ChapterSection = ({ chapter, exceptedControlIds, onAddException, isAnnex, 
         </div>
 
         {open && (
-          <div style={{ marginLeft: 16, marginTop: 8 }}>
+          <div style={{ marginLeft: 16, marginTop: 12 }}>
             {hasDesc && (
-              <p style={{ fontSize: 12, color: C.muted, marginBottom: 12, paddingLeft: 8, borderLeft: `2px solid ${C.accent}30` }}>
-                {chapter.description}
-              </p>
+              <div style={{
+                marginBottom: 16,
+                padding: "12px 16px",
+                background: "#F8FAFF",
+                borderRadius: 8,
+                borderLeft: `3px solid ${C.purple}`,
+              }}>
+                <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, margin: 0, whiteSpace: "pre-wrap" }}>
+                  {chapter.description}
+                </p>
+              </div>
             )}
+
             {chapter.children?.map((sub) => (
               <SubChapter
                 key={sub.id}
@@ -994,32 +1104,50 @@ const ChapterSection = ({ chapter, exceptedControlIds, onAddException, isAnnex, 
   );
 };
 
-// ── Level 1 Section ──
 const Level1Section = ({ section, exceptedControlIds, onAddException, standardId, onRefresh }) => {
   const [open, setOpen] = useState(true);
-  
-  const isAnnex = section?.title?.toLowerCase()?.includes("annex") || section?.isAnnex === true;
+  const isAnnex = section.isAnnex === true || section?.title?.toLowerCase()?.includes("annex");
   const color = isAnnex ? C.purple : C.accent;
+
+  const hasContent = (section.children && section.children.length > 0) ||
+                     (section.items && section.items.length > 0);
 
   return (
     <div style={{ marginBottom: 14 }}>
       <div onClick={() => setOpen(!open)} style={{
-        padding: "10px 14px", borderRadius: 8, cursor: "pointer",
+        padding: "12px 14px", borderRadius: 8, cursor: "pointer",
         display: "flex", alignItems: "center", gap: 10,
         background: `linear-gradient(135deg, ${color}15, ${color}05)`,
       }}>
         <ChevronDown size={14} color={color} style={{ transform: open ? "rotate(0)" : "rotate(-90deg)" }} />
         <Shield size={14} color={color} />
         <span style={{ fontWeight: 800 }}>{section.title}</span>
+        {!isAnnex && (
+          <span style={{ fontSize: 9, background: C.danger, color: "#fff", padding: "1px 8px", borderRadius: 12, marginLeft: 8 }}>
+            Mandatory
+          </span>
+        )}
         {isAnnex && (
           <span style={{ fontSize: 9, background: C.warning, color: "#fff", padding: "1px 8px", borderRadius: 12, marginLeft: 8 }}>
-            Exceptions allowed
+            Optional · Exceptions allowed
           </span>
         )}
       </div>
 
       {open && (
         <div style={{ paddingLeft: 12, marginTop: 6 }}>
+          {hasMeaningfulText(section.description) && (
+            <p style={{ fontSize: 12, color: C.muted, padding: "8px 4px", margin: 0, lineHeight: 1.5 }}>
+              {section.description}
+            </p>
+          )}
+          {!hasContent && (
+            <div style={{ padding: "20px 12px", color: C.muted, fontSize: 12, fontStyle: "italic" }}>
+              {isAnnex
+                ? "This framework has no annex content."
+                : "No core chapters found."}
+            </div>
+          )}
           {section.children?.map((ch) => (
             <ChapterSection
               key={ch.id}
@@ -1050,7 +1178,9 @@ const Level1Section = ({ section, exceptedControlIds, onAddException, standardId
   );
 };
 
-// ── Package Card ──
+// ============================================================
+// PackageCard
+// ============================================================
 const PackageCard = ({ standard, onImportFramework, onUnimportFramework, onAddException, isImported, refreshExceptions }) => {
   const [open, setOpen] = useState(isImported);
   const [hierarchy, setHierarchy] = useState(null);
@@ -1069,82 +1199,37 @@ const PackageCard = ({ standard, onImportFramework, onUnimportFramework, onAddEx
   }, [isImported, standard?.id, refreshExceptions]);
 
   useEffect(() => {
-      if (!isImported) return;
+    if (!isImported) return;
 
-      const loadHierarchy = async () => {
-          setLoading(true);
-          try {
-              const response = await fetch(`http://localhost:3000/api/ciso/packages/${standard.id}/hierarchy`, {
-                  credentials: "include"
-              });
-              
-              if (!response.ok) {
-                  throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-              }
-              
-              const data = await response.json();
-              console.log("Hierarchy data received:", data); // Debug
-              
-              // Vérifier si data.hierarchy existe
-              if (data && data.hierarchy) {
-                  setHierarchy(data);
-              } else if (data && (data.coreChapters || data.families)) {
-                  // Si le backend retourne un format différent, le convertir
-                  const convertedHierarchy = { hierarchy: [] };
-                  
-                  if (data.coreChapters && data.coreChapters.length > 0) {
-                      convertedHierarchy.hierarchy.push({
-                          id: "core",
-                          title: "Core Chapters",
-                          description: "Main framework chapters",
-                          isAnnex: false,
-                          children: data.coreChapters.map(ch => ({
-                              id: ch.id,
-                              ref_id: ch.ref || `CH-${ch.id}`,
-                              title: ch.title,
-                              description: ch.description || "",
-                              children: [],
-                              items: []
-                          })),
-                          items: []
-                      });
-                  }
-                  
-                  if (data.families && data.families.length > 0) {
-                      data.families.forEach(family => {
-                          convertedHierarchy.hierarchy.push({
-                              id: family.id,
-                              title: family.name,
-                              description: family.description || "",
-                              isAnnex: true,
-                              children: [],
-                              items: (family.controls || []).map(control => ({
-                                  id: control.id,
-                                  ref_id: control.ref_id,
-                                  name: control.name,
-                                  description: control.description || ""
-                              }))
-                          });
-                      });
-                  }
-                  
-                  setHierarchy(convertedHierarchy);
-              } else {
-                  console.warn("Unexpected data format:", data);
-                  setHierarchy({ hierarchy: [] });
-              }
-              
-          } catch (error) {
-              console.error("Error loading hierarchy:", error);
-              setHierarchy({ hierarchy: [] });
-          } finally {
-              setLoading(false);
-          }
-      };
+    const loadHierarchy = async () => {
+      setLoading(true);
+      try {
+        const response = await fetch(
+          `http://localhost:3000/api/ciso/packages/${standard.id}/hierarchy`,
+          { credentials: "include" }
+        );
+        if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        const data = await response.json();
 
-      loadHierarchy();
-      loadExceptions();
-  }, [standard.id, isImported, refreshKey]);
+        // The backend always returns a normalized { hierarchy: [Core, Annex] } shape now.
+        if (data && Array.isArray(data.hierarchy)) {
+          setHierarchy(data);
+        } else {
+          console.warn("Unexpected hierarchy response:", data);
+          setHierarchy({ hierarchy: [] });
+        }
+      } catch (error) {
+        console.error("Error loading hierarchy:", error);
+        setHierarchy({ hierarchy: [] });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadHierarchy();
+    loadExceptions();
+  }, [standard.id, isImported, refreshKey, loadExceptions]);
+
   const handleRefresh = useCallback(async () => {
     await loadExceptions();
     setRefreshKey(prev => prev + 1);
@@ -1153,7 +1238,7 @@ const PackageCard = ({ standard, onImportFramework, onUnimportFramework, onAddEx
   const exceptedControlIds = new Set(
     exceptions.map(e => String(e.policyId || e.entity_id || e.id))
   );
-  
+
   const totalControls = standard.controls_count || 0;
   const exceptionsCount = exceptions.length;
 
@@ -1237,7 +1322,9 @@ const PackageCard = ({ standard, onImportFramework, onUnimportFramework, onAddEx
   );
 };
 
-// ── Main Page ──
+// ============================================================
+// Main page
+// ============================================================
 export default function Policies() {
   const [availableFrameworks, setAvailableFrameworks] = useState([]);
   const [importedFrameworkIds, setImportedFrameworkIds] = useState(new Set());
@@ -1246,20 +1333,20 @@ export default function Policies() {
   const [removeModal, setRemoveModal] = useState(null);
   const [addFrameworkModal, setAddFrameworkModal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [addCustomModal, setAddCustomModal] = useState(false);
 
   const fetchAllFrameworks = async () => {
     try {
-      const response = await fetch("http://localhost:3000/api/ciso/packages", { 
-        credentials: "include" 
+      const response = await fetch("http://localhost:3000/api/ciso/packages", {
+        credentials: "include"
       });
-      
       if (response.ok) {
         const frameworks = await response.json();
-        setAvailableFrameworks(frameworks.map(fw => ({ 
-          ...fw, 
-          source: 'scraped', 
-          type: 'scraped', 
-          id: String(fw.id) 
+        setAvailableFrameworks(frameworks.map(fw => ({
+          ...fw,
+          source: 'scraped',
+          type: 'scraped',
+          id: String(fw.id)
         })));
       }
     } catch (error) {
@@ -1269,10 +1356,9 @@ export default function Policies() {
 
   const fetchImportedFrameworks = async () => {
     try {
-      const response = await fetch("http://localhost:3000/api/framauditor/imported-policies", { 
-        credentials: "include" 
+      const response = await fetch("http://localhost:3000/api/framauditor/imported-policies", {
+        credentials: "include"
       });
-      
       if (response.ok) {
         const data = await response.json();
         setImportedFrameworkIds(new Set(data.map(pkg => String(pkg.id))));
@@ -1285,14 +1371,10 @@ export default function Policies() {
   const fetchExceptions = useCallback(async (standardId) => {
     if (!standardId) return [];
     try {
-      const response = await fetch(`http://localhost:3000/api/framauditor/exceptions/${standardId}`, { 
-        credentials: "include" 
+      const response = await fetch(`http://localhost:3000/api/framauditor/exceptions/${standardId}`, {
+        credentials: "include"
       });
-      
-      if (response.ok) {
-        const data = await response.json();
-        return data;
-      }
+      if (response.ok) return await response.json();
     } catch (error) {
       console.error("Error fetching exceptions:", error);
     }
@@ -1304,8 +1386,6 @@ export default function Policies() {
     try {
       await fetchAllFrameworks();
       await fetchImportedFrameworks();
-    } catch (error) {
-      console.error("Error refreshing data:", error);
     } finally {
       setRefreshing(false);
     }
@@ -1322,10 +1402,7 @@ export default function Policies() {
 
   const handleImportFramework = async (framework) => {
     try {
-      if (!framework?.id) {
-        throw new Error("Invalid framework ID");
-      }
-
+      if (!framework?.id) throw new Error("Invalid framework ID");
       const response = await fetch("http://localhost:3000/api/framauditor/import-policy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1336,17 +1413,13 @@ export default function Policies() {
           version: framework.version || "1.0"
         })
       });
-
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.error || "Import failed");
       }
-
       await fetchImportedFrameworks();
       alert("Framework imported successfully!");
-      
     } catch (error) {
-      console.error("Import error:", error);
       alert(error.message);
     }
   };
@@ -1359,46 +1432,58 @@ export default function Policies() {
         credentials: "include",
         body: JSON.stringify({ policyId: framework.id })
       });
-      
       if (!response.ok) throw new Error("Unimport failed");
-      
       await fetchImportedFrameworks();
       alert("Framework removed successfully!");
-      
     } catch (error) {
-      console.error("Unimport error:", error);
       alert("Error removing framework: " + error.message);
     }
   };
 
-  const handleAddFramework = async (frameworkData) => {
+  const handleAddFramework = async (scrapeData) => {
     try {
-      const response = await fetch("http://localhost:3000/api/framauditor/add-custom-framework", {
-        method: "POST", 
-        headers: { "Content-Type": "application/json" }, 
+      const response = await fetch("http://localhost:3000/api/scraper/scrape", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(frameworkData)
+        body: JSON.stringify(scrapeData)
       });
-      
-      if (!response.ok) throw new Error("Failed to add framework");
-      
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to scrape framework");
+      }
       const result = await response.json();
-      console.log("Framework added successfully:", result);
-      
       await refreshAllData();
-      
       if (result.id) {
-        await handleImportFramework({ 
-          id: result.id, 
-          name: frameworkData.name, 
-          version: frameworkData.version,
-          source: 'custom',
-          type: 'custom'
+        await handleImportFramework({
+          id: result.id,
+          name: scrapeData.name,
+          version: scrapeData.version,
+          source: 'scraped',
+          type: 'scraped'
         });
       }
     } catch (error) {
-      console.error("Error adding framework:", error);
       throw error;
+    }
+  };
+
+  const handleAddCustomFramework = async (payload) => {
+    const response = await fetch("http://localhost:3000/api/framauditor/add-custom-framework", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      alert(`Backend error ${response.status}: ${text}`);
+      throw new Error(text || "Failed to create framework");
+    }
+    const result = await response.json();
+    await refreshAllData();
+    if (result.id) {
+      await handleImportFramework({ id: result.id, name: payload.name, version: payload.version });
     }
   };
 
@@ -1406,7 +1491,6 @@ export default function Policies() {
     try {
       let level = "control";
       if (item.children) level = "chapter";
-      
       const response = await fetch("http://localhost:3000/api/framauditor/add-exception", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1419,22 +1503,18 @@ export default function Policies() {
           standardId
         })
       });
-      
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.error || "Failed to add exception");
       }
-      
       alert("Exception added successfully!");
-      
     } catch (error) {
-      console.error("Error adding exception:", error);
       alert(error.message);
       throw error;
     }
   };
 
-  const filteredFrameworks = availableFrameworks.filter(fw => 
+  const filteredFrameworks = availableFrameworks.filter(fw =>
     fw.name?.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -1446,9 +1526,9 @@ export default function Policies() {
         input:focus, textarea:focus { border-color: #3B6FFF !important; box-shadow: 0 0 0 3px rgba(59,111,241,.13); }
       `}</style>
 
-      <div style={{ 
-        padding: "0 36px", display: "flex", alignItems: "center", 
-        justifyContent: "space-between", height: 64, position: "sticky", 
+      <div style={{
+        padding: "0 36px", display: "flex", alignItems: "center",
+        justifyContent: "space-between", height: 64, position: "sticky",
         top: 0, zIndex: 100, background: C.bg, borderBottom: `1px solid ${C.border}`
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
@@ -1456,55 +1536,50 @@ export default function Policies() {
             Policies Library
           </span>
           <div style={{ position: "relative" }}>
-            <Search size={16} style={{ 
-              position: "absolute", left: 10, top: "50%", 
-              transform: "translateY(-50%)", color: C.muted 
+            <Search size={16} style={{
+              position: "absolute", left: 10, top: "50%",
+              transform: "translateY(-50%)", color: C.muted
             }} />
-            <input 
-              placeholder="Search frameworks..." 
-              value={search} 
-              onChange={(e) => setSearch(e.target.value)} 
-              style={{ 
-                padding: "8px 12px 8px 32px", borderRadius: 10, 
-                border: `1.5px solid ${C.border}`, width: 250, 
-                fontSize: 13, background: C.card 
-              }} 
+            <input
+              placeholder="Search frameworks..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{
+                padding: "8px 12px 8px 32px", borderRadius: 10,
+                border: `1.5px solid ${C.border}`, width: 250,
+                fontSize: 13, background: C.card
+              }}
             />
           </div>
         </div>
         <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-          <button 
-            onClick={refreshAllData} 
-            disabled={refreshing} 
-            style={{ 
-              display: "flex", alignItems: "center", gap: 6, 
-              padding: "6px 12px", borderRadius: 8, border: `1px solid ${C.border}`, 
-              background: "transparent", cursor: refreshing ? "wait" : "pointer", 
-              fontSize: 13, color: C.muted 
+          
+          <button
+            onClick={() => setAddFrameworkModal(true)}
+            style={{
+              display: "flex", alignItems: "center", gap: 8,
+              padding: "8px 10px", borderRadius: 10, border: "none",
+              background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
+              color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer"
             }}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" 
-              stroke="currentColor" strokeWidth="2" 
-              style={{ animation: refreshing ? "spin 1s linear infinite" : "none" }}>
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-              <circle cx="12" cy="12" r="3"/>
-            </svg>
-            Refresh
+            <Plus size={16} /> Scrape Framework
           </button>
-          <button 
-            onClick={() => setAddFrameworkModal(true)} 
-            style={{ 
-              display: "flex", alignItems: "center", gap: 8, 
-              padding: "8px 18px", borderRadius: 10, border: "none", 
-              background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`, 
-              color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" 
+          <button
+            onClick={() => setAddCustomModal(true)}
+            style={{
+              display: "flex", alignItems: "center", gap: 8,
+              padding: "8px 18px", borderRadius: 10,
+              border: `1.5px solid ${C.accent}`,
+              background: "transparent", color: C.accent,
+              fontSize: 13, fontWeight: 600, cursor: "pointer",
             }}
           >
-            <Plus size={16} /> Add Framework
+            <Plus size={16} /> Add Custom Framework
           </button>
-          <div style={{ 
-            display: "flex", alignItems: "center", gap: 8, 
-            background: C.chip, padding: "4px 12px", borderRadius: 20 
+          <div style={{
+            display: "flex", alignItems: "center", gap: 8,
+            background: C.chip, padding: "4px 12px", borderRadius: 20
           }}>
             <CheckCircle size={12} color={C.success} />
             <span style={{ fontSize: 12, fontWeight: 600, color: C.accent }}>
@@ -1517,11 +1592,11 @@ export default function Policies() {
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "32px 24px" }}>
         {loading && (
           <div style={{ textAlign: "center", padding: 60 }}>
-            <div style={{ 
-              width: 48, height: 48, 
-              border: `3px solid ${C.border}`, borderTopColor: C.accent, 
-              borderRadius: "50%", animation: "spin 0.8s linear infinite", 
-              margin: "0 auto" 
+            <div style={{
+              width: 48, height: 48,
+              border: `3px solid ${C.border}`, borderTopColor: C.accent,
+              borderRadius: "50%", animation: "spin 0.8s linear infinite",
+              margin: "0 auto"
             }} />
           </div>
         )}
@@ -1546,22 +1621,28 @@ export default function Policies() {
         ))}
       </div>
 
-      {addFrameworkModal && (
-        <AddFrameworkModal 
-          onClose={() => setAddFrameworkModal(false)} 
-          onConfirm={handleAddFramework} 
+      {addCustomModal && (
+        <AddCustomFrameworkModal
+          onClose={() => setAddCustomModal(false)}
+          onConfirm={handleAddCustomFramework}
         />
       )}
-      
+      {addFrameworkModal && (
+        <ScrapeFrameworkModal
+          onClose={() => setAddFrameworkModal(false)}
+          onConfirm={handleAddFramework}
+        />
+      )}
+
       {removeModal && (
-        <div style={{ 
-          position: "fixed", inset: 0, zIndex: 1000, 
-          background: "rgba(10,20,50,.45)", backdropFilter: "blur(4px)", 
-          display: "flex", alignItems: "center", justifyContent: "center" 
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 1000,
+          background: "rgba(10,20,50,.45)", backdropFilter: "blur(4px)",
+          display: "flex", alignItems: "center", justifyContent: "center"
         }} onClick={() => setRemoveModal(null)}>
-          <div style={{ 
-            background: C.card, borderRadius: 16, width: 440, maxWidth: "95vw", 
-            boxShadow: "0 24px 60px rgba(59,111,255,.18)", border: `1px solid ${C.border}` 
+          <div style={{
+            background: C.card, borderRadius: 16, width: 440, maxWidth: "95vw",
+            boxShadow: "0 24px 60px rgba(59,111,255,.18)", border: `1px solid ${C.border}`
           }} onClick={(e) => e.stopPropagation()}>
             <div style={{ padding: "20px 24px 16px", borderBottom: `1px solid ${C.border}` }}>
               <span style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 18, fontWeight: 700, color: C.danger }}>
@@ -1574,23 +1655,23 @@ export default function Policies() {
                 This will also remove all exceptions for this framework.
               </p>
               <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 20 }}>
-                <button 
-                  onClick={() => setRemoveModal(null)} 
-                  style={{ 
-                    padding: "8px 16px", borderRadius: 8, border: `1px solid ${C.border}`, 
-                    background: "transparent", cursor: "pointer" 
+                <button
+                  onClick={() => setRemoveModal(null)}
+                  style={{
+                    padding: "8px 16px", borderRadius: 8, border: `1px solid ${C.border}`,
+                    background: "transparent", cursor: "pointer"
                   }}
                 >
                   Cancel
                 </button>
-                <button 
-                  onClick={async () => { 
-                    await handleUnimportFramework(removeModal.target); 
-                    setRemoveModal(null); 
-                  }} 
-                  style={{ 
-                    padding: "8px 20px", borderRadius: 8, border: "none", 
-                    background: C.danger, color: "#fff", cursor: "pointer" 
+                <button
+                  onClick={async () => {
+                    await handleUnimportFramework(removeModal.target);
+                    setRemoveModal(null);
+                  }}
+                  style={{
+                    padding: "8px 20px", borderRadius: 8, border: "none",
+                    background: C.danger, color: "#fff", cursor: "pointer"
                   }}
                 >
                   Confirm Remove

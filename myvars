@@ -1,0 +1,7 @@
+export DJANGO_DEBUG=True
+export CISO_ASSISTANT_URL=http://localhost:5173
+# Configuration mail (optionnel)
+export EMAIL_HOST=localhost
+export EMAIL_PORT=1025
+export EMAIL_USE_TLS=True
+export EMAIL_USE_SSL=False

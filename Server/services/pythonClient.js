@@ -1,4 +1,19 @@
 // backend/services/pythonClient.js
+// =====================================================================
+//  CPU-optimized config for mistral:7b on a machine without GPU.
+//  Goal: analyze ALL detected policies (up to 12) as fast as a CPU
+//  realistically allows.
+//
+//  ⚠️  Edit OLLAMA_NUM_THREAD below — set it to your CPU's number of
+//      PHYSICAL CORES (not threads). To find that on Windows:
+//        Task Manager → Performance → CPU → "Cores" line
+//      Examples:
+//        Ryzen 5 5600  → 6
+//        Ryzen 7 5700  → 8
+//        i5-12400      → 6 (P-cores) — set 6
+//        i7-13700      → 8 (P-cores) — set 8
+//      If unsure, leave "0" (auto).
+// =====================================================================
 import { spawn } from "child_process";
 import fs from "fs";
 import os from "os";
@@ -6,12 +21,10 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname  = path.dirname(__filename);
 
-const PYTHON_DIR =
-  process.env.PYTHON_DIR ||
-  "C:\\Users\\stagiaire\\Desktop\\Ollama\\Ollama";
-const PYTHON_BIN = process.env.PYTHON_BIN || "python";
+const PYTHON_DIR    = process.env.PYTHON_DIR    || "c:\\Users\\stagiaire\\Desktop\\Ollama\\Ollama";
+const PYTHON_BIN    = process.env.PYTHON_BIN    || "python";
 const PYTHON_SCRIPT = path.join(PYTHON_DIR, "main.py");
 
 // 2 hours by default
@@ -41,18 +54,36 @@ export function analyzeDocumentWithPython({
     const env = {
       ...process.env,
       PYTHONIOENCODING: "utf-8",
-      OLLAMA_BATCH_SIZE: process.env.OLLAMA_BATCH_SIZE || "3",
-      OLLAMA_TIMEOUT: process.env.OLLAMA_TIMEOUT || "300",
-      MAX_DOC_CHARS: process.env.MAX_DOC_CHARS || "2500",
-      MAX_POLICIES: process.env.MAX_POLICIES || "5",
-      USE_RAG: process.env.USE_RAG || "1",
-      OLLAMA_MODEL: process.env.OLLAMA_MODEL || "mistral:7b",
-      MODE: process.env.MODE || "per_policy",
+
+      // ─── coverage (analyze ALL detected policies) ──────────────────
+      MAX_POLICIES:            process.env.MAX_POLICIES            || "12",
+
+      // ─── LLM speed knobs (CPU-tuned) ───────────────────────────────
+      OLLAMA_MODEL:            process.env.OLLAMA_MODEL            || "mistral:7b",
+      OLLAMA_BATCH_SIZE:       process.env.OLLAMA_BATCH_SIZE       || "6",
+      OLLAMA_NUM_PREDICT:      process.env.OLLAMA_NUM_PREDICT      || "200",
+      OLLAMA_NUM_CTX:          process.env.OLLAMA_NUM_CTX          || "2048",
+      OLLAMA_NUM_THREAD:       process.env.OLLAMA_NUM_THREAD       || "8",  // ← set to your physical core count
+      OLLAMA_TIMEOUT:          process.env.OLLAMA_TIMEOUT          || "300",
+      OLLAMA_PARALLEL:         process.env.OLLAMA_PARALLEL         || "1",  // CPU: keep at 1
+      MAX_DOC_CHARS:           process.env.MAX_DOC_CHARS           || "3500",
+      MAX_POLICY_CHARS:        process.env.MAX_POLICY_CHARS        || "1100",
+
+      // ─── biggest CPU saver: only assess relevant items per policy ──
+      FILTER_ITEMS_PER_POLICY: process.env.FILTER_ITEMS_PER_POLICY || "1",
+
+      // ─── RAG (gives the LLM the official ISO/NIST wording) ────────
+      USE_RAG:                 process.env.USE_RAG                 || "1",
+
+      // ─── analysis mode ────────────────────────────────────────────
+      MODE:                    process.env.MODE                    || "per_policy",
     };
 
     console.log(
       `[pythonClient] timeout=${NODE_SIDE_TIMEOUT_MS / 60000} min, ` +
-      `batch=${env.OLLAMA_BATCH_SIZE}, max_policies=${env.MAX_POLICIES}, RAG=${env.USE_RAG}`
+      `model=${env.OLLAMA_MODEL}, batch=${env.OLLAMA_BATCH_SIZE}, ` +
+      `max_policies=${env.MAX_POLICIES}, filter=${env.FILTER_ITEMS_PER_POLICY}, ` +
+      `RAG=${env.USE_RAG}, threads=${env.OLLAMA_NUM_THREAD}`
     );
 
     const proc = spawn(PYTHON_BIN, [PYTHON_SCRIPT, documentPath, payloadPath], {
@@ -88,7 +119,7 @@ export function analyzeDocumentWithPython({
     proc.on("close", (code) => {
       clearTimeout(killTimer);
 
-      // 1) Try regular stdout JSON (full success)
+      // 1) regular stdout JSON
       const jsonText = extractLastJson(stdout);
       if (jsonText) {
         try {
@@ -100,7 +131,7 @@ export function analyzeDocumentWithPython({
         }
       }
 
-      // 2) Try the checkpoint — works even if Python was killed mid-run
+      // 2) checkpoint recovery
       if (fs.existsSync(checkpointPath)) {
         try {
           const ck = JSON.parse(fs.readFileSync(checkpointPath, "utf-8"));
@@ -121,7 +152,7 @@ export function analyzeDocumentWithPython({
         }
       }
 
-      // 3) Total failure
+      // 3) total failure
       cleanup(payloadPath, checkpointPath);
       if (killedByTimeout) {
         return reject(new Error(

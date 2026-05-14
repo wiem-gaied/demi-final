@@ -40,6 +40,7 @@ export default function AuthModal() {
           ) : (
             <LoginPage />
           )}
+          
         </div>
       </div>
     </>

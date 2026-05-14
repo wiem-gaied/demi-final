@@ -24,6 +24,7 @@ import About from "./pages/About.jsx"
 import Contact from "./pages/Contact.jsx";
 import Profile from "./pages/Profile.jsx";
 import Settingsprofile from "./pages/Settingsprofile.jsx";
+import ProtectedRoute from "./components/ProtectedRoute";
 
 
 
@@ -75,7 +76,7 @@ const App = () => {
    
 
         
-
+      <Route element={<ProtectedRoute />}>
         <Route path="/layout/*" element={isAuditor ? <Layout /> : <Navigate to="/" />}>
         <Route index element={<Dashboard />} />
         
@@ -102,6 +103,8 @@ const App = () => {
         
       
         </Route>
+      </Route>
+      <Route element={<ProtectedRoute />}>
         
         <Route
         path="/admin/*"
@@ -113,6 +116,7 @@ const App = () => {
           <Route path="frameworks" element={<Frameworks />} />
           <Route path="logs" element={<Logs />} />
       </Route>
+    </Route>
       <Route path="*" element={<Navigate to="/" />} />
       
       
