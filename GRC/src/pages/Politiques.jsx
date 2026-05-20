@@ -1,12 +1,8 @@
 // politique.jsx
-// Same visual design as before. All strings in English.
-// Renders Core (mandatory) and Annex (optional) sections strictly per framework,
-// with descriptions visible at chapter / sub-chapter / control level.
-
 import { useState, useEffect, useCallback } from "react";
 import {
   Shield, Search, ChevronDown, ChevronRight, Plus,
-  CheckCircle, X, AlertCircle, Database
+  CheckCircle, X, AlertCircle, Database, Trash2
 } from "lucide-react";
 
 // ── Inline icons ─────────────────────────────────────────────────────────────
@@ -17,9 +13,7 @@ const Icon = ({ d, size = 16, color = "currentColor" }) => (
   </svg>
 );
 
-const icons = {
-  close: "M18 6L6 18M6 6l12 12",
-};
+const icons = { close: "M18 6L6 18M6 6l12 12" };
 
 // ── Palette ──────────────────────────────────────────────────────────────────
 const C = {
@@ -31,10 +25,146 @@ const C = {
   text:    "#1E2A4A",
   muted:   "#64748B",
   success: "#10B981",
-  warning: "#F59E0B",
+  warning: "#061585",
   danger:  "#EF4444",
   chip:    "#EEF2FF",
 };
+
+// ── Toast system (centré, branded) ───────────────────────────────────────────
+const _toastListeners = new Set();
+let _toastIdCounter = 0;
+function showToast(toast) {
+  const id = ++_toastIdCounter;
+  const t = { id, type: "success", duration: 4000, ...toast };
+  _toastListeners.forEach(fn => fn(t));
+  return id;
+}
+
+function ToastContainer() {
+  const [toasts, setToasts] = useState([]);
+  useEffect(() => {
+    const handler = (toast) => {
+      setToasts(prev => [...prev, toast]);
+      if (toast.duration > 0) {
+        setTimeout(() => {
+          setToasts(prev => prev.filter(t => t.id !== toast.id));
+        }, toast.duration);
+      }
+    };
+    _toastListeners.add(handler);
+    return () => _toastListeners.delete(handler);
+  }, []);
+  const dismiss = (id) => setToasts(prev => prev.filter(t => t.id !== id));
+
+  return (
+    <div style={{
+      position: "fixed", top: 24, left: "50%", transform: "translateX(-50%)",
+      zIndex: 2000, display: "flex", flexDirection: "column", gap: 12,
+      pointerEvents: "none", width: "min(480px, 92vw)",
+    }}>
+      {toasts.map(t => (
+        <ToastItem key={t.id} toast={t} onDismiss={() => dismiss(t.id)} />
+      ))}
+    </div>
+  );
+}
+
+function ToastItem({ toast, onDismiss }) {
+  const variants = {
+    success: { color: "#22C55E", soft: "#F0FDF4", Icon: CheckCircle },
+    error:   { color: C.danger,  soft: "#FEF2F2", Icon: AlertCircle },
+    info:    { color: C.accent,  soft: C.chip,    Icon: AlertCircle },
+    warning: { color: "#D97706", soft: "#FFFBEB", Icon: AlertCircle },
+  };
+  const v = variants[toast.type] || variants.success;
+  const Ico = v.Icon;
+
+  return (
+    <div style={{
+      pointerEvents: "auto",
+      display: "flex", alignItems: "flex-start", gap: 14,
+      padding: "16px 18px",
+      background: C.card,
+      border: `1px solid ${C.border}`,
+      borderLeft: `4px solid ${v.color}`,
+      borderRadius: 12,
+      boxShadow: "0 20px 50px rgba(15,23,42,0.16)",
+      fontSize: 13, width: "100%",
+      animation: "toastDown 0.28s cubic-bezier(0.16,1,0.3,1)",
+    }}>
+      <div style={{
+        width: 36, height: 36, borderRadius: 10,
+        background: v.soft,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        flexShrink: 0,
+      }}>
+        <Ico size={20} color={v.color} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          color: C.text, fontWeight: 700, fontSize: 14, lineHeight: 1.35,
+          fontFamily: "Fraunces, Georgia, serif",
+        }}>
+          {toast.title}
+        </div>
+        {toast.message && (
+          <div style={{
+            color: C.muted, marginTop: 4, lineHeight: 1.5,
+            wordBreak: "break-word", fontSize: 13,
+          }}>
+            {toast.message}
+          </div>
+        )}
+      </div>
+      <button
+        onClick={onDismiss}
+        aria-label="close"
+        style={{
+          background: "transparent", border: "none", cursor: "pointer",
+          color: C.muted, padding: 4, marginTop: 2, borderRadius: 6,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          flexShrink: 0,
+        }}
+        onMouseEnter={e => e.currentTarget.style.color = C.text}
+        onMouseLeave={e => e.currentTarget.style.color = C.muted}
+      >
+        <X size={16} />
+      </button>
+    </div>
+  );
+}
+
+// ── Toggle switch ────────────────────────────────────────────────────────────
+function ToggleSwitch({ checked, onChange, disabled, title }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      title={title || (checked ? "Imported — click to remove" : "Click to import")}
+      disabled={disabled}
+      onClick={(e) => { e.stopPropagation(); if (!disabled) onChange(!checked); }}
+      style={{
+        position: "relative", width: 44, height: 24, borderRadius: 12,
+        border: "none",
+        background: checked
+          ? `linear-gradient(135deg, ${C.accent}, ${C.purple})`
+          : "#CBD5E1",
+        cursor: disabled ? "not-allowed" : "pointer",
+        transition: "background .2s", flexShrink: 0,
+        opacity: disabled ? 0.6 : 1,
+        boxShadow: checked ? "0 4px 12px rgba(59,111,255,0.25)" : "none",
+      }}
+    >
+      <div style={{
+        position: "absolute", top: 3, left: checked ? 23 : 3,
+        width: 18, height: 18, borderRadius: "50%", background: "#fff",
+        transition: "left .2s",
+        boxShadow: "0 1px 4px rgba(0,0,0,0.2)",
+      }} />
+    </button>
+  );
+}
 
 // ============================================================
 // Modal — Scrape framework
@@ -80,7 +210,6 @@ function ScrapeFrameworkModal({ onClose, onConfirm }) {
   }, []);
 
   const selected = availableFrameworks.find(f => f.id === selectedId);
-
   const filtered = availableFrameworks.filter(f => {
     const q = search.toLowerCase();
     return (
@@ -97,7 +226,7 @@ function ScrapeFrameworkModal({ onClose, onConfirm }) {
 
   const handleSubmit = async () => {
     if (!selected) {
-      alert("Please select a framework to scrape");
+      showToast({ type: "warning", title: "No framework selected", message: "Please select a framework to scrape." });
       return;
     }
     setIsScraping(true);
@@ -112,7 +241,7 @@ function ScrapeFrameworkModal({ onClose, onConfirm }) {
       onClose();
     } catch (error) {
       console.error("Error scraping framework:", error);
-      alert("Error scraping framework: " + error.message);
+      showToast({ type: "error", title: "Scraping failed", message: error.message });
     } finally {
       setIsScraping(false);
     }
@@ -135,7 +264,7 @@ function ScrapeFrameworkModal({ onClose, onConfirm }) {
           display: "flex", alignItems: "center", justifyContent: "space-between",
           padding: "20px 24px 16px", borderBottom: `1px solid ${C.border}`,
         }}>
-          <span style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 18, fontWeight: 700, color: C.text }}>
+          <span style={{  fontSize: 18, fontWeight: 700, color: C.text }}>
             Scrape Security Framework
           </span>
           <button onClick={onClose} style={{
@@ -247,22 +376,7 @@ function ScrapeFrameworkModal({ onClose, onConfirm }) {
 
           {selected && selected.versions.length > 0 && (
             <div style={{ marginBottom: 16 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: C.muted, marginBottom: 6 }}>
-                Version
-              </label>
-              <select
-                value={selectedVersion}
-                onChange={(e) => setSelectedVersion(e.target.value)}
-                style={{
-                  width: "100%", padding: "10px 14px",
-                  border: `1.5px solid ${C.border}`, borderRadius: 10,
-                  fontSize: 14, outline: "none", background: C.card,
-                }}
-              >
-                {selected.versions.map(v => (
-                  <option key={v} value={v}>{v}</option>
-                ))}
-              </select>
+              
             </div>
           )}
 
@@ -283,7 +397,7 @@ function ScrapeFrameworkModal({ onClose, onConfirm }) {
                 opacity: (!selected || loadingList) ? 0.6 : 1,
               }}
             >
-              {isScraping ? "Scraping..." : "Start Scraping"}
+              {isScraping ? "Loading" : "Start "}
             </button>
           </div>
         </div>
@@ -407,16 +521,31 @@ function AddCustomFrameworkModal({ onClose, onConfirm }) {
   };
 
   const handleSubmit = async () => {
-    if (!meta.name.trim()) return alert("Framework name is required");
-    if (coreChapters.length === 0) return alert("At least one core chapter is required");
+    if (!meta.name.trim()) {
+      showToast({ type: "error", title: "Validation error", message: "Framework name is required." });
+      return;
+    }
+    if (coreChapters.length === 0) {
+      showToast({ type: "error", title: "Validation error", message: "At least one core chapter is required." });
+      return;
+    }
     for (const ch of coreChapters) {
       const err = validateChapter(ch);
-      if (err) return alert(err);
+      if (err) {
+        showToast({ type: "error", title: "Validation error", message: err });
+        return;
+      }
     }
     for (const f of annexFamilies) {
-      if (!f.name?.trim()) return alert("Each annex family must have a name");
+      if (!f.name?.trim()) {
+        showToast({ type: "error", title: "Validation error", message: "Each annex family must have a name." });
+        return;
+      }
       for (const c of f.controls) {
-        if (!c.name?.trim()) return alert("Each annex control must have a name");
+        if (!c.name?.trim()) {
+          showToast({ type: "error", title: "Validation error", message: "Each annex control must have a name." });
+          return;
+        }
       }
     }
 
@@ -432,7 +561,7 @@ function AddCustomFrameworkModal({ onClose, onConfirm }) {
       });
       onClose();
     } catch (e) {
-      alert("Error: " + e.message);
+      showToast({ type: "error", title: "Failed to create framework", message: e.message });
     } finally {
       setSubmitting(false);
     }
@@ -559,7 +688,7 @@ function AddCustomFrameworkModal({ onClose, onConfirm }) {
                 setCoreChapters(prev => [...prev, { ref_id: "", title: "", description: "", controls: [], children: [] }])}
                 style={{
                   padding: "6px 14px", borderRadius: 8, border: "none",
-                  background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
+                  background: `linear-gradient(135deg, ${C.accent}, ${C.warning})`,
                   color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer",
                 }}>+ Chapter</button>
             </div>
@@ -653,8 +782,35 @@ const hasMeaningfulText = (s) => {
   return t.length > 0 && t !== "Untitled" && t !== "No description provided";
 };
 
+function refSegments(ref) {
+  return String(ref || "").split(".").map(s => s.trim()).filter(Boolean);
+}
+function compareRefIds(a, b) {
+  const sa = refSegments(a), sb = refSegments(b);
+  const annexA = sa.length > 0 && isNaN(Number(sa[0]));
+  const annexB = sb.length > 0 && isNaN(Number(sb[0]));
+  if (annexA !== annexB) return annexA ? 1 : -1;
+  const n = Math.max(sa.length, sb.length);
+  for (let i = 0; i < n; i++) {
+    const x = sa[i], y = sb[i];
+    if (x === undefined) return -1;
+    if (y === undefined) return 1;
+    const nx = Number(x), ny = Number(y);
+    if (!isNaN(nx) && !isNaN(ny)) { if (nx !== ny) return nx - ny; }
+    else if (x !== y) return x < y ? -1 : 1;
+  }
+  return 0;
+}
+function orderedTreeNodes(children, items) {
+  const merged = [
+    ...(children || []).map(node => ({ kind: "chapter", node })),
+    ...(items || []).map(node => ({ kind: "control", node })),
+  ];
+  merged.sort((a, b) => compareRefIds(a.node.ref_id, b.node.ref_id));
+  return merged;
+}
+
 const ControlItem = ({ item, isExcepted, onAddException, isAnnex, isParentExcepted, standardId, onRefresh }) => {
-  const [open, setOpen] = useState(false);
   const [showExceptionModal, setShowExceptionModal] = useState(false);
   const [exceptionReason, setExceptionReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -676,7 +832,7 @@ const ControlItem = ({ item, isExcepted, onAddException, isAnnex, isParentExcept
       setExceptionReason("");
       if (onRefresh) await onRefresh();
     } catch (error) {
-      alert("Error adding exception: " + error.message);
+      showToast({ type: "error", title: "Failed to add exception", message: error.message });
     } finally {
       setIsSubmitting(false);
     }
@@ -684,62 +840,30 @@ const ControlItem = ({ item, isExcepted, onAddException, isAnnex, isParentExcept
 
   return (
     <>
-      <div style={{ marginLeft: 40, marginBottom: 6 }}>
-        <div style={{
-          padding: "8px 12px",
-          borderLeft: `3px solid ${effectivelyExcepted ? C.warning : C.success}`,
-          background: effectivelyExcepted ? "#FEFCE8" : "#F0FDF4",
-          borderRadius: 6,
-          display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: 8,
-        }}>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flex: 1, cursor: hasDesc ? "pointer" : "default", flexWrap: "wrap" }}
-            onClick={() => hasDesc && setOpen(!open)}>
+      <div style={{ marginLeft: 24, marginBottom: 16, paddingLeft: 14, borderLeft: `1px solid ${C.border}` }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: effectivelyExcepted ? C.warning : C.text }}>
+              {item.ref_id || "N/A"} - {item.name}
+              {effectivelyExcepted && (
+                <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, color: C.warning }}>
+                  · {isParentExcepted ? "Inherited from chapter" : "Exception"}
+                </span>
+              )}
+            </div>
             {hasDesc && (
-              <ChevronRight size={12} style={{ transform: open ? "rotate(90deg)" : "rotate(0)", transition: "0.2s", flexShrink: 0 }} />
-            )}
-            <span style={{ fontSize: 11, fontWeight: 700, color: C.accent, fontFamily: "monospace", flexShrink: 0 }}>
-              {item.ref_id || "N/A"}
-            </span>
-            <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{item.name}</span>
-            {!effectivelyExcepted && (
-              <span style={{ fontSize: 9, background: C.success, color: "#fff", padding: "2px 8px", borderRadius: 10, flexShrink: 0 }}>Imported</span>
-            )}
-            {effectivelyExcepted && (
-              <span style={{ fontSize: 9, background: C.warning, color: "#fff", padding: "2px 8px", borderRadius: 10, flexShrink: 0 }}>Exception</span>
+              <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, margin: "4px 0 0", whiteSpace: "pre-wrap" }}>
+                {item.description}
+              </p>
             )}
           </div>
-          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-            {isAnnex && !effectivelyExcepted && !isParentExcepted && (
-              <button onClick={() => setShowExceptionModal(true)} style={{
-                padding: "2px 8px", borderRadius: 4, border: `1px solid ${C.warning}`,
-                background: "transparent", color: C.warning, fontSize: 10, cursor: "pointer",
-              }}>Add Exception</button>
-            )}
-            {effectivelyExcepted && !isParentExcepted && (
-              <span style={{ fontSize: 10, color: C.warning, fontStyle: "italic" }}>Excepted</span>
-            )}
-            {isParentExcepted && (
-              <span style={{ fontSize: 10, color: C.muted, fontStyle: "italic" }}>Inherited from chapter</span>
-            )}
-          </div>
+          {isAnnex && !effectivelyExcepted && !isParentExcepted && (
+            <button onClick={() => setShowExceptionModal(true)} style={{
+              padding: "2px 8px", borderRadius: 4, border: `1px solid ${C.warning}`,
+              background: "transparent", color: C.warning, fontSize: 10, cursor: "pointer", flexShrink: 0,
+            }}>Add Exception</button>
+          )}
         </div>
-
-        {open && hasDesc && (
-          <div style={{
-            marginTop: 8, marginLeft: 24,
-            padding: "10px 14px",
-            background: "#F8FAFF", borderRadius: 8,
-            borderLeft: `3px solid ${C.accent}`,
-          }}>
-            <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, margin: 0, whiteSpace: "pre-wrap" }}>
-              {item.description}
-            </p>
-          </div>
-        )}
       </div>
 
       {showExceptionModal && (
@@ -822,7 +946,7 @@ const SubChapter = ({ sub, exceptedControlIds, onAddException, isAnnex, isParent
       setExceptionReason("");
       if (onRefresh) await onRefresh();
     } catch (error) {
-      alert("Error adding exception: " + error.message);
+      showToast({ type: "error", title: "Failed to add exception", message: error.message });
     } finally {
       setIsSubmitting(false);
     }
@@ -830,59 +954,62 @@ const SubChapter = ({ sub, exceptedControlIds, onAddException, isAnnex, isParent
 
   return (
     <>
-      <div style={{ marginLeft: 20, marginBottom: 8 }}>
+      <div style={{ marginLeft: 20, marginBottom: 14 }}>
         <div onClick={() => setOpen(!open)} style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          gap: 6, fontWeight: 600, fontSize: 13, color: C.text,
-          cursor: "pointer", padding: "4px 0",
+          display: "flex", alignItems: "flex-start", justifyContent: "space-between",
+          gap: 8, cursor: "pointer",
         }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
-            <ChevronRight size={12} style={{ transform: open ? "rotate(90deg)" : "rotate(0)" }} />
-            <span style={{ fontWeight: 700, color: effectivelyExcepted ? C.warning : C.purple }}>{sub.ref_id}</span>
-            <span>{sub.title}</span>
-            {effectivelyExcepted && (
-              <span style={{ fontSize: 9, background: C.warning, color: "#fff", padding: "1px 6px", borderRadius: 10 }}>Exception</span>
-            )}
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 8, flex: 1, minWidth: 0 }}>
+            <ChevronRight size={13} style={{ marginTop: 3, flexShrink: 0, transition: "0.15s", color: C.muted, transform: open ? "rotate(90deg)" : "rotate(0)" }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: effectivelyExcepted ? C.warning : C.text }}>
+                {sub.ref_id} - {sub.title}
+                {effectivelyExcepted && (
+                  <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, color: C.warning }}>· Exception</span>
+                )}
+              </div>
+              {hasDesc && (
+                <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, margin: "4px 0 0", whiteSpace: "pre-wrap" }}>
+                  {sub.description}
+                </p>
+              )}
+            </div>
           </div>
           {isAnnex && !effectivelyExcepted && !isParentExcepted && (
             <button onClick={(e) => { e.stopPropagation(); setShowExceptionModal(true); }} style={{
               padding: "2px 8px", borderRadius: 4, border: `1px solid ${C.warning}`,
-              background: "transparent", color: C.warning, fontSize: 10, cursor: "pointer",
+              background: "transparent", color: C.warning, fontSize: 10, cursor: "pointer", flexShrink: 0,
             }}>Add Exception</button>
           )}
         </div>
 
         {open && (
-          <div style={{ marginLeft: 16 }}>
-            {hasDesc && (
-              <p style={{ fontSize: 11, color: C.muted, marginBottom: 8, paddingLeft: 8, borderLeft: `2px solid ${C.border}` }}>
-                {sub.description}
-              </p>
+          <div style={{ marginLeft: 16, marginTop: 10 }}>
+            {orderedTreeNodes(sub.children, sub.items).map(({ kind, node }) =>
+              kind === "chapter" ? (
+                <SubChapter
+                  key={node.id}
+                  sub={node}
+                  exceptedControlIds={exceptedControlIds}
+                  onAddException={onAddException}
+                  isAnnex={isAnnex}
+                  isParentExcepted={effectivelyExcepted}
+                  standardId={standardId}
+                  onRefresh={onRefresh}
+                />
+              ) : (
+                <ControlItem
+                  key={node.id}
+                  item={node}
+                  isExcepted={exceptedControlIds.has(String(node.id))}
+                  onAddException={onAddException}
+                  isAnnex={isAnnex}
+                  isParentExcepted={effectivelyExcepted}
+                  standardId={standardId}
+                  onRefresh={onRefresh}
+                />
+              )
             )}
-            {(sub.children || []).map((nested) => (
-              <SubChapter
-                key={nested.id}
-                sub={nested}
-                exceptedControlIds={exceptedControlIds}
-                onAddException={onAddException}
-                isAnnex={isAnnex}
-                isParentExcepted={effectivelyExcepted}
-                standardId={standardId}
-                onRefresh={onRefresh}
-              />
-            ))}
-            {(sub.items || []).map((item) => (
-              <ControlItem
-                key={item.id}
-                item={item}
-                isExcepted={exceptedControlIds.has(String(item.id))}
-                onAddException={onAddException}
-                isAnnex={isAnnex}
-                isParentExcepted={effectivelyExcepted}
-                standardId={standardId}
-                onRefresh={onRefresh}
-              />
-            ))}
           </div>
         )}
       </div>
@@ -972,7 +1099,7 @@ const ChapterSection = ({ chapter, exceptedControlIds, onAddException, isAnnex, 
       setExceptionReason("");
       if (onRefresh) await onRefresh();
     } catch (error) {
-      alert("Error adding chapter exception: " + error.message);
+      showToast({ type: "error", title: "Failed to add chapter exception", message: error.message });
     } finally {
       setIsSubmitting(false);
     }
@@ -980,69 +1107,62 @@ const ChapterSection = ({ chapter, exceptedControlIds, onAddException, isAnnex, 
 
   return (
     <>
-      <div style={{ marginBottom: 12 }}>
+      <div style={{ marginBottom: 18, marginTop: 4 }}>
         <div onClick={() => setOpen(!open)} style={{
-          padding: "10px 14px",
-          background: open ? "#E9EEFF" : "#F3F6FF",
-          borderRadius: 10, cursor: "pointer", fontWeight: 700, fontSize: 13,
-          display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
+          display: "flex", alignItems: "flex-start", justifyContent: "space-between",
+          gap: 8, cursor: "pointer",
         }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, flexWrap: "wrap" }}>
-            <ChevronRight size={12} style={{ transform: open ? "rotate(90deg)" : "rotate(0)" }} />
-            <span style={{ fontWeight: 700, color: effectivelyExcepted ? C.warning : C.purple }}>{chapter.ref_id}</span>
-            <span style={{ color: C.text }}>{chapter.title}</span>
-            {effectivelyExcepted && (
-              <span style={{ fontSize: 9, background: C.warning, color: "#fff", padding: "2px 8px", borderRadius: 10 }}>Exception</span>
-            )}
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 8, flex: 1, minWidth: 0 }}>
+            <ChevronDown size={15} style={{ marginTop: 2, flexShrink: 0, transition: "0.15s", color: C.muted, transform: open ? "rotate(0)" : "rotate(-90deg)" }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: effectivelyExcepted ? C.warning : C.text }}>
+                {chapter.ref_id} - {chapter.title}
+                {effectivelyExcepted && (
+                  <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, color: C.warning }}>· Exception</span>
+                )}
+              </div>
+              {hasDesc && (
+                <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, margin: "4px 0 0", whiteSpace: "pre-wrap" }}>
+                  {chapter.description}
+                </p>
+              )}
+            </div>
           </div>
           {isAnnex && !effectivelyExcepted && !isParentExcepted && (
             <button onClick={(e) => { e.stopPropagation(); setShowExceptionModal(true); }} style={{
               padding: "2px 8px", borderRadius: 4, border: `1px solid ${C.warning}`,
-              background: "transparent", color: C.warning, fontSize: 10, cursor: "pointer",
+              background: "transparent", color: C.warning, fontSize: 10, cursor: "pointer", flexShrink: 0,
             }}>Add Exception</button>
           )}
         </div>
 
         {open && (
           <div style={{ marginLeft: 16, marginTop: 12 }}>
-            {hasDesc && (
-              <div style={{
-                marginBottom: 16,
-                padding: "12px 16px",
-                background: "#F8FAFF",
-                borderRadius: 8,
-                borderLeft: `3px solid ${C.purple}`,
-              }}>
-                <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, margin: 0, whiteSpace: "pre-wrap" }}>
-                  {chapter.description}
-                </p>
-              </div>
+            {orderedTreeNodes(chapter.children, chapter.items).map(({ kind, node }) =>
+              kind === "chapter" ? (
+                <SubChapter
+                  key={node.id}
+                  sub={node}
+                  exceptedControlIds={exceptedControlIds}
+                  onAddException={onAddException}
+                  isAnnex={isAnnex}
+                  isParentExcepted={effectivelyExcepted}
+                  standardId={standardId}
+                  onRefresh={onRefresh}
+                />
+              ) : (
+                <ControlItem
+                  key={node.id}
+                  item={node}
+                  isExcepted={exceptedControlIds.has(String(node.id))}
+                  onAddException={onAddException}
+                  isAnnex={isAnnex}
+                  isParentExcepted={effectivelyExcepted}
+                  standardId={standardId}
+                  onRefresh={onRefresh}
+                />
+              )
             )}
-
-            {chapter.children?.map((sub) => (
-              <SubChapter
-                key={sub.id}
-                sub={sub}
-                exceptedControlIds={exceptedControlIds}
-                onAddException={onAddException}
-                isAnnex={isAnnex}
-                isParentExcepted={effectivelyExcepted}
-                standardId={standardId}
-                onRefresh={onRefresh}
-              />
-            ))}
-            {chapter.items?.map((item) => (
-              <ControlItem
-                key={item.id}
-                item={item}
-                isExcepted={exceptedControlIds.has(String(item.id))}
-                onAddException={onAddException}
-                isAnnex={isAnnex}
-                isParentExcepted={effectivelyExcepted}
-                standardId={standardId}
-                onRefresh={onRefresh}
-              />
-            ))}
           </div>
         )}
       </div>
@@ -1120,7 +1240,6 @@ const Level1Section = ({ section, exceptedControlIds, onAddException, standardId
         background: `linear-gradient(135deg, ${color}15, ${color}05)`,
       }}>
         <ChevronDown size={14} color={color} style={{ transform: open ? "rotate(0)" : "rotate(-90deg)" }} />
-        <Shield size={14} color={color} />
         <span style={{ fontWeight: 800 }}>{section.title}</span>
         {!isAnnex && (
           <span style={{ fontSize: 9, background: C.danger, color: "#fff", padding: "1px 8px", borderRadius: 12, marginLeft: 8 }}>
@@ -1148,30 +1267,31 @@ const Level1Section = ({ section, exceptedControlIds, onAddException, standardId
                 : "No core chapters found."}
             </div>
           )}
-          {section.children?.map((ch) => (
-            <ChapterSection
-              key={ch.id}
-              chapter={ch}
-              exceptedControlIds={exceptedControlIds}
-              onAddException={onAddException}
-              isAnnex={isAnnex}
-              isParentExcepted={false}
-              standardId={standardId}
-              onRefresh={onRefresh}
-            />
-          ))}
-          {section.items?.map((item) => (
-            <ControlItem
-              key={item.id}
-              item={item}
-              isExcepted={exceptedControlIds.has(String(item.id))}
-              onAddException={onAddException}
-              isAnnex={isAnnex}
-              isParentExcepted={false}
-              standardId={standardId}
-              onRefresh={onRefresh}
-            />
-          ))}
+          {orderedTreeNodes(section.children, section.items).map(({ kind, node }) =>
+            kind === "chapter" ? (
+              <ChapterSection
+                key={node.id}
+                chapter={node}
+                exceptedControlIds={exceptedControlIds}
+                onAddException={onAddException}
+                isAnnex={isAnnex}
+                isParentExcepted={false}
+                standardId={standardId}
+                onRefresh={onRefresh}
+              />
+            ) : (
+              <ControlItem
+                key={node.id}
+                item={node}
+                isExcepted={exceptedControlIds.has(String(node.id))}
+                onAddException={onAddException}
+                isAnnex={isAnnex}
+                isParentExcepted={false}
+                standardId={standardId}
+                onRefresh={onRefresh}
+              />
+            )
+          )}
         </div>
       )}
     </div>
@@ -1181,7 +1301,7 @@ const Level1Section = ({ section, exceptedControlIds, onAddException, standardId
 // ============================================================
 // PackageCard
 // ============================================================
-const PackageCard = ({ standard, onImportFramework, onUnimportFramework, onAddException, isImported, refreshExceptions }) => {
+const PackageCard = ({ standard, onImportFramework, onUnimportFramework, onDeleteFramework, onAddException, isImported, refreshExceptions }) => {
   const [open, setOpen] = useState(isImported);
   const [hierarchy, setHierarchy] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -1200,7 +1320,6 @@ const PackageCard = ({ standard, onImportFramework, onUnimportFramework, onAddEx
 
   useEffect(() => {
     if (!isImported) return;
-
     const loadHierarchy = async () => {
       setLoading(true);
       try {
@@ -1210,8 +1329,6 @@ const PackageCard = ({ standard, onImportFramework, onUnimportFramework, onAddEx
         );
         if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         const data = await response.json();
-
-        // The backend always returns a normalized { hierarchy: [Core, Annex] } shape now.
         if (data && Array.isArray(data.hierarchy)) {
           setHierarchy(data);
         } else {
@@ -1225,7 +1342,6 @@ const PackageCard = ({ standard, onImportFramework, onUnimportFramework, onAddEx
         setLoading(false);
       }
     };
-
     loadHierarchy();
     loadExceptions();
   }, [standard.id, isImported, refreshKey, loadExceptions]);
@@ -1255,13 +1371,6 @@ const PackageCard = ({ standard, onImportFramework, onUnimportFramework, onAddEx
         padding: "16px 20px", display: "flex", alignItems: "center", gap: 12,
         cursor: isImported ? "pointer" : "default",
       }}>
-        <div style={{
-          width: 40, height: 40, borderRadius: 10,
-          background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-        }}>
-          <Shield size={18} color="#fff" />
-        </div>
         <div style={{ flex: 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <div style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 17, fontWeight: 800, color: C.text }}>
@@ -1282,13 +1391,39 @@ const PackageCard = ({ standard, onImportFramework, onUnimportFramework, onAddEx
             )}
           </div>
         </div>
-        <button onClick={(e) => { e.stopPropagation(); isImported ? onUnimportFramework(standard) : onImportFramework(standard); }} style={{
-          padding: "6px 14px", borderRadius: 8, border: isImported ? `1px solid ${C.danger}` : "none",
-          background: isImported ? "transparent" : `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-          color: isImported ? C.danger : "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer",
-        }}>
-          {isImported ? "Remove" : "+ Import"}
+
+        {/* Toggle switch — import / unimport */}
+        <ToggleSwitch
+          checked={isImported}
+          onChange={(next) => {
+            if (next) onImportFramework(standard);
+            else onUnimportFramework(standard);
+          }}
+        />
+
+        {/* Trash — delete from database */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onDeleteFramework(standard); }}
+          title="Delete from database"
+          style={{
+            width: 32, height: 32, borderRadius: 8,
+            border: `1px solid ${C.border}`, background: C.card,
+            color: C.danger, cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            transition: "all .15s", flexShrink: 0,
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "#FEF2F2";
+            e.currentTarget.style.borderColor = C.danger;
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = C.card;
+            e.currentTarget.style.borderColor = C.border;
+          }}
+        >
+          <Trash2 size={14} />
         </button>
+
         {isImported && (
           <ChevronDown size={16} style={{ transform: open ? "rotate(180deg)" : "rotate(0)", transition: "transform .2s", color: C.muted }} />
         )}
@@ -1330,7 +1465,8 @@ export default function Policies() {
   const [importedFrameworkIds, setImportedFrameworkIds] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [removeModal, setRemoveModal] = useState(null);
+  const [removeModal, setRemoveModal] = useState(null);          // unimport (toggle off)
+  const [deleteDbModal, setDeleteDbModal] = useState(null);      // hard delete from DB
   const [addFrameworkModal, setAddFrameworkModal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [addCustomModal, setAddCustomModal] = useState(false);
@@ -1418,9 +1554,9 @@ export default function Policies() {
         throw new Error(error.error || "Import failed");
       }
       await fetchImportedFrameworks();
-      alert("Framework imported successfully!");
+      showToast({ type: "success", title: "Framework imported", message: "The framework was imported successfully." });
     } catch (error) {
-      alert(error.message);
+      showToast({ type: "error", title: "Import failed", message: error.message });
     }
   };
 
@@ -1434,9 +1570,31 @@ export default function Policies() {
       });
       if (!response.ok) throw new Error("Unimport failed");
       await fetchImportedFrameworks();
-      alert("Framework removed successfully!");
+      showToast({ type: "success", title: "Framework removed", message: "The framework was removed from your library." });
     } catch (error) {
-      alert("Error removing framework: " + error.message);
+      showToast({ type: "error", title: "Remove failed", message: error.message });
+    }
+  };
+
+  // Hard delete from database (trash button)
+  const handleDeleteFromDb = async (framework) => {
+    try {
+      const response = await fetch(`http://localhost:3000/api/ciso/packages/${framework.id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        throw new Error(text || `HTTP ${response.status}`);
+      }
+      await refreshAllData();
+      showToast({
+        type: "success",
+        title: "Framework deleted",
+        message: "The framework was permanently removed from the database.",
+      });
+    } catch (error) {
+      showToast({ type: "error", title: "Delete failed", message: error.message });
     }
   };
 
@@ -1477,7 +1635,7 @@ export default function Policies() {
     });
     if (!response.ok) {
       const text = await response.text();
-      alert(`Backend error ${response.status}: ${text}`);
+      showToast({ type: "error", title: `Backend error ${response.status}`, message: text });
       throw new Error(text || "Failed to create framework");
     }
     const result = await response.json();
@@ -1507,9 +1665,9 @@ export default function Policies() {
         const error = await response.json();
         throw new Error(error.error || "Failed to add exception");
       }
-      alert("Exception added successfully!");
+      showToast({ type: "success", title: "Exception added", message: "The exception was recorded." });
     } catch (error) {
-      alert(error.message);
+      showToast({ type: "error", title: "Failed", message: error.message });
       throw error;
     }
   };
@@ -1523,6 +1681,10 @@ export default function Policies() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@700;800&family=DM+Sans:wght@400;500;600;700&display=swap');
         @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes toastDown {
+          from { opacity: 0; transform: translateY(-20px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
         input:focus, textarea:focus { border-color: #3B6FFF !important; box-shadow: 0 0 0 3px rgba(59,111,241,.13); }
       `}</style>
 
@@ -1532,9 +1694,9 @@ export default function Policies() {
         top: 0, zIndex: 100, background: C.bg, borderBottom: `1px solid ${C.border}`
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
-          <span style={{ color: "#0F172A", fontSize: "26px", fontWeight: "800" }}>
+          <h1 style={{ color: "#0F172A", fontSize: 26, fontWeight: "800" }}>
             Policies Library
-          </span>
+          </h1>
           <div style={{ position: "relative" }}>
             <Search size={16} style={{
               position: "absolute", left: 10, top: "50%",
@@ -1553,17 +1715,16 @@ export default function Policies() {
           </div>
         </div>
         <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-          
           <button
             onClick={() => setAddFrameworkModal(true)}
             style={{
               display: "flex", alignItems: "center", gap: 8,
-              padding: "8px 10px", borderRadius: 10, border: "none",
-              background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
+              padding: "8px 18px", borderRadius: 10, border: "none",
+              background: `linear-gradient(135deg, ${C.accent}, ${C.warning})`,
               color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer"
             }}
           >
-            <Plus size={16} /> Scrape Framework
+            <Plus size={16} /> Import Framework
           </button>
           <button
             onClick={() => setAddCustomModal(true)}
@@ -1615,6 +1776,7 @@ export default function Policies() {
             isImported={importedFrameworkIds.has(fw.id)}
             onImportFramework={handleImportFramework}
             onUnimportFramework={(fw) => setRemoveModal({ target: fw })}
+            onDeleteFramework={(fw) => setDeleteDbModal({ target: fw })}
             onAddException={handleAddException}
             refreshExceptions={async () => fetchExceptions(fw.id)}
           />
@@ -1634,6 +1796,7 @@ export default function Policies() {
         />
       )}
 
+      {/* Confirm: unimport (toggle off) */}
       {removeModal && (
         <div style={{
           position: "fixed", inset: 0, zIndex: 1000,
@@ -1681,6 +1844,67 @@ export default function Policies() {
           </div>
         </div>
       )}
+
+      {/* Confirm: HARD delete from database */}
+      {deleteDbModal && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 1000,
+          background: "rgba(10,20,50,.45)", backdropFilter: "blur(4px)",
+          display: "flex", alignItems: "center", justifyContent: "center"
+        }} onClick={() => setDeleteDbModal(null)}>
+          <div style={{
+            background: C.card, borderRadius: 16, width: 460, maxWidth: "95vw",
+            boxShadow: "0 24px 60px rgba(239,68,68,.22)", border: `1px solid ${C.border}`
+          }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ padding: "20px 24px 16px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{
+                width: 36, height: 36, borderRadius: 10, background: "#FEF2F2",
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <Trash2 size={18} color={C.danger} />
+              </div>
+              <span style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 18, fontWeight: 700, color: C.danger }}>
+                Delete from database
+              </span>
+            </div>
+            <div style={{ padding: 24 }}>
+              <p style={{ fontSize: 14, color: C.text }}>
+                Permanently delete <strong>{deleteDbModal.target?.name}</strong> from the database?
+              </p>
+              <p style={{ fontSize: 12, color: C.muted, marginTop: 8 }}>
+                This action <strong>cannot be undone</strong>. The framework, its hierarchy,
+                imports and exceptions will all be removed.
+              </p>
+              <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 20 }}>
+                <button
+                  onClick={() => setDeleteDbModal(null)}
+                  style={{
+                    padding: "8px 16px", borderRadius: 8, border: `1px solid ${C.border}`,
+                    background: "transparent", cursor: "pointer"
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    await handleDeleteFromDb(deleteDbModal.target);
+                    setDeleteDbModal(null);
+                  }}
+                  style={{
+                    padding: "8px 20px", borderRadius: 8, border: "none",
+                    background: C.danger, color: "#fff", cursor: "pointer",
+                    fontWeight: 600,
+                  }}
+                >
+                  Permanently delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ToastContainer />
     </div>
   );
 }

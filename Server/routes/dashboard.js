@@ -1,64 +1,109 @@
-// backend/routes/dashboardRoutes.js
+// backend/routes/dashboard.js
 import express from "express";
 import db from "../db.js";
 
 const router = express.Router();
+
+// ---------------------------------------------------------------------
+// Canonicalise a messy standard id/name into one of the 3 known norms.
+// The stored standard_id is a CISO library id (e.g. "library iso2"),
+// so we look at BOTH the id and the saved standard_name to decide.
+// ---------------------------------------------------------------------
+function canonicalStandard(standardId, standardName) {
+  const s = `${standardId || ""} ${standardName || ""}`.toLowerCase();
+
+  if (s.includes("27001"))
+    return {
+      id: "international_standard_iso_iec_27001_2022",
+      name: "ISO/IEC 27001:2022",
+      short: "ISO 27001",
+      desc: "Information security",
+    };
+  if (s.includes("22301"))
+    return {
+      id: "international_standard_iso_iec_22301_2019",
+      name: "ISO/IEC 22301:2019",
+      short: "ISO 22301",
+      desc: "Business continuity",
+    };
+  if (s.includes("nist"))
+    return {
+      id: "nist_csf_2_0",
+      name: "NIST CSF 2.0",
+      short: "NIST CSF",
+      desc: "Cybersecurity Framework",
+    };
+
+  // Unknown norm — keep it visible but with a cleaned-up label
+  const clean = String(standardName || standardId || "Unknown")
+    .replace(/_/g, " ")
+    .trim();
+  return {
+    id: standardId || clean,
+    name: clean,
+    short: clean.slice(0, 14),
+    desc: "Compliance framework",
+  };
+}
 
 // =====================================================================
 // GET /api/dashboard/overview
 // =====================================================================
 router.get("/overview", async (_req, res) => {
   try {
-    // 1️⃣ Latest finalized analysis per standard + previous score (trend)
-    //    ✅ Use UNIX_TIMESTAMP() to avoid Node.js Date/timezone issues
-    const [perStd] = await db.query(`
+    // All finalized analyses (oldest -> newest) so we can group by the
+    // real norm and compute the trend vs the previous analysis.
+    const [rows] = await db.query(`
       SELECT
-        a.standard_id,
-        a.global_score,
-        DATE_FORMAT(a.created_at, '%Y-%m-%dT%H:%i:%sZ') AS created_at_str,
-        UNIX_TIMESTAMP(a.created_at)                      AS created_at_unix,
-        (
-          SELECT global_score
-          FROM   compliance_analyses
-          WHERE  standard_id = a.standard_id
-            AND  created_at  < a.created_at
-            AND  status      = 'finalized'
-          ORDER  BY created_at DESC
-          LIMIT  1
-        ) AS prev_score
-      FROM compliance_analyses a
-      INNER JOIN (
-        SELECT   standard_id, MAX(created_at) AS max_at
-        FROM     compliance_analyses
-        WHERE    standard_id IS NOT NULL
-          AND    status = 'finalized'
-        GROUP BY standard_id
-      ) lt
-        ON  lt.standard_id = a.standard_id
-        AND lt.max_at      = a.created_at
-      WHERE a.status = 'finalized'
+        standard_id,
+        standard_name,
+        global_score,
+        DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%sZ') AS created_at_str,
+        UNIX_TIMESTAMP(created_at)                    AS created_at_unix
+      FROM   compliance_analyses
+      WHERE  status = 'finalized'
+        AND  standard_id IS NOT NULL
+      ORDER  BY created_at ASC
     `);
 
-    // 2️⃣ Build standards array
-    const standards = perStd.map(r => ({
-      standard_id: r.standard_id,
-      score:       r.global_score ?? 0,
-      trend:       r.prev_score == null
-                     ? 0
-                     : (r.global_score - r.prev_score),
-      last_at:     r.created_at_str,
-      last_unix:   Number(r.created_at_unix),
-    }));
+    // Group by canonical norm, keeping the score history (ascending)
+    const groups = new Map();
+    for (const r of rows) {
+      const c = canonicalStandard(r.standard_id, r.standard_name);
+      if (!groups.has(c.id)) groups.set(c.id, { meta: c, hist: [] });
+      groups.get(c.id).hist.push({
+        score: r.global_score ?? 0,
+        str:   r.created_at_str,
+        unix:  Number(r.created_at_unix),
+      });
+    }
 
-    // 3️⃣ Global score = average of latest score per analysed standard
+    // One card per analysed norm — latest score + trend vs previous
+    const standards = [];
+    for (const { meta, hist } of groups.values()) {
+      const latest = hist[hist.length - 1];
+      const prev   = hist.length > 1 ? hist[hist.length - 2] : null;
+      standards.push({
+        standard_id:   meta.id,
+        standard_name: meta.name,
+        short_name:    meta.short,
+        description:   meta.desc,
+        score:         latest.score,
+        trend:         prev ? latest.score - prev.score : 0,
+        last_at:       latest.str,
+        last_unix:     latest.unix,
+      });
+    }
+
+    // Global score = average of each analysed norm's latest score
     const globalScore = standards.length
       ? Math.round(
           standards.reduce((sum, s) => sum + s.score, 0) / standards.length
         )
       : 0;
 
-    // 4️⃣ lastAuditDays — computed from UNIX timestamps (no timezone ambiguity)
-    //    We also query overall latest (covers analyses without standard_id)
+    // lastAuditDays — separate query so analyses without a standard_id
+    // still count towards "days since last analysis"
     const [latestRow] = await db.query(`
       SELECT UNIX_TIMESTAMP(MAX(created_at)) AS latest_unix
       FROM   compliance_analyses
@@ -67,14 +112,12 @@ router.get("/overview", async (_req, res) => {
 
     let lastAuditDays = 999;
     const latestUnix = Number(latestRow[0]?.latest_unix ?? 0);
-
     if (latestUnix > 0) {
       const nowUnix = Math.floor(Date.now() / 1000);
       lastAuditDays = Math.max(0, Math.floor((nowUnix - latestUnix) / 86_400));
     }
 
     res.json({ globalScore, lastAuditDays, standards });
-
   } catch (e) {
     console.error("dashboard overview error:", e);
     res.status(500).json({ error: e.message });
@@ -98,7 +141,8 @@ router.get("/priority-actions", async (_req, res) => {
         r.id              AS risk_id,
         r.intitule        AS risk_title,
         r.statut          AS risk_status,
-        ca.standard_id    AS norm
+        ca.standard_id    AS norm_id,
+        ca.standard_name  AS norm_name
       FROM mitigation_plans mp
       JOIN risks r
         ON mp.risk_id = r.id
@@ -112,7 +156,13 @@ router.get("/priority-actions", async (_req, res) => {
       LIMIT 50
     `);
 
-    res.json(rows);
+    // Expose the canonical norm id so the UI shows "ISO 27001" etc.
+    const out = rows.map(r => ({
+      ...r,
+      norm: r.norm_id ? canonicalStandard(r.norm_id, r.norm_name).id : null,
+    }));
+
+    res.json(out);
   } catch (e) {
     console.error("priority-actions error:", e);
     res.status(500).json({ message: "Server error" });

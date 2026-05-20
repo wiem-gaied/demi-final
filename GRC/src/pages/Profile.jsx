@@ -15,7 +15,12 @@ const iconBgMap = {
   neutral: { bg: "#dbe4ea", color: "#586065" },
   danger: { bg: "rgba(254,137,131,0.2)", color: "#9f403d" },
 };
-
+const formatAction = (action = "") => {
+  return action
+    .toLowerCase()
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+};
 function MaterialIcon({ name, filled = false, className = "" }) {
   return (
     <span
@@ -467,9 +472,9 @@ export default function Dashboard() {
         {activeTab === "profile" ? (
           // User Profile Component
           <div style={{ maxWidth: "100%", padding: 24, background: "#f8f9fb", fontFamily: "'Inter', sans-serif", color: "#2b3438" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 24 }}>
+            <div style={{ display: "flex", justifyContent: "center" }}>
               {/* LEFT COLUMN */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+              <div style={{  width: "100%", display: "flex", flexDirection: "column", gap: 24 }}>
                 {/* Header Card */}
                 <section style={{ background: "#f1f4f7", borderRadius: 12, padding: 28, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
@@ -535,7 +540,7 @@ export default function Dashboard() {
                       <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: 14, borderRadius: 8, background: "#f8f9fb" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                           <div>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: "#2b3438" }}>{log.action}</div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: "#2b3438" }}>{formatAction(log.action)}</div>
                             <div style={{ fontSize: 10, color: "#586065", marginTop: 2 }}>{log.target}</div>
                           </div>
                         </div>
@@ -553,30 +558,7 @@ export default function Dashboard() {
                 </section>
               </div>
 
-              {/* RIGHT COLUMN */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-                <section style={{ background: "#fff", borderRadius: 12, padding: 22, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
-                  <h2 style={{ fontFamily: "'Manrope', sans-serif", fontSize: 16, fontWeight: 700, display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                    <span className="material-symbols-outlined" style={{ color: "#285ab9", fontSize: 20 }}>manage_accounts</span>
-                    Role &amp; Privileges
-                  </h2>
-                  <p style={{ fontSize: 11, color: "#586065", marginBottom: 20 }}>Your current authorization level is restricted to high-tier operations.</p>
-                  <div style={{ background: "#f1f4f7", borderRadius: 8, padding: 16 }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "#586065", textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 14 }}>Access Tier Comparison</div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                      {privileges.map(({ name, auditor }) => (
-                        <div key={name} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-                          <span className="material-symbols-outlined" style={{ color: "#285ab9", fontSize: 18, flexShrink: 0, fontVariationSettings: "'FILL' 1" }}>check_circle</span>
-                          <div>
-                            <div style={{ fontSize: 12, fontWeight: 700, color: "#2b3438" }}>{name}</div>
-                            <div style={{ fontSize: 9, color: "#586065", fontStyle: "italic", marginTop: 2 }}>{auditor}</div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </section>
-              </div>
+              
             </div>
           </div>
         ) : (

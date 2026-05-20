@@ -2,11 +2,12 @@
 import express from 'express';
 import pdfExportService from '../services/pdfExportService.js';
 import db from '../db.js';
+import { activityLogger } from '../middlewares/activityLogger.js';
 
 const router = express.Router();
 
 // Endpoint pour générer un rapport PDF
-router.post('/export-pdf', async (req, res) => {
+router.post('/export-pdf',activityLogger('GENERATE_REPORT'), async (req, res) => {
   try {
     const { reportData, reportType } = req.body;
     
@@ -46,7 +47,7 @@ router.post('/export-pdf', async (req, res) => {
   }
 });
 // Endpoint pour exporter avec React-PDF
-router.post('/export-react-pdf', async (req, res) => {
+router.post('/export-react-pdf', activityLogger('GENERATE_REPORT'), async (req, res) => {
   try {
     const { reportData } = req.body;
     

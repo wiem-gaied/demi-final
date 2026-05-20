@@ -18,39 +18,38 @@ export function requirePermission(permission) {
         return res.status(403).json({ message: "No user" });
       }
 
-      
+      // 1. récupérer le rôle
       const [[user]] = await db.query(
         `SELECT role FROM users WHERE id = ?`,
         [userId]
       );
 
+      // 2. SI role = user → accès total
       if (user?.role === "user") {
-        return next(); // bypass RBAC complet
+        return next();
       }
 
-      // 2. Récupérer les groupes de l'utilisateur
+      // 3. récupérer permissions via groupes
       const [groups] = await db.query(`
-        SELECT g.id
-        FROM user_groups ug
-        JOIN groups_list g ON ug.group_id = g.id
-        WHERE ug.user_id = ?
+        SELECT group_id
+        FROM user_groups
+        WHERE user_id = ?
       `, [userId]);
 
       let permissions = [];
 
-      // 3. Récupérer permissions de chaque groupe
       for (const g of groups) {
         const [perms] = await db.query(`
           SELECT p.key_name
           FROM group_permissions gp
           JOIN permissions p ON gp.permission_id = p.id
           WHERE gp.group_id = ?
-        `, [g.id]);
+        `, [g.group_id]);
 
         permissions.push(...perms.map(p => p.key_name));
       }
 
-      // 4. Vérifier aussi les permissions directes sur le user
+      // 4. permissions directes user
       const [directPerms] = await db.query(`
         SELECT p.key_name
         FROM user_permissions up
@@ -61,9 +60,8 @@ export function requirePermission(permission) {
       permissions.push(...directPerms.map(p => p.key_name));
 
       const userPermissions = new Set(permissions);
-      console.log("FRESH PERMISSIONS:", [...userPermissions]);
 
-      // 5. Check permission
+      // 5. vérification normale
       if (!userPermissions.has(permission)) {
         return res.status(403).json({ message: "Forbidden" });
       }

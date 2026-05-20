@@ -1,12 +1,9 @@
-// Frameworks.jsx — admin page
-// Same visual identity as your original. Adds:
-//   - "Scrape Framework" button  (calls /api/scraper/scrape)
-//   - "Add Custom Framework" button  (calls /api/framauditor/add-custom-framework)
-//   - Visibility-aware listing  (server filters by current user; admin scrapes
-//     produce public rows visible to everyone)
-// All endpoints require auth (handled server-side by authenticateToken).
+// politique.jsx
+// Same visual design as before. All strings in English.
+// Renders Core (mandatory) and Annex (optional) sections strictly per framework,
+// with descriptions visible at chapter / sub-chapter / control level.
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Shield, Search, ChevronDown, ChevronRight, Plus,
   CheckCircle, X, AlertCircle, Database
@@ -19,134 +16,216 @@ const Icon = ({ d, size = 16, color = "currentColor" }) => (
     <path d={d} />
   </svg>
 );
+
 const icons = {
-  package: "M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z",
-  chapter: "M4 19.5A2.5 2.5 0 016.5 17H20",
-  shield:  "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
-  close:   "M18 6L6 18M6 6l12 12",
+  close: "M18 6L6 18M6 6l12 12",
 };
 
-// ── Palette (unchanged) ──────────────────────────────────────────────────────
+// ── Palette ──────────────────────────────────────────────────────────────────
 const C = {
-  accent: "#3B6FFF", purple: "#6D28D9",
-  bg: "#F8FAFF", card: "#FFFFFF", border: "#E2E8F8",
-  text: "#1E2A4A", muted: "#64748B",
-  success: "#10B981", warning: "#F59E0B", danger: "#EF4444",
-  chip: "#EEF2FF",
+  accent:  "#3B6FFF",
+  purple:   "#061585",
+  bg:      "#F8FAFF",
+  card:    "#FFFFFF",
+  border:  "#E2E8F8",
+  text:    "#1E2A4A",
+  muted:   "#64748B",
+  success: "#10B981",
+  warning: "#F59E0B",
+  danger:  "#EF4444",
+  chip:    "#EEF2FF",
 };
 
 // ============================================================
-// ScrapeFrameworkModal (admin scrape — produces public rows)
+// Modal — Scrape framework
 // ============================================================
 function ScrapeFrameworkModal({ onClose, onConfirm }) {
-  const [list, setList] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [availableFrameworks, setAvailableFrameworks] = useState([]);
+  const [loadingList, setLoadingList] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
+  const [selectedVersion, setSelectedVersion] = useState("");
   const [search, setSearch] = useState("");
   const [isScraping, setIsScraping] = useState(false);
 
   useEffect(() => {
-    (async () => {
-      setLoading(true);
+    const fetchAvailable = async () => {
+      setLoadingList(true);
+      setLoadError(null);
       try {
-        const r = await fetch("http://localhost:3000/api/scraper/available", { credentials: "include" });
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const data = await r.json();
-        const frameworks = Array.isArray(data) ? data : (data.frameworks || []);
-        setList(frameworks.map((f, i) => ({
-          id: f.id || f.frameworkId || `fw-${i}`,
+        const response = await fetch("http://localhost:3000/api/scraper/available", {
+          credentials: "include",
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        const data = await response.json();
+        const list = Array.isArray(data) ? data : (data.frameworks || []);
+        const normalized = list.map((f, idx) => ({
+          id: f.id || f.frameworkId || f.slug || `fw-${idx}`,
           name: f.name || f.title || "Untitled",
-          provider: f.provider || "",
+          provider: f.provider || f.source || "",
           description: f.description || "",
-          version: Array.isArray(f.versions) ? f.versions[0] : (f.version || "1.0"),
-        })));
-      } catch (e) {
-        setLoadError(e.message);
+          versions: Array.isArray(f.versions) && f.versions.length > 0
+            ? f.versions
+            : (f.version ? [f.version] : ["1.0"]),
+        }));
+        setAvailableFrameworks(normalized);
+      } catch (err) {
+        console.error("Error fetching available frameworks:", err);
+        setLoadError(err.message);
       } finally {
-        setLoading(false);
+        setLoadingList(false);
       }
-    })();
+    };
+    fetchAvailable();
   }, []);
 
-  const selected = list.find(f => f.id === selectedId);
-  const filtered = list.filter(f => {
+  const selected = availableFrameworks.find(f => f.id === selectedId);
+
+  const filtered = availableFrameworks.filter(f => {
     const q = search.toLowerCase();
-    return f.name.toLowerCase().includes(q) ||
-           (f.provider || "").toLowerCase().includes(q);
+    return (
+      f.name.toLowerCase().includes(q) ||
+      (f.provider || "").toLowerCase().includes(q) ||
+      (f.description || "").toLowerCase().includes(q)
+    );
   });
 
+  const handleSelect = (framework) => {
+    setSelectedId(framework.id);
+    setSelectedVersion(framework.versions[0] || "");
+  };
+
   const handleSubmit = async () => {
-    if (!selected) return alert("Please select a framework");
+    if (!selected) {
+      alert("Please select a framework to scrape");
+      return;
+    }
     setIsScraping(true);
     try {
       await onConfirm({
         frameworkId: selected.id,
         name: selected.name,
         provider: selected.provider,
-        version: selected.version,
+        version: selectedVersion,
         description: selected.description,
       });
       onClose();
-    } catch (e) {
-      alert("Error scraping framework: " + e.message);
+    } catch (error) {
+      console.error("Error scraping framework:", error);
+      alert("Error scraping framework: " + error.message);
     } finally {
       setIsScraping(false);
     }
   };
 
   return (
-    <div style={modalBackdrop} onClick={onClose}>
-      <div style={modalBox(640)} onClick={e => e.stopPropagation()}>
-        <div style={modalHeader}>
-          <span style={modalTitle}>Scrape Security Framework</span>
-          <button onClick={onClose} style={iconButton}><X size={18} /></button>
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 1000,
+      background: "rgba(10,20,50,.45)", backdropFilter: "blur(4px)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      overflow: "auto", padding: 20,
+    }} onClick={onClose}>
+      <div style={{
+        background: C.card, borderRadius: 16, width: 640, maxWidth: "95vw",
+        maxHeight: "90vh", overflow: "auto",
+        boxShadow: "0 24px 60px rgba(59,111,255,.18)",
+        border: `1px solid ${C.border}`,
+      }} onClick={(e) => e.stopPropagation()}>
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "20px 24px 16px", borderBottom: `1px solid ${C.border}`,
+        }}>
+          <span style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 18, fontWeight: 700, color: C.text }}>
+            Scrape Security Framework
+          </span>
+          <button onClick={onClose} style={{
+            background: "none", border: "none", cursor: "pointer",
+            color: C.muted, padding: 4, borderRadius: 8,
+          }}><X size={18} /></button>
         </div>
+
         <div style={{ padding: 24 }}>
           <p style={{ fontSize: 13, color: C.muted, marginBottom: 16 }}>
-            Pick a framework. Its full hierarchy is scraped and stored. Admin scrapes are visible to all users.
+            Select a framework. Its full hierarchy (chapters, sub-chapters, controls)
+            will be scraped and stored under its own unique standard ID.
           </p>
+
           <div style={{ position: "relative", marginBottom: 16 }}>
-            <Search size={16} style={searchIcon} />
+            <Search size={16} style={{
+              position: "absolute", left: 12, top: "50%",
+              transform: "translateY(-50%)", color: C.muted,
+            }} />
             <input
-              type="text" value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search frameworks..."
-              disabled={loading}
-              style={{ ...inputStyle, paddingLeft: 36, background: loading ? C.bg : C.card }}
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search frameworks (ISO, NIST, CIS, ...)"
+              disabled={loadingList}
+              style={{
+                width: "100%", padding: "10px 12px 10px 36px",
+                border: `1.5px solid ${C.border}`, borderRadius: 10,
+                fontSize: 13, outline: "none",
+                background: loadingList ? C.bg : C.card,
+              }}
             />
           </div>
-          <div style={{ maxHeight: 360, overflowY: "auto", border: `1px solid ${C.border}`, borderRadius: 10, marginBottom: 16, minHeight: 120 }}>
-            {loading ? (
+
+          <div style={{
+            maxHeight: 360, overflowY: "auto",
+            border: `1px solid ${C.border}`, borderRadius: 10,
+            marginBottom: 16, minHeight: 120,
+          }}>
+            {loadingList ? (
               <div style={{ padding: 40, textAlign: "center" }}>
-                <div style={spinner} />
-                <div style={{ fontSize: 12, color: C.muted, marginTop: 12 }}>Loading available frameworks...</div>
+                <div style={{
+                  width: 28, height: 28, margin: "0 auto",
+                  border: `3px solid ${C.border}`, borderTopColor: C.accent,
+                  borderRadius: "50%", animation: "spin 0.8s linear infinite",
+                }} />
+                <div style={{ fontSize: 12, color: C.muted, marginTop: 12 }}>
+                  Loading available frameworks...
+                </div>
               </div>
             ) : loadError ? (
               <div style={{ padding: 24, textAlign: "center" }}>
-                <AlertCircle size={20} color={C.danger} />
-                <div style={{ fontSize: 13, color: C.danger, fontWeight: 600, marginTop: 8 }}>Failed to load</div>
-                <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>{loadError}</div>
+                <AlertCircle size={20} color={C.danger} style={{ marginBottom: 8 }} />
+                <div style={{ fontSize: 13, color: C.danger, fontWeight: 600 }}>
+                  Failed to load frameworks
+                </div>
+                <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>
+                  {loadError}
+                </div>
               </div>
             ) : filtered.length === 0 ? (
               <div style={{ padding: 24, textAlign: "center", color: C.muted, fontSize: 13 }}>
-                {list.length === 0 ? "No frameworks available." : "No matches."}
+                {availableFrameworks.length === 0
+                  ? "No frameworks available for scraping."
+                  : "No frameworks match your search."}
               </div>
-            ) : filtered.map(fw => {
-              const sel = fw.id === selectedId;
+            ) : filtered.map((fw) => {
+              const isSelected = fw.id === selectedId;
               return (
-                <div key={fw.id} onClick={() => setSelectedId(fw.id)}
+                <div
+                  key={fw.id}
+                  onClick={() => handleSelect(fw)}
                   style={{
-                    padding: "12px 14px", borderBottom: `1px solid ${C.border}`,
-                    cursor: "pointer", background: sel ? `${C.accent}10` : "transparent",
-                    borderLeft: sel ? `3px solid ${C.accent}` : "3px solid transparent",
+                    padding: "12px 14px",
+                    borderBottom: `1px solid ${C.border}`,
+                    cursor: "pointer",
+                    background: isSelected ? `${C.accent}10` : "transparent",
+                    borderLeft: isSelected ? `3px solid ${C.accent}` : "3px solid transparent",
                     display: "flex", alignItems: "center", gap: 12,
-                  }}>
+                  }}
+                >
                   <div style={{
                     width: 18, height: 18, borderRadius: "50%",
-                    border: `2px solid ${sel ? C.accent : C.border}`,
-                    background: sel ? C.accent : "transparent",
+                    border: `2px solid ${isSelected ? C.accent : C.border}`,
+                    background: isSelected ? C.accent : "transparent",
                     display: "flex", alignItems: "center", justifyContent: "center",
-                  }}>{sel && <CheckCircle size={10} color="#fff" />}</div>
+                    flexShrink: 0,
+                  }}>
+                    {isSelected && <CheckCircle size={10} color="#fff" />}
+                  </div>
                   <div style={{ flex: 1 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                       <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{fw.name}</span>
@@ -165,11 +244,46 @@ function ScrapeFrameworkModal({ onClose, onConfirm }) {
               );
             })}
           </div>
+
+          {selected && selected.versions.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: C.muted, marginBottom: 6 }}>
+                Version
+              </label>
+              <select
+                value={selectedVersion}
+                onChange={(e) => setSelectedVersion(e.target.value)}
+                style={{
+                  width: "100%", padding: "10px 14px",
+                  border: `1.5px solid ${C.border}`, borderRadius: 10,
+                  fontSize: 14, outline: "none", background: C.card,
+                }}
+              >
+                {selected.versions.map(v => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
-            <button onClick={onClose} style={btnSecondary}>Cancel</button>
-            <button onClick={handleSubmit} disabled={!selected || isScraping || loading}
-              style={{ ...btnPrimary, opacity: (!selected || loading) ? 0.6 : 1 }}>
-              {isScraping ? "Scraping..." : "Start Scraping"}
+            <button onClick={onClose} style={{
+              padding: "10px 20px", borderRadius: 8, border: `1.5px solid ${C.border}`,
+              background: "transparent", cursor: "pointer", fontSize: 13,
+            }}>Cancel</button>
+            <button
+              onClick={handleSubmit}
+              disabled={!selected || isScraping || loadingList}
+              style={{
+                padding: "10px 24px", borderRadius: 8, border: "none",
+                background: (!selected || isScraping) ? C.muted : `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
+                color: "#fff",
+                cursor: (!selected || isScraping || loadingList) ? "not-allowed" : "pointer",
+                fontSize: 13, fontWeight: 600,
+                opacity: (!selected || loadingList) ? 0.6 : 1,
+              }}
+            >
+              {isScraping ? "Scraping..." : "Start "}
             </button>
           </div>
         </div>
@@ -179,204 +293,1016 @@ function ScrapeFrameworkModal({ onClose, onConfirm }) {
 }
 
 // ============================================================
-// AddCustomFrameworkModal (Core mandatory + Annex optional)
-// Identical UX to the user page — admin's custom is public.
+// Modal — Add custom framework
 // ============================================================
+function AddCustomFrameworkModal({ onClose, onConfirm }) {
+  const [meta, setMeta] = useState({ name: "", version: "1.0", provider: "", description: "" });
+  const [coreChapters, setCoreChapters] = useState([
+    { ref_id: "", title: "", description: "", controls: [], children: [] }
+  ]);
+  const [annexFamilies, setAnnexFamilies] = useState([]);
+  const [submitting, setSubmitting] = useState(false);
 
+  const updateAtPath = (list, path, updater) => {
+    if (path.length === 0) return updater(list);
+    const [head, ...rest] = path;
+    const next = [...list];
+    next[head] = { ...next[head], children: updateAtPath(next[head].children || [], rest, updater) };
+    return next;
+  };
 
-// ============================================================
-// Read-only viewer components (kept identical to your original)
-// ============================================================
-const ControlItem = ({ item }) => {
-  const [open, setOpen] = useState(false);
-  const hasDesc = item.description?.length > 0;
-  return (
-    <div style={{ marginLeft: 40, marginBottom: 6 }}>
-      <div onClick={() => hasDesc && setOpen(!open)} style={{
-        cursor: hasDesc ? "pointer" : "default",
-        padding: "6px 10px", borderLeft: `3px solid ${C.accent}`,
-        background: "#F9FBFF", borderRadius: 6,
-        display: "flex", alignItems: "center",
-      }}>
-        <div style={{ display: "flex", gap: 6, alignItems: "center", flex: 1 }}>
-          {hasDesc && <ChevronRight size={12} style={{ transform: open ? "rotate(90deg)" : "rotate(0)", transition: "0.2s" }} />}
-          <span style={{ fontSize: 11, fontWeight: 700, color: C.accent, fontFamily: "monospace" }}>
-            {item.ref_id}
-          </span>
-          <span style={{ fontSize: 12, fontWeight: 600 }}>{item.name}</span>
-        </div>
-      </div>
-      {open && hasDesc && (
-        <p style={{ marginTop: 6, fontSize: 12, color: C.muted, lineHeight: 1.5, paddingLeft: 20 }}>
-          {item.description}
-        </p>
-      )}
-    </div>
-  );
-};
+  const addSubChapter = (path) => {
+    setCoreChapters(prev => updateAtPath(prev, path,
+      (children) => [...children, { ref_id: "", title: "", description: "", controls: [], children: [] }]));
+  };
+  const removeChapterAt = (path) => {
+    if (path.length === 1) {
+      setCoreChapters(prev => prev.filter((_, i) => i !== path[0]));
+      return;
+    }
+    const parentPath = path.slice(0, -1);
+    const idx = path[path.length - 1];
+    setCoreChapters(prev => updateAtPath(prev, parentPath,
+      (children) => children.filter((_, i) => i !== idx)));
+  };
+  const updateChapterAt = (path, field, value) => {
+    if (path.length === 1) {
+      setCoreChapters(prev => prev.map((c, i) => i === path[0] ? { ...c, [field]: value } : c));
+      return;
+    }
+    const parentPath = path.slice(0, -1);
+    const idx = path[path.length - 1];
+    setCoreChapters(prev => updateAtPath(prev, parentPath,
+      (children) => children.map((c, i) => i === idx ? { ...c, [field]: value } : c)));
+  };
+  const addControlToChapter = (path) => {
+    if (path.length === 1) {
+      setCoreChapters(prev => prev.map((c, i) =>
+        i === path[0] ? { ...c, controls: [...(c.controls || []), { ref_id: "", name: "", description: "" }] } : c));
+      return;
+    }
+    const parentPath = path.slice(0, -1);
+    const idx = path[path.length - 1];
+    setCoreChapters(prev => updateAtPath(prev, parentPath,
+      (children) => children.map((c, i) =>
+        i === idx ? { ...c, controls: [...(c.controls || []), { ref_id: "", name: "", description: "" }] } : c)));
+  };
+  const updateControlAt = (path, ctrlIdx, field, value) => {
+    const apply = (chapter) => ({
+      ...chapter,
+      controls: chapter.controls.map((c, i) => i === ctrlIdx ? { ...c, [field]: value } : c)
+    });
+    if (path.length === 1) {
+      setCoreChapters(prev => prev.map((c, i) => i === path[0] ? apply(c) : c));
+      return;
+    }
+    const parentPath = path.slice(0, -1);
+    const idx = path[path.length - 1];
+    setCoreChapters(prev => updateAtPath(prev, parentPath,
+      (children) => children.map((c, i) => i === idx ? apply(c) : c)));
+  };
+  const removeControlAt = (path, ctrlIdx) => {
+    const apply = (chapter) => ({
+      ...chapter,
+      controls: chapter.controls.filter((_, i) => i !== ctrlIdx)
+    });
+    if (path.length === 1) {
+      setCoreChapters(prev => prev.map((c, i) => i === path[0] ? apply(c) : c));
+      return;
+    }
+    const parentPath = path.slice(0, -1);
+    const idx = path[path.length - 1];
+    setCoreChapters(prev => updateAtPath(prev, parentPath,
+      (children) => children.map((c, i) => i === idx ? apply(c) : c)));
+  };
 
-const SubChapter = ({ sub }) => {
-  const [open, setOpen] = useState(false);
-  const hasDesc = sub.description?.length > 0;
-  return (
-    <div style={{ marginLeft: 20, marginBottom: 8 }}>
-      <div onClick={() => setOpen(!open)} style={{
-        display: "flex", alignItems: "center", gap: 6,
-        fontWeight: 600, fontSize: 13, color: C.text, cursor: "pointer", padding: "4px 0",
-      }}>
-        <ChevronRight size={12} style={{ transform: open ? "rotate(90deg)" : "rotate(0)" }} />
-        <span style={{ fontWeight: 700, color: C.purple }}>{sub.ref_id}</span>
-        <span>{sub.title}</span>
-      </div>
-      {open && (
-        <div style={{ marginLeft: 16 }}>
-          {hasDesc && (
-            <p style={{
-              fontSize: 11, color: C.muted, marginBottom: 8,
-              paddingLeft: 8, borderLeft: `2px solid ${C.border}`, lineHeight: 1.5
-            }}>{sub.description}</p>
-          )}
-          {sub.children?.map(s => <SubChapter key={s.id} sub={s} />)}
-          {sub.items?.map(it => <ControlItem key={it.id} item={it} />)}
-        </div>
-      )}
-    </div>
-  );
-};
+  const addFamily = () =>
+    setAnnexFamilies(prev => [...prev, { ref_id: "", name: "", description: "", controls: [] }]);
+  const removeFamily = (idx) =>
+    setAnnexFamilies(prev => prev.filter((_, i) => i !== idx));
+  const updateFamily = (idx, field, value) =>
+    setAnnexFamilies(prev => prev.map((f, i) => i === idx ? { ...f, [field]: value } : f));
+  const addAnnexControl = (idx) =>
+    setAnnexFamilies(prev => prev.map((f, i) =>
+      i === idx ? { ...f, controls: [...f.controls, { ref_id: "", name: "", description: "" }] } : f));
+  const updateAnnexControl = (idx, ctrlIdx, field, value) =>
+    setAnnexFamilies(prev => prev.map((f, i) => i === idx ? {
+      ...f, controls: f.controls.map((c, j) => j === ctrlIdx ? { ...c, [field]: value } : c)
+    } : f));
+  const removeAnnexControl = (idx, ctrlIdx) =>
+    setAnnexFamilies(prev => prev.map((f, i) => i === idx ? {
+      ...f, controls: f.controls.filter((_, j) => j !== ctrlIdx)
+    } : f));
 
-const ChapterSection = ({ chapter }) => {
-  const [open, setOpen] = useState(false);
-  const hasDesc = chapter.description?.length > 0;
-  return (
-    <div style={{ marginBottom: 12 }}>
-      <div onClick={() => setOpen(!open)} style={{
-        padding: "8px 12px", background: open ? "#E9EEFF" : "#F3F6FF",
-        borderRadius: 8, cursor: "pointer", fontWeight: 700, fontSize: 13,
-        display: "flex", alignItems: "center", gap: 8,
-      }}>
-        <ChevronRight size={12} style={{ transform: open ? "rotate(90deg)" : "rotate(0)" }} />
-        <span>{chapter.title}</span>
-      </div>
-      {open && (
-        <div style={{ marginLeft: 16, marginTop: 8 }}>
-          {hasDesc && (
-            <p style={{
-              fontSize: 12, color: C.muted, marginBottom: 12,
-              paddingLeft: 8, borderLeft: `2px solid ${C.accent}30`, lineHeight: 1.5
-            }}>{chapter.description}</p>
-          )}
-          {chapter.children?.map(s => <SubChapter key={s.id} sub={s} />)}
-          {chapter.items?.map(it => <ControlItem key={it.id} item={it} />)}
-        </div>
-      )}
-    </div>
-  );
-};
+  const validateChapter = (ch) => {
+    if (!ch.title?.trim()) return "Each core chapter must have a title";
+    for (const c of ch.controls || []) {
+      if (!c.name?.trim()) return "Each control must have a name";
+    }
+    for (const sub of ch.children || []) {
+      const err = validateChapter(sub);
+      if (err) return err;
+    }
+    return null;
+  };
 
-const Level1Section = ({ section }) => {
-  const [open, setOpen] = useState(true);
-  const isAnnex = section.isAnnex === true || section.title?.toLowerCase()?.includes("annex");
-  const color = isAnnex ? C.purple : C.accent;
-  return (
-    <div style={{ marginBottom: 14 }}>
-      <div onClick={() => setOpen(!open)} style={{
-        padding: "10px 14px", borderRadius: 8, cursor: "pointer",
-        display: "flex", alignItems: "center", gap: 10,
-        background: `linear-gradient(135deg, ${color}15, ${color}05)`,
-      }}>
-        <ChevronDown size={14} color={color} style={{ transform: open ? "rotate(0)" : "rotate(-90deg)" }} />
-        <Shield size={14} color={color} />
-        <span style={{ fontWeight: 800 }}>{section.title}</span>
-      </div>
-      {open && (
-        <div style={{ paddingLeft: 12, marginTop: 6 }}>
-          {section.children?.map(ch => <ChapterSection key={ch.id} chapter={ch} />)}
-          {section.items?.map(it => <ControlItem key={it.id} item={it} />)}
-        </div>
-      )}
-    </div>
-  );
-};
-
-// ============================================================
-// PackageCard — shows one framework with a "Public" or "Private" tag
-// ============================================================
-const PackageCard = ({ standard }) => {
-  const [open, setOpen] = useState(false);
-  const [hierarchy, setHierarchy] = useState(null);
-  const [loading, setLoading] = useState(false);
-
-  const isPublic = standard.created_by_user_id == null;
-
-  const toggle = async () => {
-    if (!open && !hierarchy) {
-      setLoading(true);
-      try {
-        const r = await fetch(`http://localhost:3000/api/ciso/packages/${standard.id}/hierarchy`, { credentials: "include" });
-        const data = await r.json();
-        setHierarchy(data);
-      } catch (e) {
-        console.error("hierarchy error:", e);
-      } finally {
-        setLoading(false);
+  const handleSubmit = async () => {
+    if (!meta.name.trim()) return alert("Framework name is required");
+    if (coreChapters.length === 0) return alert("At least one core chapter is required");
+    for (const ch of coreChapters) {
+      const err = validateChapter(ch);
+      if (err) return alert(err);
+    }
+    for (const f of annexFamilies) {
+      if (!f.name?.trim()) return alert("Each annex family must have a name");
+      for (const c of f.controls) {
+        if (!c.name?.trim()) return alert("Each annex control must have a name");
       }
     }
-    setOpen(!open);
+
+    setSubmitting(true);
+    try {
+      await onConfirm({
+        name: meta.name,
+        version: meta.version,
+        provider: meta.provider,
+        description: meta.description,
+        coreChapters,
+        annexFamilies,
+      });
+      onClose();
+    } catch (e) {
+      alert("Error: " + e.message);
+    } finally {
+      setSubmitting(false);
+    }
   };
+
+  const renderChapter = (ch, path, depth = 0) => (
+    <div key={path.join("-")} style={{
+      marginLeft: depth * 16, marginBottom: 10,
+      padding: 12, border: `1.5px solid ${C.border}`, borderRadius: 10,
+      background: depth === 0 ? `${C.accent}07` : C.card,
+    }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: C.purple }}>
+          {depth === 0 ? "Chapter" : `Sub-chapter L${depth}`}
+        </span>
+        <button onClick={() => removeChapterAt(path)} style={{
+          marginLeft: "auto", background: "transparent", border: `1px solid ${C.danger}`,
+          color: C.danger, padding: "2px 8px", borderRadius: 4, fontSize: 10, cursor: "pointer",
+        }}>Remove</button>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: 8, marginBottom: 6 }}>
+        <input placeholder="Ref (e.g. 4.1)" value={ch.ref_id}
+          onChange={(e) => updateChapterAt(path, "ref_id", e.target.value)}
+          style={{ padding: "6px 10px", border: `1.5px solid ${C.border}`, borderRadius: 8, fontSize: 12 }} />
+        <input placeholder="Title" value={ch.title}
+          onChange={(e) => updateChapterAt(path, "title", e.target.value)}
+          style={{ padding: "6px 10px", border: `1.5px solid ${C.border}`, borderRadius: 8, fontSize: 12 }} />
+      </div>
+      <textarea placeholder="Description (optional)" value={ch.description} rows={2}
+        onChange={(e) => updateChapterAt(path, "description", e.target.value)}
+        style={{ width: "100%", padding: "6px 10px", border: `1.5px solid ${C.border}`,
+                 borderRadius: 8, fontSize: 12, marginBottom: 8, resize: "vertical" }} />
+
+      {(ch.controls || []).map((ctrl, ci) => (
+        <div key={ci} style={{
+          display: "grid", gridTemplateColumns: "100px 1fr 1fr auto", gap: 6,
+          marginBottom: 4, padding: 6, background: "#F0FDF4", borderRadius: 6,
+        }}>
+          <input placeholder="Ref" value={ctrl.ref_id}
+            onChange={(e) => updateControlAt(path, ci, "ref_id", e.target.value)}
+            style={{ padding: "4px 8px", border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 11 }} />
+          <input placeholder="Control name" value={ctrl.name}
+            onChange={(e) => updateControlAt(path, ci, "name", e.target.value)}
+            style={{ padding: "4px 8px", border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 11 }} />
+          <input placeholder="Description" value={ctrl.description}
+            onChange={(e) => updateControlAt(path, ci, "description", e.target.value)}
+            style={{ padding: "4px 8px", border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 11 }} />
+          <button onClick={() => removeControlAt(path, ci)} style={{
+            background: "transparent", border: "none", color: C.danger,
+            cursor: "pointer", padding: "0 6px",
+          }}><X size={12} /></button>
+        </div>
+      ))}
+
+      <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+        <button onClick={() => addControlToChapter(path)} style={{
+          padding: "4px 10px", border: `1px dashed ${C.success}`, background: "transparent",
+          color: C.success, borderRadius: 6, fontSize: 11, cursor: "pointer",
+        }}>+ Control</button>
+        <button onClick={() => addSubChapter(path)} style={{
+          padding: "4px 10px", border: `1px dashed ${C.purple}`, background: "transparent",
+          color: C.purple, borderRadius: 6, fontSize: 11, cursor: "pointer",
+        }}>+ Sub-chapter</button>
+      </div>
+
+      {(ch.children || []).map((sub, i) => renderChapter(sub, [...path, i], depth + 1))}
+    </div>
+  );
 
   return (
     <div style={{
-      background: C.card, borderRadius: 14, border: `1.5px solid ${C.border}`,
-      boxShadow: "0 2px 16px rgba(59,111,255,.07)", marginBottom: 20, overflow: "hidden",
+      position: "fixed", inset: 0, zIndex: 1000,
+      background: "rgba(10,20,50,.45)", backdropFilter: "blur(4px)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      overflow: "auto", padding: 20,
+    }} onClick={onClose}>
+      <div style={{
+        background: C.card, borderRadius: 16, width: 820, maxWidth: "95vw",
+        maxHeight: "92vh", overflow: "auto",
+        boxShadow: "0 24px 60px rgba(59,111,255,.18)",
+        border: `1px solid ${C.border}`,
+      }} onClick={(e) => e.stopPropagation()}>
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "20px 24px 16px", borderBottom: `1px solid ${C.border}`,
+          position: "sticky", top: 0, background: C.card, zIndex: 1,
+        }}>
+          <span style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 18, fontWeight: 700, color: C.text }}>
+            Add Custom Framework
+          </span>
+          <button onClick={onClose} style={{
+            background: "none", border: "none", cursor: "pointer", color: C.muted, padding: 4,
+          }}><X size={18} /></button>
+        </div>
+
+        <div style={{ padding: 24 }}>
+          <p style={{ fontSize: 13, color: C.muted, marginBottom: 16 }}>
+            Build your own framework. The Core part is mandatory and cannot be excepted.
+            The Annex part is optional and supports exceptions.
+          </p>
+
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 10, marginBottom: 12 }}>
+            <input placeholder="Framework name *" value={meta.name}
+              onChange={(e) => setMeta({ ...meta, name: e.target.value })}
+              style={{ padding: "10px 12px", border: `1.5px solid ${C.border}`, borderRadius: 10, fontSize: 13 }} />
+            <input placeholder="Version" value={meta.version}
+              onChange={(e) => setMeta({ ...meta, version: e.target.value })}
+              style={{ padding: "10px 12px", border: `1.5px solid ${C.border}`, borderRadius: 10, fontSize: 13 }} />
+            <input placeholder="Provider" value={meta.provider}
+              onChange={(e) => setMeta({ ...meta, provider: e.target.value })}
+              style={{ padding: "10px 12px", border: `1.5px solid ${C.border}`, borderRadius: 10, fontSize: 13 }} />
+          </div>
+          <textarea placeholder="Description (optional)" value={meta.description} rows={2}
+            onChange={(e) => setMeta({ ...meta, description: e.target.value })}
+            style={{ width: "100%", padding: "10px 12px", border: `1.5px solid ${C.border}`,
+                     borderRadius: 10, fontSize: 13, marginBottom: 16, resize: "vertical" }} />
+
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+              <span style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 15, fontWeight: 700, color: C.accent }}>
+                Core Chapters <span style={{ fontSize: 11, color: C.danger }}>* mandatory</span>
+              </span>
+              <button onClick={() =>
+                setCoreChapters(prev => [...prev, { ref_id: "", title: "", description: "", controls: [], children: [] }])}
+                style={{
+                  padding: "6px 14px", borderRadius: 8, border: "none",
+                  background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
+                  color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer",
+                }}>+ Chapter</button>
+            </div>
+            {coreChapters.map((ch, i) => renderChapter(ch, [i], 0))}
+          </div>
+
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+              <span style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 15, fontWeight: 700, color: C.purple }}>
+                Annex Families <span style={{ fontSize: 11, color: C.muted }}>(optional, exceptions allowed)</span>
+              </span>
+              <button onClick={addFamily} style={{
+                padding: "6px 14px", borderRadius: 8, border: `1px solid ${C.purple}`,
+                background: "transparent", color: C.purple, fontSize: 12, fontWeight: 600, cursor: "pointer",
+              }}>+ Family</button>
+            </div>
+            {annexFamilies.map((fam, fi) => (
+              <div key={fi} style={{
+                marginBottom: 10, padding: 12, border: `1.5px solid ${C.border}`,
+                borderRadius: 10, background: `${C.purple}07`,
+              }}>
+                <div style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: C.purple }}>Family</span>
+                  <button onClick={() => removeFamily(fi)} style={{
+                    marginLeft: "auto", background: "transparent", border: `1px solid ${C.danger}`,
+                    color: C.danger, padding: "2px 8px", borderRadius: 4, fontSize: 10, cursor: "pointer",
+                  }}>Remove</button>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: 8, marginBottom: 6 }}>
+                  <input placeholder="Ref (e.g. A.5)" value={fam.ref_id}
+                    onChange={(e) => updateFamily(fi, "ref_id", e.target.value)}
+                    style={{ padding: "6px 10px", border: `1.5px solid ${C.border}`, borderRadius: 8, fontSize: 12 }} />
+                  <input placeholder="Family name" value={fam.name}
+                    onChange={(e) => updateFamily(fi, "name", e.target.value)}
+                    style={{ padding: "6px 10px", border: `1.5px solid ${C.border}`, borderRadius: 8, fontSize: 12 }} />
+                </div>
+                <textarea placeholder="Description (optional)" value={fam.description} rows={2}
+                  onChange={(e) => updateFamily(fi, "description", e.target.value)}
+                  style={{ width: "100%", padding: "6px 10px", border: `1.5px solid ${C.border}`,
+                           borderRadius: 8, fontSize: 12, marginBottom: 8, resize: "vertical" }} />
+                {fam.controls.map((ctrl, ci) => (
+                  <div key={ci} style={{
+                    display: "grid", gridTemplateColumns: "100px 1fr 1fr auto", gap: 6,
+                    marginBottom: 4, padding: 6, background: "#F0FDF4", borderRadius: 6,
+                  }}>
+                    <input placeholder="Ref" value={ctrl.ref_id}
+                      onChange={(e) => updateAnnexControl(fi, ci, "ref_id", e.target.value)}
+                      style={{ padding: "4px 8px", border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 11 }} />
+                    <input placeholder="Control name" value={ctrl.name}
+                      onChange={(e) => updateAnnexControl(fi, ci, "name", e.target.value)}
+                      style={{ padding: "4px 8px", border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 11 }} />
+                    <input placeholder="Description" value={ctrl.description}
+                      onChange={(e) => updateAnnexControl(fi, ci, "description", e.target.value)}
+                      style={{ padding: "4px 8px", border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 11 }} />
+                    <button onClick={() => removeAnnexControl(fi, ci)} style={{
+                      background: "transparent", border: "none", color: C.danger, cursor: "pointer", padding: "0 6px",
+                    }}><X size={12} /></button>
+                  </div>
+                ))}
+                <button onClick={() => addAnnexControl(fi)} style={{
+                  padding: "4px 10px", border: `1px dashed ${C.success}`, background: "transparent",
+                  color: C.success, borderRadius: 6, fontSize: 11, cursor: "pointer", marginTop: 6,
+                }}>+ Control</button>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
+            <button onClick={onClose} style={{
+              padding: "10px 20px", borderRadius: 8, border: `1.5px solid ${C.border}`,
+              background: "transparent", cursor: "pointer", fontSize: 13,
+            }}>Cancel</button>
+            <button onClick={handleSubmit} disabled={submitting} style={{
+              padding: "10px 24px", borderRadius: 8, border: "none",
+              background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
+              color: "#fff", cursor: submitting ? "wait" : "pointer", fontSize: 13, fontWeight: 600,
+            }}>{submitting ? "Saving..." : "Create Framework"}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Tree components
+// ============================================================
+const hasMeaningfulText = (s) => {
+  if (!s) return false;
+  const t = String(s).trim();
+  return t.length > 0 && t !== "Untitled" && t !== "No description provided";
+};
+
+// The hierarchy stores sub-chapters in `children` and controls in `items`
+// as two separate arrays. Rendering children-then-items made e.g. "7.5"
+// appear before "7.1..7.4" and "9.2/9.3" before "9.1". This natural
+// ref_id comparator + merge interleaves them in the real numbering order.
+// Pure ref math → works for any framework (core "7.1", annex "A.5.1", …).
+function refSegments(ref) {
+  return String(ref || "").split(".").map(s => s.trim()).filter(Boolean);
+}
+function compareRefIds(a, b) {
+  const sa = refSegments(a), sb = refSegments(b);
+  const annexA = sa.length > 0 && isNaN(Number(sa[0]));
+  const annexB = sb.length > 0 && isNaN(Number(sb[0]));
+  if (annexA !== annexB) return annexA ? 1 : -1;            // core before annex
+  const n = Math.max(sa.length, sb.length);
+  for (let i = 0; i < n; i++) {
+    const x = sa[i], y = sb[i];
+    if (x === undefined) return -1;
+    if (y === undefined) return 1;
+    const nx = Number(x), ny = Number(y);
+    if (!isNaN(nx) && !isNaN(ny)) { if (nx !== ny) return nx - ny; }
+    else if (x !== y) return x < y ? -1 : 1;
+  }
+  return 0;
+}
+function orderedTreeNodes(children, items) {
+  const merged = [
+    ...(children || []).map(node => ({ kind: "chapter", node })),
+    ...(items || []).map(node => ({ kind: "control", node })),
+  ];
+  merged.sort((a, b) => compareRefIds(a.node.ref_id, b.node.ref_id));
+  return merged;
+}
+
+const ControlItem = ({ item, isExcepted, onAddException, isAnnex, isParentExcepted, standardId, onRefresh }) => {
+  const [showExceptionModal, setShowExceptionModal] = useState(false);
+  const [exceptionReason, setExceptionReason] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const hasDesc = hasMeaningfulText(item.description);
+  const effectivelyExcepted = isParentExcepted || isExcepted;
+
+  const handleAddException = async () => {
+    if (!exceptionReason.trim()) return;
+    setIsSubmitting(true);
+    try {
+      await onAddException({
+        id: String(item.id),
+        ref_id: item.ref_id,
+        name: item.name,
+        title: item.name
+      }, exceptionReason, standardId);
+      setShowExceptionModal(false);
+      setExceptionReason("");
+      if (onRefresh) await onRefresh();
+    } catch (error) {
+      alert("Error adding exception: " + error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <>
+      <div style={{ marginLeft: 24, marginBottom: 16, paddingLeft: 14, borderLeft: `1px solid ${C.border}` }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: effectivelyExcepted ? C.muted : C.text }}>
+              {item.ref_id || "N/A"} - {item.name}
+              {effectivelyExcepted && (
+                <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 500, color: C.muted }}>
+                  · {isParentExcepted ? "Inherited from chapter" : "Exception"}
+                </span>
+              )}
+            </div>
+            {hasDesc && (
+              <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, margin: "4px 0 0", whiteSpace: "pre-wrap" }}>
+                {item.description}
+              </p>
+            )}
+          </div>
+          {isAnnex && !effectivelyExcepted && !isParentExcepted && (
+            <button onClick={() => setShowExceptionModal(true)} style={{
+              padding: "2px 8px", borderRadius: 4, border: `1px solid ${C.border}`,
+              background: "transparent", color: C.muted, fontSize: 10, cursor: "pointer", flexShrink: 0,
+            }}>Add Exception</button>
+          )}
+        </div>
+      </div>
+
+      {showExceptionModal && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 1100,
+          background: "rgba(10,20,50,.45)", backdropFilter: "blur(4px)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }} onClick={() => setShowExceptionModal(false)}>
+          <div style={{
+            background: C.card, borderRadius: 16, width: 440, maxWidth: "95vw",
+            boxShadow: "0 24px 60px rgba(59,111,255,.18)",
+            border: `1px solid ${C.border}`,
+          }} onClick={(e) => e.stopPropagation()}>
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "20px 24px 16px", borderBottom: `1px solid ${C.border}`,
+            }}>
+              <span style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 18, fontWeight: 700, color: C.text }}>Add Exception</span>
+              <button onClick={() => setShowExceptionModal(false)} style={{
+                background: "none", border: "none", cursor: "pointer",
+                color: C.muted, padding: 4, borderRadius: 8,
+              }}><Icon d={icons.close} size={18} /></button>
+            </div>
+            <div style={{ padding: 24 }}>
+              <p style={{ marginBottom: 16, fontSize: 14, color: C.text }}>
+                Add exception for <strong>{item.name}</strong>
+              </p>
+              <textarea
+                value={exceptionReason}
+                onChange={(e) => setExceptionReason(e.target.value)}
+                placeholder="Reason for exception..."
+                rows={4}
+                style={{
+                  width: "100%", padding: "10px 14px",
+                  border: `1.5px solid ${C.border}`, borderRadius: 10,
+                  fontSize: 14, outline: "none", resize: "vertical",
+                  marginBottom: 16,
+                }}
+              />
+              <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
+                <button onClick={() => setShowExceptionModal(false)} style={{
+                  padding: "8px 16px", borderRadius: 8, border: `1px solid ${C.border}`,
+                  background: "transparent", cursor: "pointer", fontSize: 13,
+                }}>Cancel</button>
+                <button onClick={handleAddException} disabled={isSubmitting} style={{
+                  padding: "8px 20px", borderRadius: 8, border: "none",
+                  background: C.accent, color: "#fff", cursor: isSubmitting ? "wait" : "pointer", fontSize: 13,
+                }}>
+                  {isSubmitting ? "Adding..." : "Add Exception"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
+const SubChapter = ({ sub, exceptedControlIds, onAddException, isAnnex, isParentExcepted, standardId, onRefresh }) => {
+  const [open, setOpen] = useState(false);
+  const [showExceptionModal, setShowExceptionModal] = useState(false);
+  const [exceptionReason, setExceptionReason] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const hasDesc = hasMeaningfulText(sub.description);
+  const isExcepted = exceptedControlIds.has(String(sub.id));
+  const effectivelyExcepted = isParentExcepted || isExcepted;
+
+  const handleAddException = async () => {
+    if (!exceptionReason.trim()) return;
+    setIsSubmitting(true);
+    try {
+      await onAddException({
+        id: String(sub.id),
+        ref_id: sub.ref_id,
+        title: sub.title,
+        items: sub.items
+      }, exceptionReason, standardId);
+      setShowExceptionModal(false);
+      setExceptionReason("");
+      if (onRefresh) await onRefresh();
+    } catch (error) {
+      alert("Error adding exception: " + error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <>
+      <div style={{ marginLeft: 20, marginBottom: 14 }}>
+        <div onClick={() => setOpen(!open)} style={{
+          display: "flex", alignItems: "flex-start", justifyContent: "space-between",
+          gap: 8, cursor: "pointer",
+        }}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 8, flex: 1, minWidth: 0 }}>
+            <ChevronRight size={13} style={{ marginTop: 3, flexShrink: 0, transition: "0.15s", color: C.muted, transform: open ? "rotate(90deg)" : "rotate(0)" }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: effectivelyExcepted ? C.muted : C.text }}>
+                {sub.ref_id} - {sub.title}
+                {effectivelyExcepted && (
+                  <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 500, color: C.muted }}>· Exception</span>
+                )}
+              </div>
+              {hasDesc && (
+                <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, margin: "4px 0 0", whiteSpace: "pre-wrap" }}>
+                  {sub.description}
+                </p>
+              )}
+            </div>
+          </div>
+          {isAnnex && !effectivelyExcepted && !isParentExcepted && (
+            <button onClick={(e) => { e.stopPropagation(); setShowExceptionModal(true); }} style={{
+              padding: "2px 8px", borderRadius: 4, border: `1px solid ${C.border}`,
+              background: "transparent", color: C.muted, fontSize: 10, cursor: "pointer", flexShrink: 0,
+            }}>Add Exception</button>
+          )}
+        </div>
+
+        {open && (
+          <div style={{ marginLeft: 16, marginTop: 10 }}>
+            {orderedTreeNodes(sub.children, sub.items).map(({ kind, node }) =>
+              kind === "chapter" ? (
+                <SubChapter
+                  key={node.id}
+                  sub={node}
+                  exceptedControlIds={exceptedControlIds}
+                  onAddException={onAddException}
+                  isAnnex={isAnnex}
+                  isParentExcepted={effectivelyExcepted}
+                  standardId={standardId}
+                  onRefresh={onRefresh}
+                />
+              ) : (
+                <ControlItem
+                  key={node.id}
+                  item={node}
+                  isExcepted={exceptedControlIds.has(String(node.id))}
+                  onAddException={onAddException}
+                  isAnnex={isAnnex}
+                  isParentExcepted={effectivelyExcepted}
+                  standardId={standardId}
+                  onRefresh={onRefresh}
+                />
+              )
+            )}
+          </div>
+        )}
+      </div>
+
+      {showExceptionModal && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 1100,
+          background: "rgba(10,20,50,.45)", backdropFilter: "blur(4px)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }} onClick={() => setShowExceptionModal(false)}>
+          <div style={{
+            background: C.card, borderRadius: 16, width: 440, maxWidth: "95vw",
+            boxShadow: "0 24px 60px rgba(59,111,255,.18)",
+            border: `1px solid ${C.border}`,
+          }} onClick={(e) => e.stopPropagation()}>
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "20px 24px 16px", borderBottom: `1px solid ${C.border}`,
+            }}>
+              <span style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 18, fontWeight: 700, color: C.text }}>Add Exception for Sub-Chapter</span>
+              <button onClick={() => setShowExceptionModal(false)} style={{
+                background: "none", border: "none", cursor: "pointer",
+                color: C.muted, padding: 4, borderRadius: 8,
+              }}><Icon d={icons.close} size={18} /></button>
+            </div>
+            <div style={{ padding: 24 }}>
+              <p style={{ marginBottom: 16, fontSize: 14, color: C.text }}>
+                Add exception for <strong>{sub.title}</strong>
+              </p>
+              <p style={{ marginBottom: 16, fontSize: 12, color: C.muted }}>
+                This will also add exceptions for all {sub.items?.length || 0} controls.
+              </p>
+              <textarea
+                value={exceptionReason}
+                onChange={(e) => setExceptionReason(e.target.value)}
+                placeholder="Reason for exception..."
+                rows={4}
+                style={{
+                  width: "100%", padding: "10px 14px",
+                  border: `1.5px solid ${C.border}`, borderRadius: 10,
+                  fontSize: 14, outline: "none", resize: "vertical",
+                  marginBottom: 16,
+                }}
+              />
+              <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
+                <button onClick={() => setShowExceptionModal(false)} style={{
+                  padding: "8px 16px", borderRadius: 8, border: `1px solid ${C.border}`,
+                  background: "transparent", cursor: "pointer", fontSize: 13,
+                }}>Cancel</button>
+                <button onClick={handleAddException} disabled={isSubmitting} style={{
+                  padding: "8px 20px", borderRadius: 8, border: "none",
+                  background: C.accent, color: "#fff", cursor: isSubmitting ? "wait" : "pointer", fontSize: 13,
+                }}>
+                  {isSubmitting ? "Adding..." : "Add Exception"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
+const ChapterSection = ({ chapter, exceptedControlIds, onAddException, isAnnex, isParentExcepted, standardId, onRefresh }) => {
+  const [open, setOpen] = useState(false);
+  const [showExceptionModal, setShowExceptionModal] = useState(false);
+  const [exceptionReason, setExceptionReason] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const hasDesc = hasMeaningfulText(chapter.description);
+  const isExcepted = exceptedControlIds.has(String(chapter.id));
+  const effectivelyExcepted = isParentExcepted || isExcepted;
+
+  const handleAddException = async () => {
+    if (!exceptionReason.trim()) return;
+    setIsSubmitting(true);
+    try {
+      await onAddException({
+        id: String(chapter.id),
+        ref_id: chapter.ref_id,
+        title: chapter.title,
+        children: chapter.children,
+        items: chapter.items
+      }, exceptionReason, standardId);
+      setShowExceptionModal(false);
+      setExceptionReason("");
+      if (onRefresh) await onRefresh();
+    } catch (error) {
+      alert("Error adding chapter exception: " + error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <>
+      <div style={{ marginBottom: 18, marginTop: 4 }}>
+        <div onClick={() => setOpen(!open)} style={{
+          display: "flex", alignItems: "flex-start", justifyContent: "space-between",
+          gap: 8, cursor: "pointer",
+        }}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 8, flex: 1, minWidth: 0 }}>
+            <ChevronDown size={15} style={{ marginTop: 2, flexShrink: 0, transition: "0.15s", color: C.muted, transform: open ? "rotate(0)" : "rotate(-90deg)" }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: effectivelyExcepted ? C.muted : C.text }}>
+                {chapter.ref_id} - {chapter.title}
+                {effectivelyExcepted && (
+                  <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 500, color: C.muted }}>· Exception</span>
+                )}
+              </div>
+              {hasDesc && (
+                <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, margin: "4px 0 0", whiteSpace: "pre-wrap" }}>
+                  {chapter.description}
+                </p>
+              )}
+            </div>
+          </div>
+          {isAnnex && !effectivelyExcepted && !isParentExcepted && (
+            <button onClick={(e) => { e.stopPropagation(); setShowExceptionModal(true); }} style={{
+              padding: "2px 8px", borderRadius: 4, border: `1px solid ${C.border}`,
+              background: "transparent", color: C.muted, fontSize: 10, cursor: "pointer", flexShrink: 0,
+            }}>Add Exception</button>
+          )}
+        </div>
+
+        {open && (
+          <div style={{ marginLeft: 16, marginTop: 12 }}>
+            {orderedTreeNodes(chapter.children, chapter.items).map(({ kind, node }) =>
+              kind === "chapter" ? (
+                <SubChapter
+                  key={node.id}
+                  sub={node}
+                  exceptedControlIds={exceptedControlIds}
+                  onAddException={onAddException}
+                  isAnnex={isAnnex}
+                  isParentExcepted={effectivelyExcepted}
+                  standardId={standardId}
+                  onRefresh={onRefresh}
+                />
+              ) : (
+                <ControlItem
+                  key={node.id}
+                  item={node}
+                  isExcepted={exceptedControlIds.has(String(node.id))}
+                  onAddException={onAddException}
+                  isAnnex={isAnnex}
+                  isParentExcepted={effectivelyExcepted}
+                  standardId={standardId}
+                  onRefresh={onRefresh}
+                />
+              )
+            )}
+          </div>
+        )}
+      </div>
+
+      {showExceptionModal && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 1100,
+          background: "rgba(10,20,50,.45)", backdropFilter: "blur(4px)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }} onClick={() => setShowExceptionModal(false)}>
+          <div style={{
+            background: C.card, borderRadius: 16, width: 440, maxWidth: "95vw",
+            boxShadow: "0 24px 60px rgba(59,111,255,.18)",
+            border: `1px solid ${C.border}`,
+          }} onClick={(e) => e.stopPropagation()}>
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "20px 24px 16px", borderBottom: `1px solid ${C.border}`,
+            }}>
+              <span style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 18, fontWeight: 700, color: C.text }}>Add Exception for Chapter</span>
+              <button onClick={() => setShowExceptionModal(false)} style={{
+                background: "none", border: "none", cursor: "pointer",
+                color: C.muted, padding: 4, borderRadius: 8,
+              }}><Icon d={icons.close} size={18} /></button>
+            </div>
+            <div style={{ padding: 24 }}>
+              <p style={{ marginBottom: 16, fontSize: 14, color: C.text }}>
+                Add exception for chapter <strong>{chapter.title}</strong>
+              </p>
+              <textarea
+                value={exceptionReason}
+                onChange={(e) => setExceptionReason(e.target.value)}
+                placeholder="Reason for exception..."
+                rows={4}
+                style={{
+                  width: "100%", padding: "10px 14px",
+                  border: `1.5px solid ${C.border}`, borderRadius: 10,
+                  fontSize: 14, outline: "none", resize: "vertical",
+                  marginBottom: 16,
+                }}
+              />
+              <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
+                <button onClick={() => setShowExceptionModal(false)} style={{
+                  padding: "8px 16px", borderRadius: 8, border: `1px solid ${C.border}`,
+                  background: "transparent", cursor: "pointer", fontSize: 13,
+                }}>Cancel</button>
+                <button onClick={handleAddException} disabled={isSubmitting} style={{
+                  padding: "8px 20px", borderRadius: 8, border: "none",
+                  background: C.accent, color: "#fff", cursor: isSubmitting ? "wait" : "pointer", fontSize: 13,
+                }}>
+                  {isSubmitting ? "Adding..." : "Add Exception"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
+const Level1Section = ({ section, exceptedControlIds, onAddException, standardId, onRefresh }) => {
+  const [open, setOpen] = useState(true);
+  const isAnnex = section.isAnnex === true || section?.title?.toLowerCase()?.includes("annex");
+
+  const hasContent = (section.children && section.children.length > 0) ||
+                     (section.items && section.items.length > 0);
+
+  return (
+    <div style={{ marginBottom: 18 }}>
+      <div onClick={() => setOpen(!open)} style={{
+        padding: "12px 14px", borderRadius: 8, cursor: "pointer",
+        display: "flex", alignItems: "center", gap: 10,
+        background: "#F8FAFF", border: `1px solid ${C.border}`,
+      }}>
+        <ChevronDown size={14} color={C.muted} style={{ transform: open ? "rotate(0)" : "rotate(-90deg)", flexShrink: 0 }} />
+        <span style={{ fontWeight: 800, fontSize: 15, color: C.text }}>{section.title}</span>
+        <span style={{
+          fontSize: 10, fontWeight: 600, color: C.muted, marginLeft: 8,
+          padding: "2px 8px", border: `1px solid ${C.border}`, borderRadius: 12,
+        }}>
+          {isAnnex ? "Optional · exceptions allowed" : "Mandatory"}
+        </span>
+      </div>
+
+      {open && (
+        <div style={{ paddingLeft: 12, marginTop: 6 }}>
+          {hasMeaningfulText(section.description) && (
+            <p style={{ fontSize: 12, color: C.muted, padding: "8px 4px", margin: 0, lineHeight: 1.5 }}>
+              {section.description}
+            </p>
+          )}
+          {!hasContent && (
+            <div style={{ padding: "20px 12px", color: C.muted, fontSize: 12, fontStyle: "italic" }}>
+              {isAnnex
+                ? "This framework has no annex content."
+                : "No core chapters found."}
+            </div>
+          )}
+          {orderedTreeNodes(section.children, section.items).map(({ kind, node }) =>
+            kind === "chapter" ? (
+              <ChapterSection
+                key={node.id}
+                chapter={node}
+                exceptedControlIds={exceptedControlIds}
+                onAddException={onAddException}
+                isAnnex={isAnnex}
+                isParentExcepted={false}
+                standardId={standardId}
+                onRefresh={onRefresh}
+              />
+            ) : (
+              <ControlItem
+                key={node.id}
+                item={node}
+                isExcepted={exceptedControlIds.has(String(node.id))}
+                onAddException={onAddException}
+                isAnnex={isAnnex}
+                isParentExcepted={false}
+                standardId={standardId}
+                onRefresh={onRefresh}
+              />
+            )
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ============================================================
+// PackageCard
+// ============================================================
+const PackageCard = ({ standard, onImportFramework, onUnimportFramework, onAddException, isImported, refreshExceptions }) => {
+  const [open, setOpen] = useState(isImported);
+  const [hierarchy, setHierarchy] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [exceptions, setExceptions] = useState([]);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const loadExceptions = useCallback(async () => {
+    if (!isImported || !standard?.id) return;
+    try {
+      const data = await refreshExceptions();
+      setExceptions(data || []);
+    } catch (error) {
+      console.error("Error loading exceptions:", error);
+    }
+  }, [isImported, standard?.id, refreshExceptions]);
+
+  useEffect(() => {
+    if (!isImported) return;
+
+    const loadHierarchy = async () => {
+      setLoading(true);
+      try {
+        const response = await fetch(
+          `http://localhost:3000/api/ciso/packages/${standard.id}/hierarchy`,
+          { credentials: "include" }
+        );
+        if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        const data = await response.json();
+
+        // The backend always returns a normalized { hierarchy: [Core, Annex] } shape now.
+        if (data && Array.isArray(data.hierarchy)) {
+          setHierarchy(data);
+        } else {
+          console.warn("Unexpected hierarchy response:", data);
+          setHierarchy({ hierarchy: [] });
+        }
+      } catch (error) {
+        console.error("Error loading hierarchy:", error);
+        setHierarchy({ hierarchy: [] });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadHierarchy();
+    loadExceptions();
+  }, [standard.id, isImported, refreshKey, loadExceptions]);
+
+  const handleRefresh = useCallback(async () => {
+    await loadExceptions();
+    setRefreshKey(prev => prev + 1);
+  }, [loadExceptions]);
+
+  const exceptedControlIds = new Set(
+    exceptions.map(e => String(e.policyId || e.entity_id || e.id))
+  );
+
+  const totalControls = standard.controls_count || 0;
+  const exceptionsCount = exceptions.length;
+
+  return (
+    <div style={{
+      background: C.card, borderRadius: 14,
+      border: `1.5px solid ${C.border}`,
+      boxShadow: "0 2px 16px rgba(59,111,255,.07)",
+      marginBottom: 20, overflow: "hidden",
     }}>
-      <div onClick={toggle} style={{
-        background: `linear-gradient(135deg, ${C.accent}14, ${C.purple}0d)`,
-        borderBottom: open ? `1.5px solid ${C.border}` : "none",
-        padding: "16px 20px", display: "flex", alignItems: "center", gap: 12, cursor: "pointer",
+      <div onClick={() => isImported && setOpen(!open)} style={{
+        background: C.card,
+        borderBottom: open ? `1px solid ${C.border}` : "none",
+        padding: "16px 20px", display: "flex", alignItems: "center", gap: 12,
+        cursor: isImported ? "pointer" : "default",
       }}>
         <div style={{
-          width: 40, height: 40, borderRadius: 10,
-          background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-          display: "flex", alignItems: "center", justifyContent: "center",
-        }}><Shield size={18} color="#fff" /></div>
+          width: 38, height: 38, borderRadius: 9,
+          background: "#F8FAFF", border: `1px solid ${C.border}`,
+          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+        }}>
+          <Shield size={17} color={C.muted} />
+        </div>
         <div style={{ flex: 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <div style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 17, fontWeight: 800, color: C.text }}>
               {standard.name}
             </div>
-            <span style={{
-              fontSize: 10, fontWeight: 700,
-              background: isPublic ? C.success : C.warning, color: "#fff",
-              padding: "2px 8px", borderRadius: 12,
-            }}>
-              {isPublic ? "Public" : "Private"}
-            </span>
-            {standard.is_custom === 1 && (
-              <span style={{
-                fontSize: 10, fontWeight: 700, background: C.purple, color: "#fff",
-                padding: "2px 8px", borderRadius: 12,
-              }}>Custom</span>
+            {isImported && (
+              <span style={{ fontSize: 10, fontWeight: 600, color: C.muted, padding: "2px 8px", border: `1px solid ${C.border}`, borderRadius: 12 }}>
+                Imported
+              </span>
             )}
           </div>
-          {standard.description && (
-            <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>{standard.description}</div>
-          )}
           <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>
             {standard.version && <span>v{standard.version} · </span>}
             {standard.provider && <span>{standard.provider} · </span>}
-            {standard.controls_count} controls
+            {totalControls} controls
+            {isImported && exceptionsCount > 0 && (
+              <span style={{ marginLeft: 8, color: C.muted }}>· {exceptionsCount} exceptions</span>
+            )}
           </div>
         </div>
-        <ChevronDown size={16} style={{ transform: open ? "rotate(180deg)" : "rotate(0)", color: C.muted }} />
+        <button onClick={(e) => { e.stopPropagation(); isImported ? onUnimportFramework(standard) : onImportFramework(standard); }} style={{
+          padding: "6px 14px", borderRadius: 8,
+          border: `1px solid ${isImported ? C.border : C.accent}`,
+          background: isImported ? "transparent" : C.accent,
+          color: isImported ? C.muted : "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer",
+        }}>
+          {isImported ? "Remove" : "+ Import"}
+        </button>
+        {isImported && (
+          <ChevronDown size={16} style={{ transform: open ? "rotate(180deg)" : "rotate(0)", transition: "transform .2s", color: C.muted }} />
+        )}
       </div>
-      {open && (
+
+      {isImported && open && (
         <div style={{ padding: "16px 20px" }}>
           {loading ? (
             <div style={{ textAlign: "center", padding: 40 }}>
-              <div style={spinner} />
+              <div style={{ width: 32, height: 32, border: `3px solid ${C.border}`, borderTopColor: C.accent, borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto" }} />
             </div>
           ) : hierarchy?.hierarchy?.length > 0 ? (
-            hierarchy.hierarchy.map(s => <Level1Section key={s.id} section={s} />)
+            hierarchy.hierarchy.map((section) => (
+              <Level1Section
+                key={section.id}
+                section={section}
+                exceptedControlIds={exceptedControlIds}
+                onAddException={onAddException}
+                standardId={standard.id}
+                onRefresh={handleRefresh}
+              />
+            ))
           ) : (
             <div style={{ textAlign: "center", padding: "24px 0", color: "#A0AEC0", fontSize: 14 }}>
               No hierarchy data available
@@ -391,271 +1317,379 @@ const PackageCard = ({ standard }) => {
 // ============================================================
 // Main page
 // ============================================================
-export default function Frameworks() {
-  const [packages, setPackages] = useState([]);
+export default function Policies() {
+  const [availableFrameworks, setAvailableFrameworks] = useState([]);
+  const [importedFrameworkIds, setImportedFrameworkIds] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [stats, setStats] = useState({ standards: 0, families: 0, controls: 0, coreChapters: 0 });
-  const [scrapeOpen, setScrapeOpen] = useState(false);
-  const [customOpen, setCustomOpen] = useState(false);
-  const [needsLogin, setNeedsLogin] = useState(false);
+  const [removeModal, setRemoveModal] = useState(null);
+  const [addFrameworkModal, setAddFrameworkModal] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [addCustomModal, setAddCustomModal] = useState(false);
 
-  const fetchPackages = async () => {
-    setLoading(true);
+  const fetchAllFrameworks = async () => {
     try {
-      const r = await fetch("http://localhost:3000/api/ciso/packages", { credentials: "include" });
-      if (r.status === 401) { setPackages([]); setNeedsLogin(true); return; }
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const data = await r.json();
-      setPackages(data);
-      setNeedsLogin(false);
-    } catch (e) {
-      console.error("packages error:", e);
+      const response = await fetch("http://localhost:3000/api/ciso/packages", {
+        credentials: "include"
+      });
+      if (response.ok) {
+        const frameworks = await response.json();
+        setAvailableFrameworks(frameworks.map(fw => ({
+          ...fw,
+          source: 'scraped',
+          type: 'scraped',
+          id: String(fw.id)
+        })));
+      }
+    } catch (error) {
+      console.error("Error fetching frameworks:", error);
+    }
+  };
+
+  const fetchImportedFrameworks = async () => {
+    try {
+      const response = await fetch("http://localhost:3000/api/framauditor/imported-policies", {
+        credentials: "include"
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setImportedFrameworkIds(new Set(data.map(pkg => String(pkg.id))));
+      }
+    } catch (error) {
+      console.error("Error fetching imported frameworks:", error);
+    }
+  };
+
+  const fetchExceptions = useCallback(async (standardId) => {
+    if (!standardId) return [];
+    try {
+      const response = await fetch(`http://localhost:3000/api/framauditor/exceptions/${standardId}`, {
+        credentials: "include"
+      });
+      if (response.ok) return await response.json();
+    } catch (error) {
+      console.error("Error fetching exceptions:", error);
+    }
+    return [];
+  }, []);
+
+  const refreshAllData = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await fetchAllFrameworks();
+      await fetchImportedFrameworks();
     } finally {
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const loadAllData = async () => {
+      setLoading(true);
+      await refreshAllData();
       setLoading(false);
-    }
-  };
+    };
+    loadAllData();
+  }, [refreshAllData]);
 
-  const fetchStats = async () => {
+  const handleImportFramework = async (framework) => {
     try {
-      const r = await fetch("http://localhost:3000/api/ciso/stats", { credentials: "include" });
-      if (r.ok) setStats(await r.json());
-    } catch (e) {
-      console.error("stats error:", e);
+      if (!framework?.id) throw new Error("Invalid framework ID");
+      const response = await fetch("http://localhost:3000/api/framauditor/import-policy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          standardId: String(framework.id),
+          title: framework.name,
+          version: framework.version || "1.0"
+        })
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Import failed");
+      }
+      await fetchImportedFrameworks();
+      alert("Framework imported successfully!");
+    } catch (error) {
+      alert(error.message);
     }
   };
 
-  useEffect(() => { fetchPackages(); fetchStats(); }, []);
-
-  const handleScrape = async (data) => {
-    const r = await fetch("http://localhost:3000/api/scraper/scrape", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify(data),
-    });
-    if (r.status === 401) { setNeedsLogin(true); throw new Error("Login required"); }
-    if (!r.ok) {
-      const err = await r.json().catch(() => ({}));
-      throw new Error(err.error || "Scrape failed");
+  const handleUnimportFramework = async (framework) => {
+    try {
+      const response = await fetch("http://localhost:3000/api/framauditor/unimport-policy", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ policyId: framework.id })
+      });
+      if (!response.ok) throw new Error("Unimport failed");
+      await fetchImportedFrameworks();
+      alert("Framework removed successfully!");
+    } catch (error) {
+      alert("Error removing framework: " + error.message);
     }
-    await fetchPackages();
-    await fetchStats();
   };
 
-  const handleAddCustom = async (payload) => {
-    const r = await fetch("http://localhost:3000/api/framauditor/add-custom-framework", {
+  const handleAddFramework = async (scrapeData) => {
+    try {
+      const response = await fetch("http://localhost:3000/api/scraper/scrape", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(scrapeData)
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to scrape framework");
+      }
+      const result = await response.json();
+      await refreshAllData();
+      if (result.id) {
+        await handleImportFramework({
+          id: result.id,
+          name: scrapeData.name,
+          version: scrapeData.version,
+          source: 'scraped',
+          type: 'scraped'
+        });
+      }
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const handleAddCustomFramework = async (payload) => {
+    const response = await fetch("http://localhost:3000/api/framauditor/add-custom-framework", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       body: JSON.stringify(payload),
     });
-    if (r.status === 401) { setNeedsLogin(true); throw new Error("Login required"); }
-    if (!r.ok) {
-      const text = await r.text();
-      throw new Error(`Backend error ${r.status}: ${text}`);
+    if (!response.ok) {
+      const text = await response.text();
+      alert(`Backend error ${response.status}: ${text}`);
+      throw new Error(text || "Failed to create framework");
     }
-    await fetchPackages();
-    await fetchStats();
+    const result = await response.json();
+    await refreshAllData();
+    if (result.id) {
+      await handleImportFramework({ id: result.id, name: payload.name, version: payload.version });
+    }
   };
 
-  const filteredPackages = packages.filter(p =>
-    p.name?.toLowerCase().includes(search.toLowerCase())
+  const handleAddException = async (item, reason, standardId) => {
+    try {
+      let level = "control";
+      if (item.children) level = "chapter";
+      const response = await fetch("http://localhost:3000/api/framauditor/add-exception", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          policyId: String(item.id),
+          level,
+          title: item.title || item.name,
+          reason,
+          standardId
+        })
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to add exception");
+      }
+      alert("Exception added successfully!");
+    } catch (error) {
+      alert(error.message);
+      throw error;
+    }
+  };
+
+  const filteredFrameworks = availableFrameworks.filter(fw =>
+    fw.name?.toLowerCase().includes(search.toLowerCase())
   );
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "DM Sans, sans-serif" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@700;800&family=DM+Sans:wght@400;500;600;700&display=swap');
-        * { box-sizing: border-box; }
-        @keyframes fadeUp { from { opacity:0; transform:translateY(18px); } to { opacity:1; transform:translateY(0); } }
         @keyframes spin { to { transform: rotate(360deg); } }
-        input:focus, textarea:focus { border-color: #3B6FFF !important; box-shadow: 0 0 0 3px rgba(59,111,255,.13); }
-        ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 6px; }
+        input:focus, textarea:focus { border-color: #3B6FFF !important; box-shadow: 0 0 0 3px rgba(59,111,241,.13); }
       `}</style>
 
       <div style={{
-        padding: "0 36px", display: "flex", alignItems: "center", justifyContent: "space-between",
-        height: 64, position: "sticky", top: 0, zIndex: 100,
-        background: C.bg, borderBottom: `1px solid ${C.border}`,
+        padding: "0 36px", display: "flex", alignItems: "center",
+        justifyContent: "space-between", height: 64, position: "sticky",
+        top: 0, zIndex: 100, background: C.bg, borderBottom: `1px solid ${C.border}`
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
-          <span style={{ color: "#0F172A", fontSize: "26px", fontWeight: "800", lineHeight: 1.1 }}>
-            Frameworks
+          <span style={{ color: "#0F172A", fontSize: "26px", fontWeight: "800" }}>
+            Policies Library
           </span>
           <div style={{ position: "relative" }}>
-            <Search size={16} style={searchIcon} />
+            <Search size={16} style={{
+              position: "absolute", left: 10, top: "50%",
+              transform: "translateY(-50%)", color: C.muted
+            }} />
             <input
-              placeholder="Search standard..."
-              value={search} onChange={e => setSearch(e.target.value)}
-              style={{ ...inputStyle, paddingLeft: 32, width: 250 }}
+              placeholder="Search frameworks..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{
+                padding: "8px 12px 8px 32px", borderRadius: 10,
+                border: `1.5px solid ${C.border}`, width: 250,
+                fontSize: 13, background: C.card
+              }}
             />
           </div>
         </div>
-        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
           <button
-            onClick={() => setScrapeOpen(true)}
-            disabled={needsLogin}
-            style={{ ...btnPrimary, opacity: needsLogin ? 0.5 : 1, cursor: needsLogin ? "not-allowed" : "pointer" }}
+            onClick={refreshAllData}
+            disabled={refreshing}
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              padding: "6px 12px", borderRadius: 8, border: `1px solid ${C.border}`,
+              background: "transparent", cursor: refreshing ? "wait" : "pointer",
+              fontSize: 13, color: C.muted
+            }}
           >
-            <Plus size={14} style={{ marginRight: 6 }} /> Scrape Framework
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2"
+              style={{ animation: refreshing ? "spin 1s linear infinite" : "none" }}>
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+            Refresh
           </button>
-          
+          <button
+            onClick={() => setAddFrameworkModal(true)}
+            style={{
+              display: "flex", alignItems: "center", gap: 8,
+              padding: "8px 18px", borderRadius: 10, border: "none",
+              background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
+              color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer"
+            }}
+          >
+            <Plus size={16} /> Import Framework
+          </button>
+          <button
+            onClick={() => setAddCustomModal(true)}
+            style={{
+              display: "flex", alignItems: "center", gap: 8,
+              padding: "8px 18px", borderRadius: 10,
+              border: `1.5px solid ${C.accent}`,
+              background: "transparent", color: C.accent,
+              fontSize: 13, fontWeight: 600, cursor: "pointer",
+            }}
+          >
+            <Plus size={16} /> Add Custom Framework
+          </button>
+          <div style={{
+            display: "flex", alignItems: "center", gap: 8,
+            background: C.chip, padding: "4px 12px", borderRadius: 20
+          }}>
+            <CheckCircle size={12} color={C.success} />
+            <span style={{ fontSize: 12, fontWeight: 600, color: C.accent }}>
+              {importedFrameworkIds.size} imported
+            </span>
+          </div>
         </div>
       </div>
 
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "32px 24px" }}>
-        {needsLogin && (
-          <div style={{
-            background: C.card, borderRadius: 16,
-            border: `1.5px solid ${C.border}`,
-            padding: "60px 24px", textAlign: "center",
-            boxShadow: "0 2px 16px rgba(59,111,255,.07)",
-            marginBottom: 32,
-          }}>
-            <div style={{
-              width: 64, height: 64, borderRadius: "50%",
-              background: `linear-gradient(135deg, ${C.accent}1a, ${C.purple}1a)`,
-              display: "inline-flex", alignItems: "center", justifyContent: "center",
-              marginBottom: 16,
-            }}>
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="11" width="18" height="11" rx="2" />
-                <path d="M7 11V7a5 5 0 0110 0v4" />
-              </svg>
-            </div>
-            <div style={{
-              fontFamily: "Fraunces, Georgia, serif",
-              fontSize: 24, fontWeight: 800, color: C.text, marginBottom: 8,
-            }}>
-              Authentication required
-            </div>
-            <div style={{ fontSize: 14, color: C.muted, marginBottom: 24, lineHeight: 1.6 }}>
-              You must be logged in to view this page.<br />
-              Please sign in to your account to access frameworks.
-            </div>
-            <button
-              onClick={() => { window.location.href = "/login"; }}
-              style={{
-                padding: "10px 24px", borderRadius: 10, border: "none",
-                background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-                color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer",
-              }}
-            >
-              Go to Login
-            </button>
-          </div>
-        )}
-
-        {!needsLogin && <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 32 }}>
-          {[
-            { label: "Standards", value: stats.standards ?? stats.packages, color: C.accent, icon: "package" },
-            { label: "Chapters",  value: stats.coreChapters ?? stats.chapters, color: "#0EA5E9", icon: "chapter" },
-            { label: "Controls",  value: stats.controls ?? stats.policies, color: C.accent, icon: "shield" },
-          ].map(kpi => (
-            <div key={kpi.label} style={{
-              background: C.card, borderRadius: 18, padding: "20px 24px",
-              border: `1.5px solid ${C.border}`, boxShadow: "0 1px 8px rgba(59,111,255,.05)",
-            }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                <div style={{
-                  width: 28, height: 28, borderRadius: 7,
-                  background: kpi.color + "1a",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                }}><Icon d={icons[kpi.icon]} size={14} color={kpi.color} /></div>
-                <span style={{ fontSize: 12, color: C.muted, fontWeight: 600 }}>{kpi.label}</span>
-              </div>
-              <div style={{ fontSize: 26, fontWeight: 800, color: C.text, fontFamily: "Fraunces, Georgia, serif" }}>
-                {kpi.value ?? 0}
-              </div>
-            </div>
-          ))}
-        </div>}
-
-        {!needsLogin && loading && (
+        {loading && (
           <div style={{ textAlign: "center", padding: 60 }}>
-            <div style={spinner} />
-            <p style={{ marginTop: 16, color: C.muted }}>Loading standards...</p>
+            <div style={{
+              width: 48, height: 48,
+              border: `3px solid ${C.border}`, borderTopColor: C.accent,
+              borderRadius: "50%", animation: "spin 0.8s linear infinite",
+              margin: "0 auto"
+            }} />
           </div>
         )}
 
-        {!needsLogin && !loading && filteredPackages.length === 0 && (
-          <div style={{
-            textAlign: "center", padding: "60px 24px",
-            background: C.card, borderRadius: 16, border: `1.5px dashed ${C.border}`,
-          }}>
-            <Database size={36} color={C.muted} style={{ opacity: 0.6, marginBottom: 12 }} />
-            <div style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 8 }}>
-              {search ? "No standards found" : "No frameworks yet"}
-            </div>
-            <div style={{ color: C.muted, fontSize: 14 }}>
-              {search ? "Try a different search term."
-                      : 'Click "Scrape Framework" to fetch one from CISO Assistant, or "Add Custom Framework" to build your own.'}
-            </div>
+        {!loading && filteredFrameworks.length === 0 && (
+          <div style={{ textAlign: "center", padding: 60, color: C.muted }}>
+            <Database size={48} style={{ marginBottom: 16, opacity: 0.5 }} />
+            <p>No frameworks found</p>
           </div>
         )}
 
-        {!needsLogin && !loading && filteredPackages.map(pkg => (
-          <PackageCard key={pkg.id} standard={pkg} />
+        {!loading && filteredFrameworks.map(fw => (
+          <PackageCard
+            key={fw.id}
+            standard={fw}
+            isImported={importedFrameworkIds.has(fw.id)}
+            onImportFramework={handleImportFramework}
+            onUnimportFramework={(fw) => setRemoveModal({ target: fw })}
+            onAddException={handleAddException}
+            refreshExceptions={async () => fetchExceptions(fw.id)}
+          />
         ))}
       </div>
 
-      {scrapeOpen && <ScrapeFrameworkModal onClose={() => setScrapeOpen(false)} onConfirm={handleScrape} />}
-      {customOpen && <AddCustomFrameworkModal onClose={() => setCustomOpen(false)} onConfirm={handleAddCustom} />}
+      {addCustomModal && (
+        <AddCustomFrameworkModal
+          onClose={() => setAddCustomModal(false)}
+          onConfirm={handleAddCustomFramework}
+        />
+      )}
+      {addFrameworkModal && (
+        <ScrapeFrameworkModal
+          onClose={() => setAddFrameworkModal(false)}
+          onConfirm={handleAddFramework}
+        />
+      )}
+
+      {removeModal && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 1000,
+          background: "rgba(10,20,50,.45)", backdropFilter: "blur(4px)",
+          display: "flex", alignItems: "center", justifyContent: "center"
+        }} onClick={() => setRemoveModal(null)}>
+          <div style={{
+            background: C.card, borderRadius: 16, width: 440, maxWidth: "95vw",
+            boxShadow: "0 24px 60px rgba(59,111,255,.18)", border: `1px solid ${C.border}`
+          }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ padding: "20px 24px 16px", borderBottom: `1px solid ${C.border}` }}>
+              <span style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 18, fontWeight: 700, color: C.danger }}>
+                Remove Framework
+              </span>
+            </div>
+            <div style={{ padding: 24 }}>
+              <p>Remove <strong>{removeModal.target?.name}</strong> from your library?</p>
+              <p style={{ fontSize: 12, color: C.muted, marginTop: 8 }}>
+                This will also remove all exceptions for this framework.
+              </p>
+              <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 20 }}>
+                <button
+                  onClick={() => setRemoveModal(null)}
+                  style={{
+                    padding: "8px 16px", borderRadius: 8, border: `1px solid ${C.border}`,
+                    background: "transparent", cursor: "pointer"
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    await handleUnimportFramework(removeModal.target);
+                    setRemoveModal(null);
+                  }}
+                  style={{
+                    padding: "8px 20px", borderRadius: 8, border: "none",
+                    background: C.danger, color: "#fff", cursor: "pointer"
+                  }}
+                >
+                  Confirm Remove
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-
-// ============================================================
-// Shared inline styles
-// ============================================================
-const modalBackdrop = {
-  position: "fixed", inset: 0, zIndex: 1000,
-  background: "rgba(10,20,50,.45)", backdropFilter: "blur(4px)",
-  display: "flex", alignItems: "center", justifyContent: "center",
-  overflow: "auto", padding: 20,
-};
-const modalBox = (width) => ({
-  background: C.card, borderRadius: 16, width, maxWidth: "95vw",
-  maxHeight: "90vh", overflow: "auto",
-  boxShadow: "0 24px 60px rgba(59,111,255,.18)",
-  border: `1px solid ${C.border}`,
-});
-const modalHeader = {
-  display: "flex", alignItems: "center", justifyContent: "space-between",
-  padding: "20px 24px 16px", borderBottom: `1px solid ${C.border}`,
-};
-const modalTitle = { fontFamily: "Fraunces, Georgia, serif", fontSize: 18, fontWeight: 700, color: C.text };
-const iconButton = { background: "none", border: "none", cursor: "pointer", color: C.muted, padding: 4, borderRadius: 8 };
-const inputStyle = {
-  width: "100%", boxSizing: "border-box",
-  border: `1.5px solid ${C.border}`, borderRadius: 10,
-  padding: "9px 13px", fontSize: 13, color: C.text,
-  fontFamily: "DM Sans, sans-serif", outline: "none", background: C.card,
-};
-const smallInput = { padding: "6px 10px", border: `1.5px solid ${C.border}`, borderRadius: 8, fontSize: 12 };
-const tinyInput  = { padding: "4px 8px",  border: `1px solid ${C.border}`,   borderRadius: 6, fontSize: 11 };
-const controlRow = {
-  display: "grid", gridTemplateColumns: "100px 1fr 1fr auto", gap: 6,
-  marginBottom: 4, padding: 6, background: "#F0FDF4", borderRadius: 6,
-};
-const dashedButton = (color) => ({
-  padding: "4px 10px", border: `1px dashed ${color}`, background: "transparent",
-  color, borderRadius: 6, fontSize: 11, cursor: "pointer",
-});
-const btnPrimary = {
-  display: "inline-flex", alignItems: "center", gap: 6,
-  padding: "8px 16px", borderRadius: 10, border: "none",
-  background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-  color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer",
-};
-const btnSecondary = {
-  padding: "10px 20px", borderRadius: 8, border: `1.5px solid ${C.border}`,
-  background: "transparent", cursor: "pointer", fontSize: 13,
-};
-const searchIcon = { position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: C.muted };
-const spinner = {
-  width: 32, height: 32, margin: "0 auto",
-  border: `3px solid ${C.border}`, borderTopColor: C.accent,
-  borderRadius: "50%", animation: "spin 0.8s linear infinite",
-};

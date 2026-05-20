@@ -31,7 +31,10 @@ export const AuthProvider = ({ children }) => {
 
   const login = (userData) => setUser(userData ?? true); // ← MANQUAIT dans value
 
-  const logout = () => {
+   const logout = () => {
+    // Drop any in-progress compliance analysis so it does not leak across
+    // sessions (same key as Conformite.jsx ANALYSIS_PERSIST_KEY).
+    try { sessionStorage.removeItem("conformity_analysis_state"); } catch {}
     setUser(null);
     setPermissions([]);
     setRole(null);

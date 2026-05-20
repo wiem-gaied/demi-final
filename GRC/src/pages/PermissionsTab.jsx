@@ -30,6 +30,21 @@ const T = {
   hover: "#F8FAFC",
   borderDark: "#E2E8F0",
 };
+const C = {
+  bg: "#F8FAFF", surface: "#FFFFFF", surfaceAlt: "#F0F4FF",
+  border: "#E2E8F8", borderStrong: "#C7D2F0",
+  wow: "#3B6FFF", accentLight: "#EEF2FF", accentHover: "#2D5CE8",
+  purple: "#6D28D9", purpleLight: "#F5F0FF",
+  success: "#059669", successLight: "#ECFDF5",
+  warning: "#061585", warningLight: "#FFFBEB",
+  danger: "#DC2626", dangerLight: "#FEF2F2",
+  info: "#0891B2", infoLight: "#ECFEFF",
+  text: "#0F172A", textMid: "#475569", textMuted: "#94A3B8",
+  shadow: "0 1px 3px rgba(15,23,42,0.07)",
+  shadowMd: "0 4px 12px rgba(15,23,42,0.09)",
+  shadowLg: "0 10px 30px rgba(15,23,42,0.13)",
+};
+C.accent = `linear-gradient(135deg, ${C.wow}, ${C.warning})`;
 
 const CATEGORIES = [
   "Risks",
@@ -154,8 +169,8 @@ function GlobalPermissionPanel({ open, onClose, onAdd }) {
             {error && <div style={{ color: T.danger, fontSize: 12, marginTop: 6 }}>{error}</div>}
           </div>
           <div>
-            <label style={{ fontSize: 13, fontWeight: 500, color: T.text, marginBottom: 8, display: "block" }}>Permission ID</label>
-            <input value={permId} readOnly style={{ ...inputStyle, background: T.hover, color: T.muted }} />
+            <label style={{display: "none" }}>Permission ID</label>
+            <input value={permId} readOnly style={{ display: "none" }} />
           </div>
           <div>
             <label style={{ fontSize: 13, fontWeight: 500, color: T.text, marginBottom: 8, display: "block" }}>Category</label>
@@ -177,7 +192,7 @@ function GlobalPermissionPanel({ open, onClose, onAdd }) {
           <button
             onClick={handleAdd}
             disabled={loading || !!error}
-            style={{ flex: 1, padding: "10px", borderRadius: 8, border: "none", background: `linear-gradient(135deg, ${T.primary}, ${T.primaryDark})`, color: "#fff", fontSize: 14, fontWeight: 700, boxShadow: `0 4px 16px ${T.primary}44`, opacity: loading || error ? 0.6 : 1, cursor: loading || error ? "not-allowed" : "pointer" }}
+            style={{ flex: 1, padding: "10px", borderRadius: 8, border: "none", background: `linear-gradient(135deg, ${C.wow}, ${C.warning})`, color: "#fff", fontSize: 14, fontWeight: 700, boxShadow: `0 4px 16px ${T.primary}44`, opacity: loading || error ? 0.6 : 1, cursor: loading || error ? "not-allowed" : "pointer" }}
           >
             {loading ? "Adding..." : "Add Permission"}
           </button>
@@ -314,7 +329,6 @@ function PermissionRow({ perm, groups, onToggleGroup, saving, onDelete }) {
       {/* Left: label + id */}
       <div style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
         <span style={{ fontSize: 14, fontWeight: 500, color: T.text }}>{perm.label}</span>
-        <span style={{ fontSize: 11, color: T.muted, fontFamily: "monospace" }}>{perm.id}</span>
       </div>
 
       {/* Right: assigned badges + dropdown + delete */}
@@ -514,7 +528,7 @@ export default function PermissionsTab({ groups, setGroups }) {
             padding: "10px 20px",
             borderRadius: 12,
             border: "none",
-            background: `linear-gradient(135deg, ${T.primary}, ${T.primaryDark})`,
+            background: `linear-gradient(135deg, ${C.wow}, ${C.warning})`,
             color: "#fff",
             fontWeight: 700,
             fontSize: 13,

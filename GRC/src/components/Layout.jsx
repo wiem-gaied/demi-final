@@ -32,23 +32,36 @@ import {
 const SEED_ORGS = [];
 const MOCK_NOTIFICATIONS = [];
 
+// ─── Design tokens ───────────────────────────────────────────
+const C = {
+  wow: "#3B6FFF",
+  warning: "#061585",
+};
+C.accent = `linear-gradient(135deg, ${C.wow}, ${C.warning})`;
+// Couleur unie proche du dégradé (pour bordures / texte, où le dégradé est impossible)
+C.accentSolid = "#2A4AD0";
+
 const menuItems = [
   { to: "/layout/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   {
     icon: CheckCircle, label: "Compliance", subOptions: [
-      { to: "/layout/conformite/Politiques", label: "All Policies & Proofs" },
-      { to: "/layout/conformite", label: "Compliance Test" },
-      { to: "/layout/exception", label: "Exception " },
+      { to: "/layout/conformite/Politiques", label:"Policies Library" },
+      { to: "/layout/conformite", label: "Policies analysis" },
+      { to: "/layout/exception", label: " Policy Exception " },
     ],
   },
   {
-    to: "/layout/risques", icon: AlertTriangle, label: "Risk management", subOptions: [
+    icon: AlertTriangle, label: "Risk management", subOptions: [
       { to: "/layout/risques", label: "Identification & Assessment" },
-      { to: "/layout/assets", label: "Assets " },
-      { to: "/layout/business", label: "Business " },
+      { to: "/layout/assets", label: "Assets management " },
+      { to: "/layout/business", label: "Business Risk Register" },
     ]
   },
-  { to: "/layout/logs", icon: FileText, label: "Logs", roles: ["user"] },
+  {  icon: FileText, label: "Logs", roles: ["user"], subOptions: [
+    { to: "/layout/logs", icon: FileText, label: " Event Log", roles: ["user"]},
+    { to: "/layout/logsactivity", icon: FileText, label: " Activity Log", roles: ["user"]}
+  ]
+   },
   { to: "/layout/reporting", icon: BarChart, label: "Reporting" },
   { to: "/layout/settings", icon: Settings, label: "Access & controls", roles: ["user"] },
 ];
@@ -178,7 +191,7 @@ function UserAvatar({ user, size = 28, radius = "7px", fontSize = "10px" }) {
   return (
     <div style={{
       width: size, height: size, borderRadius: radius, flexShrink: 0,
-      background: "linear-gradient(135deg,#3B6FFF,#6D28D9)",
+      background: C.accent,
       display: "flex", alignItems: "center", justifyContent: "center",
       color: "#fff", fontSize, fontWeight: "700",
     }}>
@@ -335,7 +348,7 @@ function AIChatbot() {
           style={{
             position: "fixed", bottom: "28px", right: "28px", zIndex: 999,
             width: "54px", height: "54px", borderRadius: "16px", border: "none",
-            background: "linear-gradient(135deg,#3B6FFF,#6D28D9)",
+            background: C.accent,
             boxShadow: "0 8px 32px rgba(59,111,255,0.40)",
             cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
             transition: "transform 0.2s",
@@ -362,7 +375,7 @@ function AIChatbot() {
 
           {/* Header */}
           <div style={{
-            background: "linear-gradient(135deg,#3B6FFF,#6D28D9)",
+            background: C.accent,
             padding: "14px 16px", display: "flex", alignItems: "center", gap: "10px", flexShrink: 0,
           }}>
             <div style={{
@@ -422,7 +435,7 @@ function AIChatbot() {
             {messages.map((msg, i) => (
               <div key={i} style={{ display: "flex", flexDirection: msg.role === "user" ? "row-reverse" : "row", gap: "8px", alignItems: "flex-end" }}>
                 {msg.role === "assistant" && (
-                  <div style={{ width: "26px", height: "26px", borderRadius: "8px", background: "linear-gradient(135deg,#3B6FFF,#6D28D9)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <div style={{ width: "26px", height: "26px", borderRadius: "8px", background: C.accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                     <BotMessageSquare size={12} color="#fff" />
                   </div>
                 )}
@@ -430,7 +443,7 @@ function AIChatbot() {
                   <div style={{
                     padding: "10px 13px",
                     borderRadius: msg.role === "user" ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
-                    background: msg.role === "user" ? "linear-gradient(135deg,#3B6FFF,#6D28D9)" : "#F8FAFF",
+                    background: msg.role === "user" ? C.accent : "#F8FAFF",
                     color: msg.role === "user" ? "#fff" : "#1E293B",
                     fontSize: "12.5px", lineHeight: "1.55",
                     border: msg.role === "assistant" ? "1.5px solid #EEF4FF" : "none",
@@ -446,12 +459,12 @@ function AIChatbot() {
             {/* Typing indicator */}
             {loading && (
               <div style={{ display: "flex", gap: "8px", alignItems: "flex-end" }}>
-                <div style={{ width: "26px", height: "26px", borderRadius: "8px", background: "linear-gradient(135deg,#3B6FFF,#6D28D9)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <div style={{ width: "26px", height: "26px", borderRadius: "8px", background: C.accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                   <BotMessageSquare size={12} color="#fff" />
                 </div>
                 <div style={{ padding: "12px 15px", borderRadius: "14px", background: "#F8FAFF", border: "1.5px solid #EEF4FF", display: "flex", gap: "4px" }}>
                   {[0, 0.2, 0.4].map((delay, i) => (
-                    <div key={i} style={{ width: "5px", height: "5px", borderRadius: "50%", background: "#3B6FFF", animation: `bounce 0.9s ${delay}s ease-in-out infinite` }} />
+                    <div key={i} style={{ width: "5px", height: "5px", borderRadius: "50%", background: C.accentSolid, animation: `bounce 0.9s ${delay}s ease-in-out infinite` }} />
                   ))}
                 </div>
               </div>
@@ -481,7 +494,7 @@ function AIChatbot() {
                 disabled={!input.trim() || loading || !ollamaStatus?.ollamaRunning}
                 style={{
                   width: "32px", height: "32px", borderRadius: "9px", border: "none", flexShrink: 0,
-                  background: input.trim() && !loading && ollamaStatus?.ollamaRunning ? "linear-gradient(135deg,#3B6FFF,#6D28D9)" : "#E2E8F0",
+                  background: input.trim() && !loading && ollamaStatus?.ollamaRunning ? C.accent : "#E2E8F0",
                   color: input.trim() && !loading && ollamaStatus?.ollamaRunning ? "#fff" : "#94A3B8",
                   cursor: input.trim() && !loading && ollamaStatus?.ollamaRunning ? "pointer" : "default",
                   display: "flex", alignItems: "center", justifyContent: "center",
@@ -738,18 +751,10 @@ const Layout = () => {
           display: "flex", alignItems: "center", gap: "10px",
           minHeight: "60px",
         }}>
-          <div style={{
-            width: 34, height: 34, borderRadius: 9,
-            background: "linear-gradient(135deg,#3B6FFF,#6D28D9)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            flexShrink: 0,
-            boxShadow: "0 4px 12px rgba(59,111,255,0.3)",
-          }}>
-            <Shield size={16} style={{ color: "#fff" }} />
-          </div>
+          
           {menuOpen && (
             <div style={{ overflow: "hidden", whiteSpace: "nowrap" }}>
-              <div style={{ fontWeight: 800, fontSize: 13, color: "#0F172A", fontFamily: "'Fraunces', serif" }}>
+              <div style={{ fontWeight: 800, fontSize: 15, color: "#0F172A", fontFamily: "'Fraunces', serif" }}>
                 GRC Platform
               </div>
               <div style={{ fontSize: 10, color: "#94A3B8", fontWeight: 500 }}>
@@ -795,9 +800,10 @@ const Layout = () => {
                     width: "100%",
                     display: "flex", alignItems: "center", gap: 10,
                     padding: "10px 11px",
-                    borderRadius: 9, border: "none",
-                    background: active ? "#EEF4FF" : "transparent",
-                    color: active ? "#3B6FFF" : "#64748B",
+                    borderRadius: 9,
+                    border: active ? `2px solid ${C.accentSolid}` : "2px solid transparent",
+                    background: "transparent",
+                    color: active ? C.accentSolid : "#64748B",
                     fontWeight: active ? 700 : 500,
                     cursor: "pointer",
                     transition: "all 0.15s",
@@ -819,7 +825,7 @@ const Layout = () => {
                     </span>
                   )}
                   {active && menuOpen && (
-                    <div style={{ width: 5, height: 5, borderRadius: "50%", background: "#3B6FFF", boxShadow: "0 0 6px #3B6FFF80" }} />
+                    <div style={{ width: 5, height: 5, borderRadius: "50%", background: C.accentSolid, boxShadow: `0 0 6px ${C.accentSolid}80` }} />
                   )}
                 </button>
 
@@ -834,12 +840,14 @@ const Layout = () => {
                       <NavLink
                         key={sub.label}
                         to={sub.to}
+                        end
                         style={({ isActive }) => ({
                           padding: "7px 12px",
                           borderRadius: 7,
                           textDecoration: "none",
-                          color: isActive ? "#3B6FFF" : "#64748B",
-                          background: isActive ? "#EEF4FF" : "transparent",
+                          color: isActive ? C.accentSolid : "#64748B",
+                          background: "transparent",
+                          border: isActive ? `1.5px solid ${C.accentSolid}` : "1.5px solid transparent",
                           fontSize: 12,
                           fontWeight: isActive ? 600 : 400,
                           transition: "all 0.15s",

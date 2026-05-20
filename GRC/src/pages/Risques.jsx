@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { X, ShieldAlert, TrendingUp, AlertTriangle, CheckCircle, Plus, Trash2, Edit3 } from "lucide-react";
-import PermissionGuard from "../components/PermissionGuard";
 
 const IMPACT_LEVELS = ["0", "1", "2", "3", "4"];
 const PROBA_LEVELS  = ["0", "1", "2", "3", "4"];
@@ -53,7 +52,6 @@ const Risques = () => {
   const [editingStatus, setEditingStatus] = useState(null);
   const [threats, setThreats] = useState([""]);
   const [vulnerabilities, setVulnerabilities] = useState([ ""]);
-  
 
   const openModal  = () => setModalOpen(true);
   const closeModal = () => {
@@ -186,39 +184,11 @@ setRisques(risks);
       if (!res.ok) {
       throw new Error(data.error || "Erreur lors de l'ajout");
     }
-    await handleFetchRisques();
+    setRisques(prev => [...prev, data]);
     closeModal();
   } catch (err) {
     console.error(err);
     alert("Erreur lors de l'ajout du risque");
-  }
-};
-const handleFetchRisques = async () => {
-  try {
-    const res = await fetch("http://localhost:3000/api/risks/getrisks");
-    const data = await res.json();
-
-    const grouped = {};
-
-    data.forEach(row => {
-      if (!grouped[row.id]) {
-        grouped[row.id] = { ...row, mitigations: [] };
-      }
-
-      if (row.mitigation_id) {
-        grouped[row.id].mitigations.push({
-          id: row.mitigation_id,
-          action: row.action,
-          priority: row.priority,
-          status: row.mitigation_status,
-          progress: row.progress
-        });
-      }
-    });
-
-    setRisques(Object.values(grouped));
-  } catch (err) {
-    console.error(err);
   }
 };
 
@@ -267,7 +237,41 @@ const handleFetchRisques = async () => {
       alert("Error updating status");
     }
   };
+// Composant AI Risks Summary
+const AIRisksSummary = ({ risks }) => {
+  const aiRisks = risks.filter(r => r.source_ia === true);
+  
+  if (aiRisks.length === 0) return null;
+  
+  return (
+    <div style={{
+      background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+      borderRadius: 14,
+      padding: "16px 20px",
+      marginBottom: 20,
+      color: "#fff"
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+        <ShieldAlert size={20} />
+        <span style={{ fontWeight: 700, fontSize: 14 }}>Risques identifiés par IA</span>
+        <span style={{
+          background: "rgba(255,255,255,0.2)",
+          borderRadius: 20,
+          padding: "2px 10px",
+          fontSize: 12
+        }}>
+          {aiRisks.length}
+        </span>
+      </div>
+      <div style={{ fontSize: 12, opacity: 0.9 }}>
+        Ces risques ont été automatiquement détectés lors de l'analyse des rapports de conformité ISO 27001.
+      </div>
+    </div>
+  );
+};
 
+// Ajoutez dans votre composant Risques principal
+// <AIRisksSummary risques={risques} />
   const total       = risques.length;
   const critiques   = risques.filter(r => getRiskScore(r.impact, r.probabilite) > 16).length;
   const enTraitement = risques.filter(r => r.statut === "In progress").length;
@@ -326,13 +330,12 @@ const handleFetchRisques = async () => {
               margin: 0,
             }}
           >
-            Risk Management
+            Identification & assessments
           </h1>
           <p style={{ color: "#7a96c0", margin: "4px 0 0", fontSize: 13 }}>
             Identification, assessment and monitoring of risks
           </p>
         </div>
-      <PermissionGuard permission="create_risks">
         <button
           onClick={openModal}
           style={{
@@ -359,7 +362,6 @@ const handleFetchRisques = async () => {
         >
           <Plus size={15} /> Add a risk
         </button>
-      </PermissionGuard>  
       </div>
 
       {/* ── KPI CARDS ── */}
@@ -486,10 +488,10 @@ const handleFetchRisques = async () => {
                               cellRisques.length > 0 ? "pointer" : "default",
                             position: "relative",
                             transition: "transform .15s, box-shadow .15s",
-                            transform: "none",
+                            transform: isHovered ? "scale(1.08)" : "scale(1)",
                             boxShadow: isHovered
-  ? "0 4px 12px rgba(0,0,0,.15)"
-  : "none",
+                              ? "0 4px 16px rgba(0,0,0,.15)"
+                              : "none",
                             border: isHovered
                               ? "2px solid #0f1e3d"
                               : "2px solid transparent",
@@ -532,7 +534,6 @@ const handleFetchRisques = async () => {
                               }}
                             >
                               {cellRisques.map((r) => (
-                                
                                 <div key={r.id} style={{ marginBottom: 2 }}>
                                   • {r.intitule}
                                 </div>
@@ -805,12 +806,11 @@ const handleFetchRisques = async () => {
               </tr>
             ) : (
               risques.map((r, idx) => {
-                const isLastRow = hoveredRisk === r.id && idx === risques.length - 1;
                 const { bg, label } = getRiskColor(r.impact, r.probabilite);
                 const statusColors = {
-                  Open: { bg: "#fee2e2", color: "#dc2626" },
-                  "In progress": { bg: "#fef3c7", color: "#d97706" },
-                  Resolved: { bg: "#dcfce7", color: "#16a34a" },
+                  Open: { bg: "#f0f5ff", color: "#3a5080" },
+                  "In progress": { bg: "#f0f5ff", color: "#3a5080" },
+                  Resolved: { bg: "#f0f5ff", color: "#3a5080" },
                 };
                 const currentStatusColor =
                   statusColors[r.statut] || statusColors.Open;
@@ -825,9 +825,7 @@ const handleFetchRisques = async () => {
     borderTop: "1px solid #f0f5ff",
     background: idx % 2 === 0 ? "#fff" : "#fafbff",
     transition: "background .15s",
-    position: "relative",
-    
-
+    position: "relative"
   }}
 >
                     <td
@@ -849,41 +847,27 @@ const handleFetchRisques = async () => {
                       }}
                     >
                       {r.intitule}
-                      
                       {hoveredRisk === r.id && r.description && (
-  <div
-    style={{
-      position: "absolute",
-      
-      // ✅ IMPORTANT: ne jamais dépasser vers le bas
-      bottom: isLastRow ? "100%" : "auto",
-      top: isLastRow ? "auto" : "100%",
-
-      marginBottom: isLastRow ? 10 : 0,
-      marginTop: !isLastRow ? 10 : 0,
-
-      left: 0,
-      width: 250,
-
-      background: "#fff",
-      color: "#0f1e3d",
-      padding: "10px 12px",
-      borderRadius: 8,
-      fontSize: 11,
-
-      zIndex: 9999,
-      boxShadow: "0 4px 16px rgba(0,0,0,.2)",
-
-      pointerEvents: "none",
-
-      // ✅ FIX stabilité rendering
-      transform: "translateZ(0)",
-      willChange: "transform, opacity",
-    }}
-  >
-    {r.description}
-  </div>
-)}
+    <div
+      style={{
+        position: "absolute",
+        top: "100%",
+        left: 0,
+        marginTop: 8,
+        background: "#fff",
+        color: "#0f1e3d",
+        padding: "10px 12px",
+        borderRadius: 8,
+        fontSize: 11,
+        width: 250,
+        zIndex: 9999,
+        boxShadow: "0 4px 16px rgba(0,0,0,.2)",
+        pointerEvents: "none" 
+      }}
+    >
+      {r.description}
+    </div>
+  )}
                     </td>
                     <td style={{ padding: "11px 16px" }}>
                       <span
@@ -986,7 +970,6 @@ const handleFetchRisques = async () => {
                             {r.statut}
                           </span>
                           <div style={{ display: "flex", gap: "4px" }}>
-                          <PermissionGuard permission="edit_risks">
                             <button
                               onClick={() => setEditingStatus(r.id)}
                               className="action-btn"
@@ -1014,8 +997,6 @@ const handleFetchRisques = async () => {
                             >
                               <Edit3 size={14} />
                             </button>
-                          </PermissionGuard>
-                          <PermissionGuard permission="delete_risks">
                             <button
                               onClick={() => handleDelete(r.id)}
                               className="action-btn"
@@ -1043,7 +1024,6 @@ const handleFetchRisques = async () => {
                             >
                               <Trash2 size={14} />
                             </button>
-                          </PermissionGuard>
                           </div>
                         </>
                       )}
@@ -1060,12 +1040,7 @@ const handleFetchRisques = async () => {
       {modalOpen && (
         <div
           style={{
-            
-  position: "fixed",
-  left: "auto",
-  top: "auto",
-  transform: "none",
-
+            position: "fixed",
             inset: 0,
             background: "rgba(15,30,80,.18)",
             backdropFilter: "blur(4px)",
@@ -1149,12 +1124,12 @@ const handleFetchRisques = async () => {
                   <option value="Financial">Financial</option>
                   <option value="HR">HR</option>
                   <option value="SOC">SOC</option>
-                  <option value="IT">Information Technology (IT)</option>
-                  <option value="Healthcare">
-                    Healthcare
+                  <option value="IT">IT</option>
+                  <option value="Information Security">
+                    Information Security
                   </option>
-                  <option value="Telecommunications">Telecommunications</option>
-                  <option value="Energy">Energy</option>
+                  <option value="Application Security">Application Security</option>
+                  <option value="Access Control">Access Control</option>
                 </select>
                 <div style={{ flex: 1, position: "relative" }}>
                   <div

@@ -25,6 +25,8 @@ import Contact from "./pages/Contact.jsx";
 import Profile from "./pages/Profile.jsx";
 import Settingsprofile from "./pages/Settingsprofile.jsx";
 import ProtectedRoute from "./components/ProtectedRoute";
+import LogsActivity from "./pages/Logsactivity.jsx";
+import LogsActivityadmin from "./pages/admin/LogsActivityadmin.jsx";
 
 
 
@@ -96,6 +98,8 @@ const App = () => {
           <Route path="exception" element={<Exception />} />
 
         <Route path="logs" element={<LogsAuditor />} />
+          <Route path="logsactivity" element={<LogsActivity />} />
+
         <Route path="settings" element={<SettingsPage />} />
         <Route path="reporting" element={<Reporting />} />
         
@@ -114,7 +118,8 @@ const App = () => {
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="access" element={<AccessPage />} />
           <Route path="frameworks" element={<Frameworks />} />
-          <Route path="logs" element={<Logs />} />
+          <Route path="log" element={<Logs />} />
+            <Route path="LogsActivityadmin" element={<LogsActivityadmin />} />
       </Route>
     </Route>
       <Route path="*" element={<Navigate to="/" />} />

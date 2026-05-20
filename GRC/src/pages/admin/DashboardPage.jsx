@@ -6,32 +6,49 @@ import {
   Briefcase, Users, TrendingUp, ShieldCheck 
 } from "lucide-react";
 
+/* ─── Color System ───────────────────────────── */
+const C = {
+  bg: "#F8FAFF", surface: "#FFFFFF", surfaceAlt: "#F0F4FF",
+  border: "#E2E8F8", borderStrong: "#C7D2F0",
+  wow: "#3B6FFF", accentLight: "#EEF2FF", accentHover: "#2D5CE8",
+  purple: "#6D28D9", purpleLight: "#F5F0FF",
+  success: "#059669", successLight: "#ECFDF5",
+  warning: "#061585", warningLight: "#FFFBEB",
+  danger: "#DC2626", dangerLight: "#FEF2F2",
+  info: "#0891B2", infoLight: "#ECFEFF",
+  text: "#0F172A", textMid: "#475569", textMuted: "#94A3B8",
+  shadow: "0 1px 3px rgba(15,23,42,0.07)",
+  shadowMd: "0 4px 12px rgba(15,23,42,0.09)",
+  shadowLg: "0 10px 30px rgba(15,23,42,0.13)",
+};
+C.accent = `linear-gradient(135deg, ${C.wow}, ${C.warning})`;
+
 /* ─── Theme Constants ───────────────── */
 const THEME = {
   colors: {
-    primary: "#6366F1",
-    primaryDark: "#4F46E5",
-    primaryLight: "#818CF8",
-    primaryBg: "#EEF2FF",
-    textDark: "#0F172A",
-    textGray: "#64748B",
-    textLight: "#94A3B8",
-    white: "#fff",
-    background: "#F8FAFC",
-    border: "#E2E8F0",
-    borderLight: "#F1F5F9",
-    error: "#EF4444",
-    errorLight: "#FEF2F2",
+    primary: C.wow,
+    primaryDark: C.accentHover,
+    primaryLight: "#6B93FF",
+    primaryBg: C.accentLight,
+    textDark: C.text,
+    textGray: C.textMid,
+    textLight: C.textMuted,
+    white: C.surface,
+    background: C.bg,
+    border: C.border,
+    borderLight: C.surfaceAlt,
+    error: C.danger,
+    errorLight: C.dangerLight,
     errorHover: "#FEE2E2",
   },
   gradients: {
-    button: "linear-gradient(135deg, #6366F1, #4F46E5)",
+    button: C.accent,
   },
   shadows: {
-    card: "0 2px 12px rgba(0,0,0,0.04)",
-    cardHover: "0 8px 24px rgba(0,0,0,0.08)",
-    modal: "0 32px 80px rgba(0,0,0,0.18)",
-    button: "0 4px 16px rgba(99,102,241,0.3)",
+    card: C.shadow,
+    cardHover: C.shadowMd,
+    modal: C.shadowLg,
+    button: `0 4px 16px rgba(59,111,255,0.35)`,
   },
   animation: {
     fadeUp: {
@@ -75,7 +92,6 @@ const AddCompanyModal = ({ onClose, onAdd }) => {
       alert("Company name is required");
       return;
     }
-    
     setIsSubmitting(true);
     const companyData = { ...form, sector: form.sector || "Other" };
     await onAdd(companyData);
@@ -87,7 +103,7 @@ const AddCompanyModal = ({ onClose, onAdd }) => {
     overlay: {
       position: "fixed",
       inset: 0,
-      background: "rgba(15,23,42,0.6)",
+      background: "rgba(15,23,42,0.55)",
       backdropFilter: "blur(8px)",
       zIndex: 1000,
       display: "flex",
@@ -95,11 +111,12 @@ const AddCompanyModal = ({ onClose, onAdd }) => {
       justifyContent: "center",
     },
     modal: {
-      background: THEME.colors.white,
+      background: C.surface,
       borderRadius: "24px",
       width: "500px",
       maxWidth: "90vw",
-      boxShadow: THEME.shadows.modal,
+      boxShadow: C.shadowLg,
+      border: `1px solid ${C.border}`,
     },
     header: {
       padding: "24px 28px 0 28px",
@@ -107,19 +124,23 @@ const AddCompanyModal = ({ onClose, onAdd }) => {
       justifyContent: "space-between",
       alignItems: "flex-start",
     },
-    title: {
+    titleAccent: {
+      display: "inline-block",
       fontSize: "20px",
       fontWeight: "700",
-      color: THEME.colors.textDark,
+      background: C.accent,
+      WebkitBackgroundClip: "text",
+      WebkitTextFillColor: "transparent",
+      backgroundClip: "text",
       marginBottom: "4px",
     },
     subtitle: {
       fontSize: "13px",
-      color: THEME.colors.textLight,
+      color: C.textMuted,
     },
     closeButton: {
-      background: THEME.colors.borderLight,
-      border: "none",
+      background: C.surfaceAlt,
+      border: `1px solid ${C.border}`,
       borderRadius: "10px",
       width: "32px",
       height: "32px",
@@ -127,7 +148,7 @@ const AddCompanyModal = ({ onClose, onAdd }) => {
       alignItems: "center",
       justifyContent: "center",
       cursor: "pointer",
-      color: THEME.colors.textGray,
+      color: C.textMid,
       transition: "all 0.2s",
     },
     form: {
@@ -144,31 +165,33 @@ const AddCompanyModal = ({ onClose, onAdd }) => {
     label: {
       fontSize: "12px",
       fontWeight: "600",
-      color: THEME.colors.textGray,
+      color: C.textMid,
       textTransform: "uppercase",
       letterSpacing: "0.5px",
     },
     input: {
       width: "100%",
       padding: "10px 14px",
-      border: `1.5px solid ${THEME.colors.border}`,
+      border: `1.5px solid ${C.border}`,
       borderRadius: "12px",
       fontSize: "14px",
-      color: THEME.colors.textDark,
+      color: C.text,
       outline: "none",
       fontFamily: "inherit",
       transition: "all 0.2s",
+      background: C.surface,
+      boxSizing: "border-box",
     },
     select: {
       width: "100%",
       padding: "10px 14px",
-      border: `1.5px solid ${THEME.colors.border}`,
+      border: `1.5px solid ${C.border}`,
       borderRadius: "12px",
       fontSize: "14px",
-      color: THEME.colors.textDark,
+      color: C.text,
       outline: "none",
       fontFamily: "inherit",
-      background: THEME.colors.white,
+      background: C.surface,
       cursor: "pointer",
     },
     actions: {
@@ -179,10 +202,10 @@ const AddCompanyModal = ({ onClose, onAdd }) => {
     cancelButton: {
       flex: 1,
       padding: "11px",
-      border: `1.5px solid ${THEME.colors.border}`,
+      border: `1.5px solid ${C.border}`,
       borderRadius: "12px",
-      background: THEME.colors.white,
-      color: THEME.colors.textGray,
+      background: C.surface,
+      color: C.textMid,
       fontSize: "13px",
       fontWeight: "600",
       cursor: "pointer",
@@ -193,12 +216,12 @@ const AddCompanyModal = ({ onClose, onAdd }) => {
       padding: "11px",
       border: "none",
       borderRadius: "12px",
-      background: THEME.gradients.button,
-      color: THEME.colors.white,
+      background: C.accent,
+      color: C.surface,
       fontSize: "13px",
       fontWeight: "600",
       cursor: "pointer",
-      boxShadow: THEME.shadows.button,
+      boxShadow: `0 4px 16px rgba(59,111,255,0.35)`,
       transition: "all 0.2s",
       opacity: isSubmitting ? 0.7 : 1,
     },
@@ -215,32 +238,47 @@ const AddCompanyModal = ({ onClose, onAdd }) => {
       >
         <div style={styles.header}>
           <div>
-            <h2 style={styles.title}>New Company</h2>
+            <h2 style={styles.titleAccent}>New Company</h2>
             <p style={styles.subtitle}>Fill in the company information</p>
           </div>
           <button 
             onClick={onClose} 
             style={styles.closeButton}
-            onMouseEnter={(e) => e.currentTarget.style.background = THEME.colors.border}
-            onMouseLeave={(e) => e.currentTarget.style.background = THEME.colors.borderLight}
+            onMouseEnter={(e) => e.currentTarget.style.background = C.border}
+            onMouseLeave={(e) => e.currentTarget.style.background = C.surfaceAlt}
           >
             <X size={16} />
           </button>
         </div>
 
         <div style={styles.form}>
-          <div style={styles.field}>
-            <label style={styles.label}>Company Name *</label>
-            <input
-              type="text"
-              placeholder="Ex: TechCorp Inc."
-              value={form.name}
-              onChange={(e) => handleChange("name", e.target.value)}
-              style={styles.input}
-              onFocus={(e) => e.target.style.borderColor = THEME.colors.primary}
-              onBlur={(e) => e.target.style.borderColor = THEME.colors.border}
-            />
-          </div>
+          {[
+            { key: "name", label: "Company Name *", type: "text", placeholder: "Ex: TechCorp Inc." },
+            { key: "email", label: "Email", type: "email", placeholder: "contact@company.com" },
+            { key: "website", label: "Website", type: "text", placeholder: "https://company.com" },
+            { key: "phone", label: "Phone", type: "text", placeholder: "+216" },
+          ].map(({ key, label, type, placeholder }) =>
+            key === "sector" ? null : (
+              <div key={key} style={styles.field}>
+                <label style={styles.label}>{label}</label>
+                <input
+                  type={type}
+                  placeholder={placeholder}
+                  value={form[key]}
+                  onChange={(e) => handleChange(key, e.target.value)}
+                  style={styles.input}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = C.wow;
+                    e.target.style.boxShadow = `0 0 0 3px rgba(59,111,255,0.12)`;
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = C.border;
+                    e.target.style.boxShadow = "none";
+                  }}
+                />
+              </div>
+            )
+          )}
 
           <div style={styles.field}>
             <label style={styles.label}>Sector</label>
@@ -254,53 +292,14 @@ const AddCompanyModal = ({ onClose, onAdd }) => {
               ))}
             </select>
           </div>
-
-          <div style={styles.field}>
-            <label style={styles.label}>Email</label>
-            <input
-              type="email"
-              placeholder="contact@company.com"
-              value={form.email}
-              onChange={(e) => handleChange("email", e.target.value)}
-              style={styles.input}
-              onFocus={(e) => e.target.style.borderColor = THEME.colors.primary}
-              onBlur={(e) => e.target.style.borderColor = THEME.colors.border}
-            />
-          </div>
-
-          <div style={styles.field}>
-            <label style={styles.label}>Website</label>
-            <input
-              type="text"
-              placeholder="https://company.com"
-              value={form.website}
-              onChange={(e) => handleChange("website", e.target.value)}
-              style={styles.input}
-              onFocus={(e) => e.target.style.borderColor = THEME.colors.primary}
-              onBlur={(e) => e.target.style.borderColor = THEME.colors.border}
-            />
-          </div>
-
-          <div style={styles.field}>
-            <label style={styles.label}>Phone</label>
-            <input
-              type="text"
-              placeholder="+216"
-              value={form.phone}
-              onChange={(e) => handleChange("phone", e.target.value)}
-              style={styles.input}
-              onFocus={(e) => e.target.style.borderColor = THEME.colors.primary}
-              onBlur={(e) => e.target.style.borderColor = THEME.colors.border}
-            />
-          </div>
         </div>
 
         <div style={styles.actions}>
           <button 
             onClick={onClose} 
             style={styles.cancelButton}
-            onMouseEnter={(e) => e.currentTarget.style.background = THEME.colors.borderLight}
-            onMouseLeave={(e) => e.currentTarget.style.background = THEME.colors.white}
+            onMouseEnter={(e) => e.currentTarget.style.background = C.surfaceAlt}
+            onMouseLeave={(e) => e.currentTarget.style.background = C.surface}
           >
             Cancel
           </button>
@@ -330,18 +329,27 @@ const CompanyCard = ({ company, onDelete, index }) => {
 
   const styles = {
     card: {
-      background: THEME.colors.white,
+      background: C.surface,
       borderRadius: "20px",
-      border: `1px solid ${THEME.colors.borderLight}`,
+      border: `1px solid ${C.border}`,
       padding: "20px",
       display: "flex",
       flexDirection: "column",
       gap: "16px",
-      boxShadow: THEME.shadows.card,
+      boxShadow: C.shadow,
       transition: "all 0.3s cubic-bezier(0.22, 1, 0.36, 1)",
       cursor: "default",
       position: "relative",
       overflow: "hidden",
+    },
+    accentBar: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      height: "3px",
+      background: C.accent,
+      borderRadius: "20px 20px 0 0",
     },
     header: {
       display: "flex",
@@ -352,45 +360,51 @@ const CompanyCard = ({ company, onDelete, index }) => {
       width: "48px",
       height: "48px",
       borderRadius: "14px",
-      background: THEME.colors.primaryBg,
+      background: C.accentLight,
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
       position: "relative",
+      border: `1px solid ${C.borderStrong}`,
     },
     initials: {
       fontSize: "16px",
       fontWeight: "700",
-      color: THEME.colors.primary,
+      background: C.accent,
+      WebkitBackgroundClip: "text",
+      WebkitTextFillColor: "transparent",
+      backgroundClip: "text",
     },
     iconOverlay: {
       position: "absolute",
       bottom: "-4px",
       right: "-4px",
-      background: THEME.colors.white,
+      background: C.surface,
       borderRadius: "50%",
       padding: "2px",
+      boxShadow: C.shadow,
     },
     companyInfo: {
       flex: 1,
     },
     companyName: {
-      color: THEME.colors.textDark,
+      color: C.text,
       fontSize: "15px",
       fontWeight: "700",
       marginBottom: "6px",
     },
     sectorBadge: {
-      background: THEME.colors.primaryBg,
-      color: THEME.colors.primary,
+      background: C.accentLight,
+      color: C.wow,
       fontSize: "10px",
       fontWeight: "600",
       padding: "3px 10px",
       borderRadius: "20px",
       display: "inline-block",
+      border: `1px solid ${C.borderStrong}`,
     },
     deleteButton: {
-      background: THEME.colors.errorLight,
+      background: C.dangerLight,
       border: "none",
       borderRadius: "8px",
       width: "30px",
@@ -399,7 +413,7 @@ const CompanyCard = ({ company, onDelete, index }) => {
       alignItems: "center",
       justifyContent: "center",
       cursor: "pointer",
-      color: THEME.colors.error,
+      color: C.danger,
       transition: "all 0.2s",
     },
     details: {
@@ -411,11 +425,8 @@ const CompanyCard = ({ company, onDelete, index }) => {
       display: "flex",
       alignItems: "center",
       gap: "8px",
-      color: THEME.colors.textGray,
+      color: C.textMid,
       fontSize: "12px",
-    },
-    detailIcon: {
-      color: THEME.colors.primary,
     },
     detailText: {
       overflow: "hidden",
@@ -430,17 +441,20 @@ const CompanyCard = ({ company, onDelete, index }) => {
       custom={index}
       whileHover={{ 
         y: -4, 
-        boxShadow: THEME.shadows.cardHover,
-        borderColor: THEME.colors.primary + "20"
+        boxShadow: C.shadowMd,
+        borderColor: C.borderStrong,
       }}
       style={styles.card}
     >
+      {/* Accent top bar */}
+      <div style={styles.accentBar} />
+
       <div style={styles.header}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <div style={styles.avatar}>
             <span style={styles.initials}>{initials}</span>
             <div style={styles.iconOverlay}>
-              <Icon size={10} color={THEME.colors.primary} />
+              <Icon size={10} color={C.wow} />
             </div>
           </div>
           <div style={styles.companyInfo}>
@@ -453,8 +467,8 @@ const CompanyCard = ({ company, onDelete, index }) => {
           whileTap={{ scale: 0.95 }}
           onClick={() => onDelete(company.id)}
           style={styles.deleteButton}
-          onMouseEnter={(e) => e.currentTarget.style.background = THEME.colors.errorHover}
-          onMouseLeave={(e) => e.currentTarget.style.background = THEME.colors.errorLight}
+          onMouseEnter={(e) => e.currentTarget.style.background = "#FEE2E2"}
+          onMouseLeave={(e) => e.currentTarget.style.background = C.dangerLight}
         >
           <Trash2 size={13} />
         </motion.button>
@@ -463,19 +477,19 @@ const CompanyCard = ({ company, onDelete, index }) => {
       <div style={styles.details}>
         {company.email && (
           <div style={styles.detailRow}>
-            <Mail size={12} style={styles.detailIcon} />
+            <Mail size={12} color={C.wow} />
             <span style={styles.detailText}>{company.email}</span>
           </div>
         )}
         {company.website && (
           <div style={styles.detailRow}>
-            <Globe size={12} style={styles.detailIcon} />
+            <Globe size={12} color={C.wow} />
             <span style={styles.detailText}>{company.website}</span>
           </div>
         )}
         {company.phone && (
           <div style={styles.detailRow}>
-            <Phone size={12} style={styles.detailIcon} />
+            <Phone size={12} color={C.wow} />
             <span style={styles.detailText}>{company.phone}</span>
           </div>
         )}
@@ -491,11 +505,8 @@ export default function DashboardPage() {
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
-  // Fetch companies
   useEffect(() => {
-    fetch("http://localhost:3000/api/companies", {
-      credentials: "include"
-    })
+    fetch("http://localhost:3000/api/companies", { credentials: "include" })
       .then(res => res.json())
       .then(data => {
         setCompanies(Array.isArray(data) ? data : []);
@@ -508,7 +519,6 @@ export default function DashboardPage() {
       });
   }, []);
 
-  // Delete company
   const handleDelete = async (id) => {
     try {
       const res = await fetch(`http://localhost:3000/api/companies/${id}`, {
@@ -527,7 +537,6 @@ export default function DashboardPage() {
     }
   };
 
-  // Add company
   const handleAdd = async (companyData) => {
     try {
       const res = await fetch("http://localhost:3000/api/companies", {
@@ -548,7 +557,6 @@ export default function DashboardPage() {
     }
   };
 
-  // Filter companies
   const filteredCompanies = Array.isArray(companies)
     ? companies.filter(c => 
         c.name.toLowerCase().includes(search.toLowerCase()) || 
@@ -560,7 +568,7 @@ export default function DashboardPage() {
     container: {
       padding: "32px 36px",
       minHeight: "100%",
-      background: THEME.colors.background,
+      background: C.bg,
     },
     header: {
       display: "flex",
@@ -574,15 +582,19 @@ export default function DashboardPage() {
       flex: 1,
     },
     badge: {
-      color: THEME.colors.primary,
+      display: "inline-block",
       fontSize: "11px",
       letterSpacing: "0.12em",
       textTransform: "uppercase",
       fontWeight: "700",
       marginBottom: "8px",
+      background: C.accent,
+      WebkitBackgroundClip: "text",
+      WebkitTextFillColor: "transparent",
+      backgroundClip: "text",
     },
     title: {
-      color: THEME.colors.textDark,
+      color: C.text,
       fontSize: "28px",
       fontWeight: "800",
       lineHeight: 1.2,
@@ -600,21 +612,21 @@ export default function DashboardPage() {
       left: "12px",
       top: "50%",
       transform: "translateY(-50%)",
-      color: THEME.colors.textLight,
+      color: C.textMuted,
     },
     searchInput: {
       paddingLeft: "34px",
       paddingRight: "14px",
       paddingTop: "10px",
       paddingBottom: "10px",
-      border: `1.5px solid ${THEME.colors.border}`,
+      border: `1.5px solid ${C.border}`,
       borderRadius: "12px",
       fontSize: "13px",
-      color: THEME.colors.textDark,
+      color: C.text,
       outline: "none",
       fontFamily: "inherit",
       width: "220px",
-      background: THEME.colors.white,
+      background: C.surface,
       transition: "all 0.2s",
     },
     addButton: {
@@ -622,29 +634,30 @@ export default function DashboardPage() {
       alignItems: "center",
       gap: "8px",
       padding: "10px 20px",
-      background: THEME.gradients.button,
+      background: C.accent,
       border: "none",
       borderRadius: "12px",
-      color: THEME.colors.white,
+      color: C.surface,
       fontSize: "13px",
       fontWeight: "600",
       cursor: "pointer",
       transition: "all 0.2s",
+      boxShadow: `0 4px 16px rgba(59,111,255,0.3)`,
     },
     emptyState: {
       textAlign: "center",
       padding: "80px 20px",
-      color: THEME.colors.textLight,
+      color: C.textMuted,
     },
     emptyIcon: {
       margin: "0 auto 16px",
       opacity: 0.3,
-      color: THEME.colors.textGray,
+      color: C.textMid,
     },
     emptyTitle: {
       fontSize: "15px",
       fontWeight: "600",
-      color: THEME.colors.textGray,
+      color: C.textMid,
       marginBottom: "4px",
     },
     emptySubtitle: {
@@ -671,7 +684,6 @@ export default function DashboardPage() {
       {/* Header */}
       <div style={styles.header}>
         <div style={styles.headerLeft}>
-          <div style={styles.badge}>Dashboard</div>
           <h1 style={styles.title}>Managed Companies</h1>
         </div>
         <div style={styles.actions}>
@@ -682,12 +694,18 @@ export default function DashboardPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               style={styles.searchInput}
-              onFocus={(e) => e.target.style.borderColor = THEME.colors.primary}
-              onBlur={(e) => e.target.style.borderColor = THEME.colors.border}
+              onFocus={(e) => {
+                e.target.style.borderColor = C.wow;
+                e.target.style.boxShadow = `0 0 0 3px rgba(59,111,255,0.12)`;
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = C.border;
+                e.target.style.boxShadow = "none";
+              }}
             />
           </div>
           <motion.button
-            whileHover={{ scale: 1.02 }}
+            whileHover={{ scale: 1.02, opacity: 0.92 }}
             whileTap={{ scale: 0.98 }}
             onClick={() => setShowModal(true)}
             style={styles.addButton}
@@ -710,7 +728,7 @@ export default function DashboardPage() {
             {search ? "No results found" : "No companies"}
           </p>
           <p style={styles.emptySubtitle}>
-            {search ? "Try different search terms" : "Click \"Add Company\" to get started"}
+            {search ? "Try different search terms" : 'Click "Add Company" to get started'}
           </p>
         </div>
       ) : (

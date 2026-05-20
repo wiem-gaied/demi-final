@@ -21,6 +21,23 @@ const T = {
   warning: "#F59E0B",
   info: "#06B6D4",
 };
+const C = {
+  bg: "#F8FAFF", surface: "#FFFFFF", surfaceAlt: "#F0F4FF",
+  border: "#E2E8F8", borderStrong: "#C7D2F0",
+  wow: "#3B6FFF", accentLight: "#EEF2FF", accentHover: "#2D5CE8",
+  purple: "#6D28D9", purpleLight: "#F5F0FF",
+  success: "#059669", successLight: "#ECFDF5",
+  warning: "#061585", warningLight: "#FFFBEB",
+  danger: "#DC2626", dangerLight: "#FEF2F2",
+  info: "#0891B2", infoLight: "#ECFEFF",
+  text: "#0F172A", textMid: "#475569", textMuted: "#94A3B8",
+  shadow: "0 1px 3px rgba(15,23,42,0.07)",
+  shadowMd: "0 4px 12px rgba(15,23,42,0.09)",
+  shadowLg: "0 10px 30px rgba(15,23,42,0.13)",
+};
+C.accent = `linear-gradient(135deg, ${C.wow}, ${C.warning})`;
+// Couleur unie proche du dégradé (texte / bordures, où le dégradé est impossible)
+C.accentSolid = "#2A4AD0";
 
 // Mock data
 const ROLES = ["auditor", "user"];
@@ -240,9 +257,9 @@ function UserModal({ user, groups, onClose, onSave }) {
             flex: 1,
             padding: "8px 0",
             borderRadius: 10,
-            border: `2px solid ${form.status === s ? T.primary : T.border}`,
-            background: form.status === s ? T.primary + "12" : "transparent",
-            color: form.status === s ? T.primary : T.muted,
+            border: `2px solid ${form.status === s ? C.accentSolid : T.border}`,
+            background: "transparent",
+            color: form.status === s ? C.accentSolid : T.muted,
             fontWeight: 600,
             fontSize: 13,
             cursor: "pointer"
@@ -269,7 +286,7 @@ function UserModal({ user, groups, onClose, onSave }) {
         <div style={{ padding: "16px 32px 28px", display: "flex", justifyContent: "flex-end", gap: 12 }}>
           <button onClick={onClose} style={{ padding: "10px 24px", borderRadius: 12, border: `1px solid ${T.border}`, background: "transparent", color: T.muted, fontWeight: 600, fontSize: 14, cursor: "pointer" }}>Cancel</button>
           <button onClick={handleSave} disabled={loading || emailError !== ""}
- style={{ padding: "10px 28px", borderRadius: 12, border: "none", background: `linear-gradient(135deg, ${T.primary}, ${T.primaryDark})`, color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer", boxShadow: `0 4px 16px ${T.primary}44`, opacity: loading ? 0.7 : 1 }}>
+ style={{ padding: "10px 28px", borderRadius: 12, border: "none", background: C.accent, color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer", boxShadow: `0 4px 16px ${T.primary}44`, opacity: loading ? 0.7 : 1 }}>
             {loading ? "Creating..." : (user ? "Save Changes" : "Create User")}
           </button>
         </div>
@@ -312,7 +329,7 @@ export default function UsersTab({ users, groups, setUsers }) {
         groups: user.groups || [],
         
         avatar: `${user.first_name?.[0] || ''}${user.last_name?.[0] || ''}`.toUpperCase(),
-        lastLogin: user.last_login || "—"
+        lastLogin: new Date(user.last_login).toLocaleString() || "—"
       }));
       
       setUsers(formattedUsers);
@@ -363,7 +380,7 @@ export default function UsersTab({ users, groups, setUsers }) {
   if (loading) {
     return (
       <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "400px" }}>
-        <div style={{ color: T.primary }}>Loading users...</div>
+        <div style={{ color: C.accentSolid }}>Loading users...</div>
       </div>
     );
   }
@@ -379,7 +396,7 @@ export default function UsersTab({ users, groups, setUsers }) {
           <option value="all">All roles</option>
           {ROLES.map(r => <option key={r}>{r}</option>)}
         </select>
-        <button onClick={() => { setEditTarget(null); setUserModal(true); }} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 20px", borderRadius: 12, border: "none", background: `linear-gradient(135deg, ${T.primary}, ${T.primaryDark})`, color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap", boxShadow: `0 4px 16px ${T.primary}44` }}>
+        <button onClick={() => { setEditTarget(null); setUserModal(true); }} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 20px", borderRadius: 12, border: "none", background: C.accent, color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap", boxShadow: `0 4px 16px ${T.primary}44` }}>
           <UserPlus size={16} /> New User
         </button>
       </div>
@@ -424,7 +441,7 @@ export default function UsersTab({ users, groups, setUsers }) {
                   <td style={{ padding: "14px 18px", fontSize: 12, color: T.muted }}>{u.lastLogin || "—"}</td>
                   <td style={{ padding: "14px 18px" }}>
                     <div style={{ display: "flex", gap: 6 }}>
-                      <button onClick={() => { setEditTarget(u); setUserModal(true); }} style={{ background: T.bg, border: `1px solid ${T.border}`, borderRadius: 8, padding: "6px 10px", cursor: "pointer", color: T.primary }}><Edit3 size={14} /></button>
+                      <button onClick={() => { setEditTarget(u); setUserModal(true); }} style={{ background: T.bg, border: `1px solid ${T.border}`, borderRadius: 8, padding: "6px 10px", cursor: "pointer", color: C.accentSolid }}><Edit3 size={14} /></button>
                       <button onClick={() => setDeleteConfirm(u.id)} style={{ background: T.bg, border: `1px solid ${T.border}`, borderRadius: 8, padding: "6px 10px", cursor: "pointer", color: T.danger }}><Trash2 size={14} /></button>
                     </div>
                   </td>

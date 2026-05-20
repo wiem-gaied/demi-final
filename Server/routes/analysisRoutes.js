@@ -1,15 +1,35 @@
-// backend/routes/analysisRoutes.js
+// backend/routes/analysisRoutes.js — v2 (KPIs fix)
+//
+// Fixes vs v1:
+//   ✅ KPI roll-up (covered/partial/not_covered) now counts EVERY
+//      assessment across EVERY policy instead of deduplicating by
+//      item_id and keeping only the first occurrence (which made the
+//      saved counts reflect the FIRST policy only).
+//   ✅ "Filtered" placeholders (items the Python pipeline marked as
+//      not relevant to a given policy) are excluded from every count.
+//   ✅ Global score = AVERAGE of every policy's own score
+//      (each policy weighs equally).
+//   ✅ "Items analyzed" stored in total_items = total of evaluable
+//      assessments across all policies, matching what the UI shows.
+//
 import express from "express";
 import db from "../db.js";
+import { activityLogger } from "../middlewares/activityLogger.js";
 
 const router = express.Router();
 
 const STATUS_SCORE = { "Covered": 100, "Partial": 50, "Not covered": 0 };
 
+// Items the Python pipeline marked as "not relevant to this policy"
+// (the filter step). They are kept on the per-policy assessment list so
+// the UI can still show them in the global view, but they MUST NOT
+// count towards the per-policy or global KPIs.
+const isFilteredItem = (it) => it && it._source === "filtered";
+
 function normalizeText(s) {
   if (!s) return "";
   return String(s).toLowerCase().normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+    .replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
 }
 function jaccard(a, b) {
   const ta = new Set(normalizeText(a).split(" ").filter(w => w.length > 2));
@@ -45,7 +65,7 @@ function deduplicateRisks(risks, threshold = 0.55) {
 // =====================================================================
 // POST /api/analyses — save a finalized analysis
 // =====================================================================
-router.post("/", async (req, res) => {
+router.post("/", activityLogger("COMPLIANCE_ANALYSIS", { onSuccess: true }),async (req, res) => {
   const conn = await db.getConnection();
   try {
     console.log("✅ ROUTE /api/analyses POST HIT");
@@ -78,28 +98,35 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "Title is required" });
     }
 
-    // KPI roll-up (deduplicate items by item_id across all policies)
-    const seenItems = new Map();
-    for (const p of policies) {
-      for (const it of (p.items || [])) {
-        if (it.item_id && !seenItems.has(String(it.item_id))) {
-          seenItems.set(String(it.item_id), it);
-        }
-      }
-    }
-    const allUniqueItems = Array.from(seenItems.values());
+    // ─── KPI roll-up ────────────────────────────────────────────────
+    // ✅ FIX: previously we deduped items by item_id keeping only the
+    //         FIRST occurrence — so the saved counts reflected just the
+    //         first policy. Now we count EVERY assessment across EVERY
+    //         policy (filtered placeholders excluded), and we compute
+    //         the global score as the AVERAGE of per-policy scores.
+    let covered = 0, partial = 0, notCovered = 0;
+    let totalAssessments = 0;
+    let policyScoreSum = 0;
+    let policyScoredCount = 0;
 
-    let covered = 0, partial = 0, notCovered = 0, scoreSum = 0;
-    for (const it of allUniqueItems) {
-      const finalStatus = it.ciso_status || it.ai_status || "Not covered";
-      const sc = STATUS_SCORE[finalStatus] ?? 0;
-      scoreSum += sc;
-      if (finalStatus === "Covered")      covered++;
-      else if (finalStatus === "Partial") partial++;
-      else                                notCovered++;
+    for (const p of policies) {
+      const evaluable = (p.items || []).filter(it => !isFilteredItem(it));
+      if (evaluable.length === 0) continue;
+
+      let pSum = 0;
+      for (const it of evaluable) {
+        const fs = it.ciso_status || it.ai_status || "Not covered";
+        const sc = STATUS_SCORE[fs] ?? 0;
+        totalAssessments++;
+        pSum += sc;
+        if      (fs === "Covered") covered++;
+        else if (fs === "Partial") partial++;
+        else                       notCovered++;
+      }
+      policyScoreSum += Math.round(pSum / evaluable.length);
+      policyScoredCount++;
     }
-    const total       = allUniqueItems.length;
-    const globalScore = total ? Math.round(scoreSum / total) : 0;
+    const globalScore = policyScoredCount ? Math.round(policyScoreSum / policyScoredCount) : 0;
 
     const [aRes] = await conn.query(
       `INSERT INTO compliance_analyses
@@ -112,7 +139,7 @@ router.post("/", async (req, res) => {
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         title, document_name || "", standard_id || null, standard_name || "",
-        globalScore, covered, partial, notCovered, total,
+        globalScore, covered, partial, notCovered, totalAssessments,
         user.id, user.name, user.organisation, user.department,
         "finalized",
       ]
@@ -121,13 +148,13 @@ router.post("/", async (req, res) => {
 
     // POLICIES LOOP
     for (const p of policies) {
-      const pItems = p.items || [];
+      const evaluable = (p.items || []).filter(it => !isFilteredItem(it));
       let pSum = 0;
-      for (const it of pItems) {
+      for (const it of evaluable) {
         const fs = it.ciso_status || it.ai_status || "Not covered";
         pSum += STATUS_SCORE[fs] ?? 0;
       }
-      const pScore  = pItems.length ? Math.round(pSum / pItems.length) : 0;
+      const pScore  = evaluable.length ? Math.round(pSum / evaluable.length) : 0;
       const pStatus = pScore >= 80 ? "Covered" : pScore >= 30 ? "Partial" : "Not covered";
 
       const [pRes] = await conn.query(
@@ -137,7 +164,10 @@ router.post("/", async (req, res) => {
       );
       const policyId = pRes.insertId;
 
-      for (const it of pItems) {
+      // We still persist every assessment row (including the filtered
+      // ones) so the saved analysis page can show the global view.
+      // The aggregate counts above already excluded the filtered ones.
+      for (const it of (p.items || [])) {
         const fs = it.ciso_status || it.ai_status || "Not covered";
         await conn.query(
           `INSERT INTO analysis_items
@@ -224,7 +254,15 @@ router.post("/", async (req, res) => {
     }
 
     await conn.commit();
-    return res.json({ success: true, analysis_id: analysisId, global_score: globalScore, total_items: total, covered, partial, notCovered });
+    return res.json({
+      success: true,
+      analysis_id: analysisId,
+      global_score: globalScore,
+      total_items: totalAssessments,
+      covered,
+      partial,
+      notCovered,
+    });
 
   } catch (e) {
     await conn.rollback();

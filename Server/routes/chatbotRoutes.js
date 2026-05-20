@@ -86,7 +86,7 @@ function createPythonSession(sessionId) {
 }
 
 // Fonction pour attendre une réponse du processus Python
-function waitForResponse(sessionId, type, timeout = 120000) { // Timeout augmenté à 120 secondes
+function waitForResponse(sessionId, type, timeout = 600000) { // Timeout augmenté à 120 secondes
     return new Promise((resolve, reject) => {
         const start = Date.now();
 
@@ -132,7 +132,7 @@ router.post('/chatbot/message', async (req, res) => {
     }) + "\n");
 
     try {
-        const response = await waitForResponse(sessionId, "response", 120000);
+        const response = await waitForResponse(sessionId, "response", 600000);
 
         res.json({
             success: true,

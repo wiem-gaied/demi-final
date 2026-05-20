@@ -282,11 +282,11 @@ function Pagination({ current, total, onPage }) {
 }
 function formatAction(action) {
   const map = {
-    LOGIN_FAILED: "Login attempt failed",
+    ADD_COMPANY: "ADD COMPANY",
+    DELETE_USER: "DELETE_USER",
     LOGIN: "User logged in",
-    LOGOUT: "User logged out",
-    MFA_FAILED: "Multi-factor authentication failed",
-    ACCESS_DENIED: "Access denied"
+    CREATE_USER: "CREATE USER",
+    DELETE_USER: "DELETE USER"
   };
 
   return map[action] || action.replaceAll("_", " ");
@@ -310,7 +310,7 @@ export default function Logs() {
   const fetchLogs = useCallback(async () => {
     try {
       setLoading(true); setError(null);
-      const response = await fetch("http://localhost:3000/api/logs?category=SECURITY", {
+      const response = await fetch("http://localhost:3000/api/logs?category=ACTIVITY", {
         method: "GET", credentials: "include",
         headers: { "Accept": "application/json", "Content-Type": "application/json" }
       });
@@ -452,7 +452,7 @@ export default function Logs() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 20 }}>
           <div>
             <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700, color: C.text }}>
-              Event Log
+              Activity Log
             </h1>
           </div>
         </div>

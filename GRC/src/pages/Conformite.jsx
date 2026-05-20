@@ -1,20 +1,29 @@
-// src/pages/Conformity.jsx — v11 (fixed)
+// src/pages/Conformity.jsx — v13 (inspired by v9 + KPI fix)
+//   ✅ Item-level details show EVERY assessment the backend returned
+//   ✅ Global compliance % = AVERAGE of every policy's own score
+//   ✅ Covered / Partial / Not covered exclude "filtered" placeholders
+//   ✅ Analysis persists across refresh + page navigation (sessionStorage)
+//   ✅ Analysis keeps running while you browse other pages (module-level
+//      request) + a "Stop analysis" button to cancel it.
+//
 import { Trash2, Pencil, Check, X } from "lucide-react";
 import { useState, useRef, useEffect, useMemo } from "react";
 
 const C = {
   bg: "#F8FAFF", surface: "#FFFFFF", surfaceAlt: "#F0F4FF",
   border: "#E2E8F8", borderStrong: "#C7D2F0",
-  accent: "#3B6FFF", accentLight: "#EEF2FF",
+  wow: "#3B6FFF", accentLight: "#EEF2FF",
   purple: "#6D28D9",
   success: "#16A34A", successLight: "#F0FDF4",
-  warning: "#D97706", warningLight: "#FFFBEB",
+  warning: "#061585", warningLight: "#FFFBEB",
   danger:  "#DC2626", dangerLight:  "#FEF2F2",
   text: "#0F172A", textMid: "#475569", textMuted: "#94A3B8",
   shadow: "0 1px 6px rgba(0,0,0,0.05)",
   shadowMd: "0 4px 14px rgba(0,0,0,0.08)",
   shadowLg: "0 20px 60px rgba(59,111,255,0.14)",
+  Spin:"#0d2d85",
 };
+C.accent = `linear-gradient(135deg, ${C.wow}, ${C.warning})`;
 const F = { display: "'Fraunces', Georgia, serif", body: "'DM Sans', system-ui, sans-serif" };
 
 const API_BASE     = "http://localhost:3000/api/ai";
@@ -29,10 +38,32 @@ const STATUS_META = {
 const RSSI_OPTIONS = ["Covered", "Partial", "Not covered"];
 const RSSI_STYLE = STATUS_META;
 
+const isFiltered = (a) => a?._source === "filtered";
+
+// Persisted (finished) analysis — survives refresh + navigation.
+const ANALYSIS_PERSIST_KEY = "conformity_analysis_state";
+// Flag set while an analysis is in flight (for UX after navigation).
+const ANALYSIS_RUNNING_KEY = "conformity_analysis_running";
+
+// In-flight analysis request hoisted to MODULE scope so it survives a
+// React unmount → the user can browse other pages while it runs and the
+// result is recovered when they come back (within the same tab, no full
+// page reload). Shape: { controller, promise, fileName }.
+let ongoingAnalysis = null;
+
+function loadPersistedAnalysis() {
+  try {
+    const raw = sessionStorage.getItem(ANALYSIS_PERSIST_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
 function normalizeText(s) {
   if (!s) return "";
   return String(s).toLowerCase()
-    .normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+    .normalize("NFKD").replace(/[̀-ͯ]/g, "")
     .replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
 }
 function jaccard(a, b) {
@@ -521,7 +552,7 @@ function EditPill({ onClick, validated }) {
 function ItemDetail({ a, decision, onValidate, onEditAiComment, onEditCisoComment }) {
   const displayStatus = decision?.status || a.status;
   const m = STATUS_META[displayStatus];
-  const typeLabel = a.type === "core_chapter" ? "Core" : a.type === "annex_family" ? "Family" : a.type === "annex_control" ? "Control" : "";
+  const typeLabel = a.type === "core_chapter" ? "Core" : a.type === "core_control" ? "Requirement" : a.type === "annex_family" ? "Family" : a.type === "annex_control" ? "Control" : "";
 
   return (
     <div style={{ borderRadius: 9, border: `1px solid ${m ? m.border : C.border}`, background: m ? `${m.bg}50` : C.surfaceAlt, padding: "10px 12px", marginBottom: 6 }}>
@@ -545,13 +576,118 @@ function ItemDetail({ a, decision, onValidate, onEditAiComment, onEditCisoCommen
   );
 }
 
+const isBigTitle = (a) => a?.type === "core_chapter" || a?.type === "annex_family";
+
+function refSegs(ref) {
+  return String(ref || "").split(".").map(s => s.trim()).filter(Boolean);
+}
+function isDottedPrefix(prefix, ref) {
+  if (!prefix || !ref || prefix === ref) return false;
+  return String(ref).startsWith(prefix + ".");
+}
+function refCompare(a, b) {
+  const sa = refSegs(a), sb = refSegs(b);
+  const annexA = sa.length > 0 && isNaN(Number(sa[0]));
+  const annexB = sb.length > 0 && isNaN(Number(sb[0]));
+  if (annexA !== annexB) return annexA ? 1 : -1;            // core before annex
+  const n = Math.max(sa.length, sb.length);
+  for (let i = 0; i < n; i++) {
+    const x = sa[i], y = sb[i];
+    if (x === undefined) return -1;
+    if (y === undefined) return 1;
+    const nx = Number(x), ny = Number(y);
+    if (!isNaN(nx) && !isNaN(ny)) { if (nx !== ny) return nx - ny; }
+    else if (x !== y) return x < y ? -1 : 1;
+  }
+  return 0;
+}
+function buildTitleTree(assessments) {
+  const list = assessments || [];
+  const titles = list.filter(isBigTitle);
+  const byLen = [...titles].sort(
+    (p, q) => String(q.ref_id || "").length - String(p.ref_id || "").length
+  );
+  const nodeById = new Map();
+  for (const t of titles) nodeById.set(t.item_id, { title: t, members: [], children: [] });
+
+  const roots = [];
+  for (const t of titles) {
+    const node = nodeById.get(t.item_id);
+    const parent = byLen.find(o => o.item_id !== t.item_id && isDottedPrefix(o.ref_id, t.ref_id));
+    if (parent && nodeById.has(parent.item_id)) nodeById.get(parent.item_id).children.push(node);
+    else roots.push(node);
+  }
+
+  const ungrouped = [];
+  for (const a of list) {
+    if (isBigTitle(a)) continue;
+    const parent = byLen.find(o => isDottedPrefix(o.ref_id, a.ref_id));
+    if (parent && nodeById.has(parent.item_id)) nodeById.get(parent.item_id).members.push(a);
+    else ungrouped.push(a);
+  }
+
+  const sortNode = (n) => {
+    n.members.sort((x, y) => refCompare(x.ref_id, y.ref_id));
+    n.children.sort((x, y) => refCompare(x.title.ref_id, y.title.ref_id));
+    n.children.forEach(sortNode);
+  };
+  roots.sort((x, y) => refCompare(x.title.ref_id, y.title.ref_id));
+  roots.forEach(sortNode);
+  ungrouped.sort((x, y) => refCompare(x.ref_id, y.ref_id));
+  return { roots, ungrouped };
+}
+
+function countLeaves(node) {
+  return node.members.length + node.children.reduce((s, c) => s + countLeaves(c), 0);
+}
+
+function ItemGroup({ node, depth = 0, decisions, onValidate, onEditAiComment, onEditCisoComment }) {
+  const [open, setOpen] = useState(false);
+  const t = node.title;
+  const isBucket = t.item_id === "__ungrouped__";
+  const m = STATUS_META[decisions?.[t.item_id]?.status || t.status];
+  const total = countLeaves(node);
+  return (
+    <div style={{ marginBottom: depth === 0 ? 8 : 4, border: depth === 0 ? `1px solid ${C.border}` : "none", borderRadius: 10, overflow: "hidden" }}>
+      <button onClick={() => setOpen(o => !o)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: depth === 0 ? "9px 12px" : "6px 8px", background: depth === 0 ? (m ? `${m.bg}70` : C.surfaceAlt) : "transparent", border: "none", cursor: "pointer", textAlign: "left" }}>
+        <svg width="12" height="12" viewBox="0 0 13 13" fill="none" style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform .15s", flexShrink: 0 }}>
+          <path d="M2.5 5L6.5 9L10.5 5" stroke={C.textMuted} strokeWidth="1.8" strokeLinecap="round"/>
+        </svg>
+        <span style={{ fontSize: 13 }}>{m?.icon || "⏳"}</span>
+        {t.ref_id && <span style={{ fontFamily: F.body, fontSize: 9, color: C.textMuted, background: C.surface, padding: "1px 6px", borderRadius: 4, fontWeight: 700, border: `1px solid ${C.border}` }}>{t.ref_id}</span>}
+        <span style={{ fontFamily: F.display, fontSize: depth === 0 ? 13 : 12, fontWeight: depth === 0 ? 800 : 700, color: C.text, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</span>
+        <span style={{ fontFamily: F.body, fontSize: 10, color: C.textMuted, fontWeight: 600, flexShrink: 0 }}>{total} item{total === 1 ? "" : "s"}</span>
+      </button>
+      {open && (
+        <div style={{ padding: depth === 0 ? "10px 12px 4px" : "6px 0 0", background: depth === 0 ? C.surface : "transparent" }}>
+          {!isBucket && (
+            <ItemDetail a={t} decision={decisions?.[t.item_id]} onValidate={onValidate} onEditAiComment={onEditAiComment} onEditCisoComment={onEditCisoComment} />
+          )}
+          {(node.members.length > 0 || node.children.length > 0) && (
+            <div style={{ marginLeft: 14, borderLeft: `2px solid ${C.border}`, paddingLeft: 10 }}>
+              {node.members.map(a => (
+                <ItemDetail key={a.item_id} a={a} decision={decisions?.[a.item_id]} onValidate={onValidate} onEditAiComment={onEditAiComment} onEditCisoComment={onEditCisoComment} />
+              ))}
+              {node.children.map(c => (
+                <ItemGroup key={c.title.item_id} node={c} depth={depth + 1} decisions={decisions} onValidate={onValidate} onEditAiComment={onEditAiComment} onEditCisoComment={onEditCisoComment} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PolicyCard({ policy, decisions, assets, onValidateItem, onEditAiComment, onEditCisoComment, onSavePolicy }) {
   const [open, setOpen] = useState(true);
   const [showItems, setShowItems] = useState(false);
+  const grouped = useMemo(() => buildTitleTree(policy.assessments), [policy.assessments]);
 
   const initialRisks = useMemo(() => {
     const deduped = dedupeAiRisks(policy.risks || []);
     return deduped.map(r => ({ id: r.id, description: r.description, riskClass: "asset", impact: 2, probability: 2, asset_ids: [] }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [policy.policy_name]);
 
   const [risks, setRisks]           = useState(initialRisks);
@@ -564,18 +700,22 @@ function PolicyCard({ policy, decisions, assets, onValidateItem, onEditAiComment
   const [showGaps, setShowGaps]     = useState(false);
   const [showMiti, setShowMiti]     = useState(false);
 
-  const itemsForCalc = policy.assessments || [];
-  const liveScore = itemsForCalc.length
-    ? Math.round(itemsForCalc.reduce((s, a) => {
+  // Per-policy live score: average only over the items this policy
+  // actually evaluated — "Not relevant to this policy" placeholders
+  // are not real audit verdicts and would unfairly drag the score down.
+  const evaluable = (policy.assessments || []).filter(a => !isFiltered(a));
+  const liveScore = evaluable.length
+    ? Math.round(evaluable.reduce((s, a) => {
         const finalSt = decisions?.[a.item_id]?.status || a.status || "Not covered";
         return s + (STATUS_META[finalSt]?.score ?? 0);
-      }, 0) / itemsForCalc.length)
+      }, 0) / evaluable.length)
     : 0;
   const liveStatus = liveScore >= 80 ? "Covered" : liveScore >= 30 ? "Partial" : "Not covered";
   const m = STATUS_META[liveStatus];
 
   useEffect(() => {
     onSavePolicy?.({ ...policy, _validated: { risks, gaps, mitigation, risksValidated, gapsValidated, mitiValidated, liveScore, liveStatus } });
+    // eslint-disable-next-line
   }, [risks, gaps, mitigation, risksValidated, gapsValidated, mitiValidated, liveScore, liveStatus, decisions]);
 
   return (
@@ -642,16 +782,27 @@ function PolicyCard({ policy, decisions, assets, onValidateItem, onEditAiComment
             </div>
           )}
 
+          {/* Item-level details — shows EVERY assessment the backend
+              returned for this policy (including "Not relevant to this
+              policy" placeholders), so each clause-item and annex-control
+              is visible. Inspired by v9. */}
           {policy.assessments?.length > 0 && (
             <div style={{ marginTop: 16 }}>
               <button onClick={() => setShowItems(s => !s)} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, padding: "7px 12px", cursor: "pointer", fontFamily: F.body, fontSize: 12, fontWeight: 600, color: C.textMid }}>
-                {showItems ? "▾ Hide" : "▸ Show"} item-level details ({policy.assessments.length})
+                {showItems ? "▾ Hide" : "▸ Show"} item-level details ({grouped.roots.length} section{grouped.roots.length === 1 ? "" : "s"} · {policy.assessments.length} items)
               </button>
               {showItems && (
                 <div style={{ marginTop: 10 }}>
-                  {policy.assessments.map(a => (
-                    <ItemDetail key={a.item_id} a={a} decision={decisions?.[a.item_id]} onValidate={onValidateItem} onEditAiComment={onEditAiComment} onEditCisoComment={onEditCisoComment} />
+                  {grouped.roots.map(n => (
+                    <ItemGroup key={n.title.item_id} node={n} decisions={decisions} onValidate={onValidateItem} onEditAiComment={onEditAiComment} onEditCisoComment={onEditCisoComment} />
                   ))}
+                  {grouped.ungrouped.length > 0 && (
+                    <ItemGroup
+                      key="__ungrouped__"
+                      node={{ title: { item_id: "__ungrouped__", ref_id: "", title: "Other items", type: "core_chapter", status: "Not covered", comment: "" }, members: grouped.ungrouped, children: [] }}
+                      decisions={decisions} onValidate={onValidateItem} onEditAiComment={onEditAiComment} onEditCisoComment={onEditCisoComment}
+                    />
+                  )}
                 </div>
               )}
             </div>
@@ -677,7 +828,6 @@ async function fetchCurrentUser() {
   } catch (e) {
     console.warn("Could not fetch current user from session:", e);
   }
-  // Fallback: try localStorage
   try {
     const stored = JSON.parse(localStorage.getItem("user") || "null");
     if (stored?.id) return stored;
@@ -686,19 +836,51 @@ async function fetchCurrentUser() {
 }
 
 export default function ConformityPage() {
-  const [step, setStep] = useState(1);
-  const [uploadedFile, setUploadedFile] = useState(null);
-  const [analysisData, setAnalysisData] = useState(null);
-  const [decisions, setDecisions] = useState({});
-  const [validatedPolicies, setVP] = useState({});
-  const [editedAiComments, setEditedAiComments] = useState({});
+  // Restore a previously-running analysis (survives refresh + navigation).
+  // Cleared on logout (AuthContext) and on finalize/reset (resetAll).
+  const _persisted = loadPersistedAnalysis();
+  const _hasPersisted = !!_persisted?.analysisData;
+
+  const [step, setStep] = useState(_hasPersisted ? 3 : 1);
+  const [uploadedFile, setUploadedFile] = useState(
+    _hasPersisted && _persisted.uploadedFileName
+      ? { name: _persisted.uploadedFileName }
+      : null
+  );
+  const [analysisData, setAnalysisData] = useState(_hasPersisted ? _persisted.analysisData : null);
+  const [decisions, setDecisions] = useState(_hasPersisted ? (_persisted.decisions || {}) : {});
+  const [validatedPolicies, setVP] = useState(_hasPersisted ? (_persisted.validatedPolicies || {}) : {});
+  const [editedAiComments, setEditedAiComments] = useState(_hasPersisted ? (_persisted.editedAiComments || {}) : {});
   const [modalItem, setModalItem] = useState(null);
   const [showFinalize, setShowFinalize] = useState(false);
   const fileRef = useRef();
   const [policies, setPolicies] = useState([]);
   const [assets, setAssets] = useState([]);
 
-  // ✅ FIX: currentUser now holds full session data including organization + department
+  // Save the running analysis on every meaningful change so a refresh
+  // or a page navigation does not lose it.
+  useEffect(() => {
+    if (!analysisData) {
+      sessionStorage.removeItem(ANALYSIS_PERSIST_KEY);
+      return;
+    }
+    try {
+      sessionStorage.setItem(
+        ANALYSIS_PERSIST_KEY,
+        JSON.stringify({
+          step,
+          uploadedFileName: uploadedFile?.name || "",
+          analysisData,
+          decisions,
+          validatedPolicies,
+          editedAiComments,
+        })
+      );
+    } catch (e) {
+      console.warn("Could not persist analysis (storage full?):", e);
+    }
+  }, [step, uploadedFile, analysisData, decisions, validatedPolicies, editedAiComments]);
+
   const [currentUser, setCurrentUser] = useState({
     id: null,
     name: "Anonymous CISO",
@@ -706,7 +888,6 @@ export default function ConformityPage() {
     department: "",
   });
 
-  // ✅ FIX: Load user from session API (not localStorage)
   useEffect(() => {
     (async () => {
       const user = await fetchCurrentUser();
@@ -732,7 +913,9 @@ export default function ConformityPage() {
 
   const aiResults  = analysisData?.results  || {};
   const aiPolicies = analysisData?.policies || [];
-  const allItems   = policies.flatMap(p => (p.chapters || []).flatMap(c => (c.items || [])));
+
+  const bigTitleCount  = useMemo(() => policies.reduce((s, p) => s + (p.bigTitles  || 0), 0), [policies]);
+  const totalItemCount = useMemo(() => policies.reduce((s, p) => s + (p.totalItems || 0), 0), [policies]);
 
   useEffect(() => {
     (async () => {
@@ -740,85 +923,175 @@ export default function ConformityPage() {
         const res  = await fetch("http://localhost:3000/api/framauditor/imported", { credentials: "include" });
         const data = await res.json();
         const norm = data.map(pkg => {
-          const coreChaps = (pkg.core_chapters || []).map(ch => ({ id: ch.id, title: ch.title, type: "core", items: [{ id: ch.id, title: ch.title, ref: ch.ref_id, type: "core_chapter" }] }));
-          const annexChaps = (pkg.families || []).map(f => ({
-            id: f.id, title: f.name, type: "family",
-            items: (pkg.controls || []).filter(c => c.family_id === f.id && !c.is_exception).map(c => ({ id: c.id, title: c.name, ref: c.ref_id, type: "control", family_id: f.id })),
-          })).filter(ch => ch.items.length > 0);
-          return { id: pkg.standard_id, title: pkg.title, version: pkg.version || "1.0", color: "#3B6FFF", chapters: [...coreChaps, ...annexChaps] };
+          const chapters = pkg.core_chapters || [];
+          const families = pkg.families || [];
+          const controls = pkg.controls  || [];
+
+          const keptFamilies = families.filter(
+            f => controls.some(c => c.family_id === f.id && !c.is_exception)
+          );
+          const rootCoreChapters = chapters.filter(c => !c.parent_id);
+          const bigTitles = rootCoreChapters.length + keptFamilies.length;
+
+          const keptCoreControls  = controls.filter(c => c.core_chapter_id && !c.is_exception);
+          const keptAnnexControls = controls.filter(c => c.family_id && !c.is_exception);
+          const totalItems =
+            chapters.length + keptFamilies.length +
+            keptCoreControls.length + keptAnnexControls.length;
+
+          return {
+            id: pkg.standard_id, title: pkg.title,
+            version: pkg.version || "1.0", color: "#3B6FFF",
+            bigTitles, totalItems,
+          };
         });
         setPolicies(norm);
       } catch (e) { console.error(e); setPolicies([]); }
     })();
   }, []);
 
-  // ✅ FIX: KPIs computed across ALL policies, deduplicating by item_id,
-  //         and correctly counting covered/partial/not covered based on final status
-    const kpis = useMemo(() => {
-    // Use the global merged map from main.py (one entry per unique item_id).
-    // Falls back to deduping aiPolicies if results is empty.
-    let list = Object.values(aiResults || {});
-    if (list.length === 0) {
-      const seen = new Map();
-      for (const p of aiPolicies) {
-        for (const a of (p.assessments || [])) {
-          if (!a?.item_id) continue;
-          if (a._source === "filtered") continue;
-          if (!seen.has(a.item_id)) seen.set(a.item_id, a);
-        }
+  // ─── KPIs ─────────────────────────────────────────────────────────────
+  const kpis = useMemo(() => {
+    let covered = 0, partial = 0, notCovered = 0;
+    let totalAssessments = 0;
+    let policyScoreSum = 0;
+    let policyScoredCount = 0;
+
+    for (const p of aiPolicies) {
+      const evaluable = (p.assessments || []).filter(a => !isFiltered(a) && a?.item_id);
+      if (evaluable.length === 0) continue;
+
+      let pScore = 0;
+      for (const a of evaluable) {
+        const finalStatus = decisions[a.item_id]?.status || a.status;
+        const meta = STATUS_META[finalStatus];
+        if (!meta) continue;
+        totalAssessments++;
+        pScore += meta.score;
+        if      (finalStatus === "Covered") covered++;
+        else if (finalStatus === "Partial") partial++;
+        else                                notCovered++;
       }
-      list = Array.from(seen.values());
+      policyScoreSum += Math.round(pScore / evaluable.length);
+      policyScoredCount++;
     }
 
-    let covered = 0, partial = 0, notCovered = 0, scoreSum = 0, validCount = 0, validatedByCiso = 0;
-
-    for (const a of list) {
-      const finalStatus = decisions[a.item_id]?.status || a.status || "Not covered";
-      if (decisions[a.item_id]) validatedByCiso++;
-
-      const meta = STATUS_META[finalStatus];
-      if (!meta) continue;
-
-      validCount++;
-      scoreSum += meta.score;
-
-      if (finalStatus === "Covered")       covered++;
-      else if (finalStatus === "Partial")  partial++;
-      else                                 notCovered++;
+    const cisoItemsSeen = new Set();
+    for (const item_id of Object.keys(decisions || {})) {
+      if (decisions[item_id]?.status) cisoItemsSeen.add(item_id);
     }
+    let rgmValidations = 0;
+    for (const p of aiPolicies) {
+      const v = validatedPolicies[p.policy_name]?._validated;
+      if (!v) continue;
+      if (v.risksValidated) rgmValidations++;
+      if (v.gapsValidated)  rgmValidations++;
+      if (v.mitiValidated)  rgmValidations++;
+    }
+    const validatedByCiso = cisoItemsSeen.size + rgmValidations;
 
-    const globalScore = validCount ? Math.round(scoreSum / validCount) : 0;
+    const globalScore  = policyScoredCount ? Math.round(policyScoreSum / policyScoredCount) : 0;
     const globalStatus = globalScore >= 80 ? "Covered" : globalScore >= 30 ? "Partial" : "Not covered";
 
-    return { analyzedCount: validCount, coveredCount: covered, partialCount: partial, notCoveredCount: notCovered, validatedCount: validatedByCiso, globalScore, globalStatus };
-  }, [aiResults, aiPolicies, decisions]);
-  
+    return {
+      analyzedCount:   totalAssessments,
+      coveredCount:    covered,
+      partialCount:    partial,
+      notCoveredCount: notCovered,
+      validatedCount:  validatedByCiso,
+      globalScore,
+      globalStatus,
+    };
+  }, [aiPolicies, decisions, validatedPolicies]);
+
+  const uniqueImportedAnalyzed = useMemo(() => {
+    const seen = new Set();
+    for (const p of aiPolicies) {
+      for (const a of (p.assessments || [])) {
+        if (!isFiltered(a) && a?.item_id) seen.add(a.item_id);
+      }
+    }
+    return seen.size;
+  }, [aiPolicies]);
+
   const handleFile = (f) => {
     if (!f) return;
     setUploadedFile(f); setAnalysisData(null); setDecisions({}); setVP({}); setEditedAiComments({}); setStep(1);
   };
   const resetAll = () => {
+    sessionStorage.removeItem(ANALYSIS_PERSIST_KEY);
     setStep(1); setUploadedFile(null); setAnalysisData(null); setDecisions({}); setVP({}); setEditedAiComments({});
     if (fileRef.current) fileRef.current.value = "";
+  };
+
+  // Wait on the (module-level) in-flight analysis promise and apply the
+  // result to THIS mounted instance. Used both by runAnalysis and by the
+  // reattach effect when the user comes back to the page.
+  const consumeAnalysis = async (promise) => {
+    try {
+      const data = await promise;
+      setAnalysisData(data);
+      setStep(3);
+    } catch (e) {
+      if (e?.name === "AbortError") {
+        setStep(1); // user stopped it — silent
+      } else {
+        alert("Analysis failed: " + e.message);
+        setStep(1);
+      }
+    } finally {
+      ongoingAnalysis = null;
+      try { sessionStorage.removeItem(ANALYSIS_RUNNING_KEY); } catch {}
+    }
   };
 
   const runAnalysis = async () => {
     if (!uploadedFile || !policies.length) return;
     setStep(2);
-    try {
-      const fd = new FormData();
-      fd.append("pdf", uploadedFile);
-      fd.append("standardIds", JSON.stringify(policies.map(p => p.id)));
-      const res  = await fetch(`${API_BASE}/analyze-pdf`, { method: "POST", body: fd, credentials: "include" });
+
+    const controller = new AbortController();
+    const fd = new FormData();
+    fd.append("pdf", uploadedFile);
+    fd.append("standardIds", JSON.stringify(policies.map(p => p.id)));
+
+    const promise = fetch(`${API_BASE}/analyze-pdf`, {
+      method: "POST", body: fd, credentials: "include", signal: controller.signal,
+    }).then(async res => {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-      setAnalysisData(data);
-      setStep(3);
-    } catch (e) {
-      alert("Analysis failed: " + e.message);
-      setStep(1);
-    }
+      return data;
+    });
+
+    // Hoist to module scope so it survives navigation away from this page.
+    ongoingAnalysis = { controller, promise, fileName: uploadedFile.name };
+    try {
+      sessionStorage.setItem(ANALYSIS_RUNNING_KEY, JSON.stringify({ fileName: uploadedFile.name }));
+    } catch {}
+
+    await consumeAnalysis(promise);
   };
+
+  const stopAnalysis = () => {
+    try { ongoingAnalysis?.controller?.abort(); } catch {}
+    ongoingAnalysis = null;
+    try { sessionStorage.removeItem(ANALYSIS_RUNNING_KEY); } catch {}
+    resetAll();
+  };
+
+  // On (re)mount: if an analysis is still running from before a page
+  // navigation, reattach to it instead of losing it.
+  useEffect(() => {
+    if (analysisData) return; // a finished analysis is already restored
+    if (ongoingAnalysis) {
+      setUploadedFile({ name: ongoingAnalysis.fileName });
+      setStep(2);
+      consumeAnalysis(ongoingAnalysis.promise);
+    } else {
+      // Stale "running" flag (the request died on a full page reload).
+      try { sessionStorage.removeItem(ANALYSIS_RUNNING_KEY); } catch {}
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const editAiComment = (item_id, newComment) => {
     setEditedAiComments(prev => ({ ...prev, [item_id]: newComment }));
@@ -839,9 +1112,6 @@ export default function ConformityPage() {
     });
   };
 
-  // ✅ FIX: finalizeAnalysis sends user data from session (not localStorage)
-  //         The backend already reads from req.session.user, but we also send it
-  //         in the body as a fallback so the data is always saved correctly.
   const finalizeAnalysis = async (title) => {
     const standardId   = policies[0]?.id || null;
     const standardName = policies[0]?.title || "";
@@ -857,6 +1127,7 @@ export default function ConformityPage() {
         ai_confidence: a.conf || 0,
         ciso_status:   decisions[a.item_id]?.status || null,
         ciso_comment:  decisions[a.item_id]?.comment || a.comment || "",
+        _source:       a._source || "llm",
       }));
       const remediations = (v.mitigation || "").split("\n").map(s => s.trim()).filter(Boolean).map(action => ({ action, priority: "Medium", due_date: null, assigned_to: "" }));
       const risks = (v.risks || []).filter(r => (r.description || "").trim()).map(r => ({
@@ -873,26 +1144,34 @@ export default function ConformityPage() {
         vulnerabilities:[],
         mitigationPlan: remediations.map(x => x.action),
       }));
-      return { policy_name: p.policy_name, policy_summary: p.policy_summary || "", items, risks, gaps: v.gaps || [], remediations };
+      return {
+        policy_name:      p.policy_name,
+        policy_summary:   p.policy_summary || "",
+        items,
+        risks,
+        gaps:             v.gaps || [],
+        remediations,
+        risks_validated:  !!v.risksValidated,
+        gaps_validated:   !!v.gapsValidated,
+        miti_validated:   !!v.mitiValidated,
+      };
     });
 
-    // ✅ Include user data in body so backend can use it if session is unavailable
     const body = {
       title,
-      document_name:          uploadedFile?.name || "",
-      standard_id:            standardId,
-      standard_name:          standardName,
-      // These are sent as fallback — backend prefers req.session.user
-      created_by_id:          currentUser.id,
-      created_by_name:        currentUser.name,
+      document_name:           uploadedFile?.name || "",
+      standard_id:             standardId,
+      standard_name:           standardName,
+      created_by_id:           currentUser.id,
+      created_by_name:         currentUser.name,
       created_by_organisation: currentUser.organization,
-      created_by_department:  currentUser.department,
-      policies:               policiesPayload,
+      created_by_department:   currentUser.department,
+      policies:                policiesPayload,
     };
 
     const res  = await fetch(API_ANALYSIS, {
       method: "POST",
-      credentials: "include",   // ← sends the session cookie
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
@@ -919,7 +1198,7 @@ export default function ConformityPage() {
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, paddingTop: 4 }}>
         <div>
-          <h1 style={{ fontFamily: F.display, fontSize: 22, fontWeight: 900, color: C.text, margin: 0 }}>GRC Compliance</h1>
+          <h1 style={{  fontSize: 25, fontWeight: 900, color: C.text, margin: 0 }}>Policies Analysis</h1>
           <p style={{ fontFamily: F.body, color: C.textMuted, margin: "4px 0 0", fontSize: 13 }}>
             Upload a document · Each detected policy is assessed against imported chapters &amp; controls
             {currentUser.name !== "Anonymous CISO" && (
@@ -930,6 +1209,12 @@ export default function ConformityPage() {
             )}
           </p>
         </div>
+        {step === 2 && (
+          <button onClick={stopAnalysis}
+            style={{ padding: "8px 16px", borderRadius: 9, border: `1px solid ${C.danger}`, background: C.dangerLight, cursor: "pointer", fontFamily: F.body, fontSize: 13, fontWeight: 700, color: C.danger }}>
+             Stop analysis
+          </button>
+        )}
         {step === 3 && (
           <button onClick={resetAll} style={{ padding: "8px 16px", borderRadius: 9, border: `1px solid ${C.border}`, background: C.surface, cursor: "pointer", fontFamily: F.body, fontSize: 13, fontWeight: 600, color: C.textMid }}>New analysis</button>
         )}
@@ -964,7 +1249,7 @@ export default function ConformityPage() {
                   <div style={{ width: 42, height: 42, borderRadius: 11, background: `linear-gradient(135deg,${C.accent},${C.purple})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, color: "#fff" }}>📄</div>
                   <div>
                     <div style={{ fontFamily: F.display, fontSize: 14, fontWeight: 700, color: C.accent }}>{uploadedFile.name}</div>
-                    <div style={{ fontFamily: F.body, fontSize: 11, color: C.textMuted, marginTop: 2 }}>Ready · {allItems.length} items across {policies.length} framework(s) · {assets.length} asset(s) loaded</div>
+                    <div style={{ fontFamily: F.body, fontSize: 11, color: C.textMuted, marginTop: 2 }}>Ready · {bigTitleCount} section{bigTitleCount === 1 ? "" : "s"} · {totalItemCount} items analyzed · {policies.length} framework(s) · {assets.length} asset(s) loaded</div>
                   </div>
                 </div>
                 <button onClick={() => setUploadedFile(null)} style={{ background: "none", border: "none", cursor: "pointer", color: C.textMuted, fontSize: 20 }}>×</button>
@@ -972,7 +1257,7 @@ export default function ConformityPage() {
             ) : (
               <div onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); handleFile(e.dataTransfer.files[0]); }} onClick={() => fileRef.current?.click()}
                 style={{ padding: "42px 20px", background: C.surfaceAlt, border: `2px dashed ${C.borderStrong}`, borderRadius: 13, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 11 }}>
-                <div style={{ width: 52, height: 52, borderRadius: 13, background: `linear-gradient(135deg,${C.accent},${C.purple})`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <div style={{ width: 52, height: 52, borderRadius: 13, background: `linear-gradient(135deg,${C.warning},${C.wow})`, display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
                 </div>
                 <span style={{ fontFamily: F.display, fontSize: 16, fontWeight: 800, color: C.text }}>Drop your document here</span>
@@ -981,8 +1266,8 @@ export default function ConformityPage() {
             )}
           </div>
           {uploadedFile && policies.length > 0 && (
-            <button onClick={runAnalysis} className="fade" style={{ width: "100%", padding: 15, background: `linear-gradient(135deg,${C.accent},${C.purple})`, border: "none", borderRadius: 12, fontSize: 14, fontWeight: 700, fontFamily: F.body, color: "#fff", cursor: "pointer", boxShadow: `0 6px 22px ${C.accent}38` }}>
-              Run AI Analysis — {allItems.length} items
+            <button onClick={runAnalysis} className="fade" style={{ width: "100%", padding: 15, background: `linear-gradient(135deg,${C.warning},${C.wow})`, border: "none", borderRadius: 12, fontSize: 14, fontWeight: 700, fontFamily: F.body, color: "#fff", cursor: "pointer", boxShadow: `0 6px 22px ${C.accent}38` }}>
+              Run AI Analysis — {totalItemCount} items
             </button>
           )}
         </div>
@@ -990,27 +1275,28 @@ export default function ConformityPage() {
 
       {step === 2 && (
         <div className="fade" style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "52px 32px", boxShadow: C.shadow, textAlign: "center" }}>
-          <div style={{ width: 58, height: 58, borderRadius: "50%", border: `4px solid ${C.accentLight}`, borderTop: `4px solid ${C.accent}`, animation: "spin .9s linear infinite", margin: "0 auto 22px" }} />
+          <div style={{ width: 58, height: 58, borderRadius: "50%", border: `4px solid ${C.accentLight}`, borderTop: `4px solid ${C.Spin}`, animation: "spin .9s linear infinite", margin: "0 auto 22px" }} />
           <div style={{ fontFamily: F.display, fontSize: 18, fontWeight: 900, color: C.text, marginBottom: 8 }}>Analyzing your document…</div>
-          <div style={{ fontFamily: F.body, fontSize: 13, color: C.textMuted }}>Checking <strong style={{ color: C.accent }}>{uploadedFile?.name}</strong> against {allItems.length} items</div>
+          <div style={{ fontFamily: F.body, fontSize: 13, color: C.textMuted }}>Checking <strong style={{ color: C.accent }}>{uploadedFile?.name}</strong> against {totalItemCount} items</div>
+          <div style={{ fontFamily: F.body, fontSize: 12, color: C.textMuted, marginTop: 10 }}>
+            You can browse other pages — the analysis keeps running in the background.
+          </div>
+          
         </div>
       )}
 
       {step === 3 && analysisData && (
         <div className="fade">
-          {/* ✅ FIX: Global compliance bar spans ALL policies/items via kpis */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, gap: 12, flexWrap: "wrap" }}>
             <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "10px 18px", display: "flex", alignItems: "center", gap: 14, boxShadow: C.shadow }}>
-              <span style={{ fontFamily: F.body, fontSize: 11, color: C.textMuted, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em" }}>Overall Compliance (all policies)</span>
+              <span style={{ fontFamily: F.body, fontSize: 11, color: C.textMuted, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em" }}>Overall Compliance (avg of all policies)</span>
               <span style={{ fontFamily: F.display, fontSize: 24, fontWeight: 900, color: STATUS_META[kpis.globalStatus].color }}>{kpis.globalScore}%</span>
-              {/* Progress bar */}
               <div style={{ width: 120, height: 6, background: C.border, borderRadius: 3, overflow: "hidden" }}>
                 <div style={{ width: `${kpis.globalScore}%`, height: "100%", background: STATUS_META[kpis.globalStatus].color, borderRadius: 3, transition: "width .4s ease" }} />
               </div>
             </div>
           </div>
 
-          {/* ✅ FIX: KPI cards use deduplicated counts across ALL policies */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 10, marginBottom: 20 }}>
             {[
               { label: "Items analyzed",  value: kpis.analyzedCount,   color: C.accent },
@@ -1031,7 +1317,9 @@ export default function ConformityPage() {
               <span style={{ fontSize: 14 }}>📄</span>
               <span style={{ fontFamily: F.body, fontSize: 12, fontWeight: 600, color: C.accent }}>{uploadedFile.name}</span>
             </div>
-            <span style={{ fontFamily: F.body, fontSize: 12, color: C.textMuted }}>{aiPolicies.length} {aiPolicies.length > 1 ? "policies" : "policy"} detected · {kpis.analyzedCount} unique item(s)</span>
+            <span style={{ fontFamily: F.body, fontSize: 12, color: C.textMuted }}>
+              {aiPolicies.length} {aiPolicies.length > 1 ? "policies" : "policy"} detected · {uniqueImportedAnalyzed}/{totalItemCount} unique framework item(s) analyzed
+            </span>
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>

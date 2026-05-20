@@ -5,8 +5,17 @@ import {
   LayoutDashboard, ShieldCheck, Bell, ChevronLeft, ChevronRight,
   Users, Key, Settings, LogOut, UserCircle, Building2, Plus, X,
   Search, Globe, Mail, Phone, Trash2, Loader2, Layers, List, BarChart,
-  Bot, Send, Minimize2, Maximize2, RefreshCw, BotMessageSquare, AlertCircle
+  Bot, Send, Minimize2, Maximize2, RefreshCw, BotMessageSquare, AlertCircle, FileText
 } from "lucide-react";
+
+// ─── Design tokens ───────────────────────────────────────────
+const C = {
+  wow: "#3B6FFF",
+  warning: "#061585",
+};
+C.accent = `linear-gradient(135deg, ${C.wow}, ${C.warning})`;
+// Couleur unie proche du dégradé (bordures / texte, où le dégradé est impossible)
+C.accentSolid = "#2A4AD0";
 
 const fetchAdminProfile = async () => {
   const res = await fetch("http://localhost:3000/api/admin/profile", {
@@ -44,7 +53,7 @@ function AdminAvatar({ admin, size = 28, radius = "7px", fontSize = "10px" }) {
   return (
     <div style={{
       width: size, height: size, borderRadius: radius, flexShrink: 0,
-      background: "linear-gradient(135deg,#3B6FFF,#6D28D9)",
+      background: C.accent,
       display: "flex", alignItems: "center", justifyContent: "center",
       color: "#fff", fontSize, fontWeight: "700",
     }}>
@@ -212,7 +221,7 @@ const checkBackendConnection = async () => {
           style={{
             position: "fixed", bottom: "28px", right: "28px", zIndex: 999,
             width: "54px", height: "54px", borderRadius: "16px", border: "none",
-            background: "linear-gradient(135deg,#3B6FFF,#6D28D9)",
+            background: C.accent,
             boxShadow: "0 8px 32px rgba(59,111,255,0.40)",
             cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
             transition: "transform 0.2s",
@@ -238,7 +247,7 @@ const checkBackendConnection = async () => {
         }}>
           {/* Header */}
           <div style={{
-            background: "linear-gradient(135deg,#3B6FFF,#6D28D9)",
+            background: C.accent,
             padding: "14px 16px", display: "flex", alignItems: "center", gap: "10px", flexShrink: 0,
           }}>
             <div style={{
@@ -283,7 +292,7 @@ const checkBackendConnection = async () => {
             {messages.map((msg, i) => (
               <div key={i} style={{ display: "flex", flexDirection: msg.role === "user" ? "row-reverse" : "row", gap: "8px", alignItems: "flex-end" }}>
                 {msg.role === "assistant" && (
-                  <div style={{ width: "26px", height: "26px", borderRadius: "8px", background: "linear-gradient(135deg,#3B6FFF,#6D28D9)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <div style={{ width: "26px", height: "26px", borderRadius: "8px", background: C.accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                     <BotMessageSquare size={12} color="#fff" />
                   </div>
                 )}
@@ -291,7 +300,7 @@ const checkBackendConnection = async () => {
                   <div style={{
                     padding: "10px 13px",
                     borderRadius: msg.role === "user" ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
-                    background: msg.role === "user" ? "linear-gradient(135deg,#3B6FFF,#6D28D9)" : "#F8FAFF",
+                    background: msg.role === "user" ? C.accent : "#F8FAFF",
                     color: msg.role === "user" ? "#fff" : "#1E293B",
                     fontSize: "12.5px", lineHeight: "1.55",
                     border: msg.role === "assistant" ? "1.5px solid #EEF4FF" : "none",
@@ -307,13 +316,13 @@ const checkBackendConnection = async () => {
             {/* Loading indicator */}
             {loading && (
               <div style={{ display: "flex", gap: "8px", alignItems: "flex-end" }}>
-                <div style={{ width: "26px", height: "26px", borderRadius: "8px", background: "linear-gradient(135deg,#3B6FFF,#6D28D9)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <div style={{ width: "26px", height: "26px", borderRadius: "8px", background: C.accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                   <BotMessageSquare size={12} color="#fff" />
                 </div>
                 <div style={{ padding: "12px 15px", borderRadius: "14px", background: "#F8FAFF", border: "1.5px solid #EEF4FF", display: "flex", gap: "4px" }}>
-                  <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: "#3B6FFF", animation: "bounce 0.9s 0s ease-in-out infinite" }} />
-                  <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: "#3B6FFF", animation: "bounce 0.9s 0.2s ease-in-out infinite" }} />
-                  <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: "#3B6FFF", animation: "bounce 0.9s 0.4s ease-in-out infinite" }} />
+                  <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: C.accentSolid, animation: "bounce 0.9s 0s ease-in-out infinite" }} />
+                  <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: C.accentSolid, animation: "bounce 0.9s 0.2s ease-in-out infinite" }} />
+                  <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: C.accentSolid, animation: "bounce 0.9s 0.4s ease-in-out infinite" }} />
                 </div>
               </div>
             )}
@@ -342,7 +351,7 @@ const checkBackendConnection = async () => {
                 disabled={!input.trim() || loading}
                 style={{
                   width: "32px", height: "32px", borderRadius: "9px", border: "none", flexShrink: 0,
-                  background: input.trim() && !loading ? "linear-gradient(135deg,#3B6FFF,#6D28D9)" : "#E2E8F0",
+                  background: input.trim() && !loading ? C.accent : "#E2E8F0",
                   color: input.trim() && !loading ? "#fff" : "#94A3B8",
                   cursor: input.trim() && !loading ? "pointer" : "default",
                   display: "flex", alignItems: "center", justifyContent: "center",
@@ -381,6 +390,7 @@ export default function AdminLayout() {
   const [admin, setAdmin]               = useState(null);
   const [adminLoading, setAdminLoading] = useState(true);
   const [adminError, setAdminError]     = useState(null);
+  const [openSubMenu, setOpenSubMenu] = useState(null);
 
   const [notifs, setNotifs]             = useState([]);
   const [notifsLoading, setNotifsLoading] = useState(true);
@@ -395,10 +405,14 @@ export default function AdminLayout() {
   const unread = notifs.filter(n => !n.read).length;
 
   const navItems = [
-    { to: '/admin/dashboard',  id: "dashboard",  label: "Dashboard",        icon: LayoutDashboard },
+    { to: '/admin/dashboard',  id: "dashboard",  label: "Managed companies",        icon: LayoutDashboard },
     { to: '/admin/access',     id: "access",     label: "Access & Controls", icon: ShieldCheck     },
-    { to: '/admin/frameworks', id: "frameworks", label: "Frameworks",        icon: Layers          },
-    { to: '/admin/logs',       id: "logs",       label: "Logs",              icon: List            },
+    { to: '/admin/frameworks', id: "frameworks", label: "Policies Library",        icon: Layers          },
+    {  icon: FileText, label: "Logs", subOptions: [
+      { to: "/admin/log", icon: FileText, label: " Event Log"},
+      { to: "/admin/LogsActivityadmin", icon: FileText, label: " Activity Log"}
+      ]
+    },
     
   ];
 
@@ -434,37 +448,76 @@ export default function AdminLayout() {
           boxShadow: "2px 0 16px rgba(0,0,0,0.04)",
         }}>
           <div style={{ padding: "16px 13px", borderBottom: "1px solid #F1F5F9", display: "flex", alignItems: "center", gap: "10px", minHeight: "60px" }}>
-            <div style={{ width: "34px", height: "34px", borderRadius: "9px", background: "linear-gradient(135deg,#3B6FFF,#6D28D9)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: "0 4px 12px rgba(59,111,255,0.3)" }}>
-              <ShieldCheck size={16} color="#fff" />
-            </div>
+            
             {sidebarOpen && (
               <div style={{ overflow: "hidden", whiteSpace: "nowrap" }}>
-                <div style={{ color: "#0F172A", fontSize: "13px", fontWeight: "800", fontFamily: "'Fraunces', serif" }}>GRC Admin</div>
+                <div style={{ color: "#0F172A", fontSize: 15, fontWeight: "800", fontFamily: "'Fraunces', serif" }}>GRC Admin</div>
               </div>
             )}
           </div>
 
           <nav style={{ flex: 1, padding: "10px 7px", display: "flex", flexDirection: "column", gap: "2px" }}>
             {navItems.map(item => {
-              const Icon = item.icon;
-              const active = page === item.id;
-              return (
-                <button key={item.id} onClick={() => { setPage(item.id); navigate(item.to); }} style={{
-                  display: "flex", alignItems: "center", gap: "10px", padding: "10px 11px",
-                  borderRadius: "9px", border: "none",
-                  background: active ? "#EEF4FF" : "transparent",
-                  color: active ? "#3B6FFF" : "#64748B",
-                  cursor: "pointer", transition: "all 0.15s", width: "100%", whiteSpace: "nowrap", overflow: "hidden",
+  const Icon = item.icon;
+  const active = page === item.id;
+  const hasSubOptions = item.subOptions?.length > 0;
+  const isOpen = openSubMenu === item.id;
+
+  return (
+    <div key={item.id}>
+      <button
+        onClick={() => {
+          if (hasSubOptions) {
+            setOpenSubMenu(isOpen ? null : item.id);
+          } else {
+            setPage(item.id);
+            navigate(item.to);
+          }
+        }}
+        style={{
+          display: "flex", alignItems: "center", gap: "10px",
+          padding: "10px 11px", borderRadius: "9px",
+          border: active ? `2px solid ${C.accentSolid}` : "2px solid transparent",
+          background: "transparent",
+          color: active ? C.accentSolid : "#64748B",
+          cursor: "pointer", width: "100%", whiteSpace: "nowrap", overflow: "hidden",
+        }}
+      >
+        <Icon size={17} style={{ flexShrink: 0 }} />
+        {sidebarOpen && <span style={{ fontSize: "13px", fontWeight: active ? "700" : "500" }}>{item.label}</span>}
+        {sidebarOpen && hasSubOptions && (
+          <ChevronRight size={13} style={{ marginLeft: "auto", transform: isOpen ? "rotate(90deg)" : "none", transition: "transform 0.2s" }} />
+        )}
+      </button>
+
+      {/* Sous-menu */}
+      {hasSubOptions && isOpen && sidebarOpen && (
+        <div style={{ paddingLeft: "16px", display: "flex", flexDirection: "column", gap: "2px", marginTop: "2px" }}>
+          {item.subOptions.map(sub => {
+            const SubIcon = sub.icon;
+            return (
+              <button
+                key={sub.to}
+                onClick={() => { setPage(item.id); navigate(sub.to); }}
+                style={{
+                  display: "flex", alignItems: "center", gap: "8px",
+                  padding: "8px 11px", borderRadius: "8px", border: "none",
+                  background: "transparent", color: "#64748B",
+                  cursor: "pointer", fontSize: "12px", width: "100%",
                 }}
-                  onMouseEnter={e => { if (!active) { e.currentTarget.style.background = "#F8FAFC"; e.currentTarget.style.color = "#0F172A"; } }}
-                  onMouseLeave={e => { if (!active) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#64748B"; } }}
-                >
-                  <Icon size={17} style={{ flexShrink: 0 }} />
-                  {sidebarOpen && <span style={{ fontSize: "13px", fontWeight: active ? "700" : "500" }}>{item.label}</span>}
-                  {active && sidebarOpen && <div style={{ marginLeft: "auto", width: "5px", height: "5px", borderRadius: "50%", background: "#3B6FFF", boxShadow: "0 0 6px #3B6FFF80" }} />}
-                </button>
-              );
-            })}
+                onMouseEnter={e => { e.currentTarget.style.background = "#F8FAFC"; e.currentTarget.style.color = "#0F172A"; }}
+                onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#64748B"; }}
+              >
+                <SubIcon size={14} style={{ flexShrink: 0 }} />
+                {sub.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+})}
           </nav>
 
           <div style={{ padding: "10px 7px", borderTop: "1px solid #F1F5F9" }}>
@@ -516,7 +569,7 @@ export default function AdminLayout() {
                   <div style={{ position: "absolute", right: 0, top: "44px", width: "300px", background: "#fff", border: "1.5px solid #F1F5F9", borderRadius: "14px", boxShadow: "0 16px 48px rgba(0,0,0,0.12)", animation: "fadeDown 0.2s ease", zIndex: 100, overflow: "hidden" }}>
                     <div style={{ padding: "13px 16px", borderBottom: "1px solid #F1F5F9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <span style={{ color: "#0F172A", fontSize: "13px", fontWeight: "700" }}>Notifications</span>
-                      <button onClick={() => setNotifs(ns => ns.map(n => ({ ...n, read: true })))} style={{ background: "none", border: "none", color: "#3B6FFF", fontSize: "11px", fontWeight: "600", cursor: "pointer" }}>Read all</button>
+                      <button onClick={() => setNotifs(ns => ns.map(n => ({ ...n, read: true })))} style={{ background: "none", border: "none", color: C.accentSolid, fontSize: "11px", fontWeight: "600", cursor: "pointer" }}>Read all</button>
                     </div>
                     {notifsLoading ? (
                       <div style={{ padding: "28px", display: "flex", justifyContent: "center", alignItems: "center" }}>
@@ -572,7 +625,7 @@ export default function AdminLayout() {
                       </div>
                       <div style={{ color: "#0F172A", fontSize: "14px", fontWeight: "800", fontFamily: "'Fraunces',serif" }}>{admin.name}</div>
                       <div style={{ color: "#94A3B8", fontSize: "11px", marginTop: "3px" }}>{admin.email}</div>
-                      <div style={{ display: "inline-flex", alignItems: "center", gap: "4px", marginTop: "9px", background: "#EEF4FF", color: "#3B6FFF", padding: "3px 10px", borderRadius: "20px", fontSize: "10px", fontWeight: "700" }}>
+                      <div style={{ display: "inline-flex", alignItems: "center", gap: "4px", marginTop: "9px", background: C.accent, color: "#fff", padding: "3px 10px", borderRadius: "20px", fontSize: "10px", fontWeight: "700" }}>
                         <ShieldCheck size={9} /> {admin.role}
                       </div>
                     </div>

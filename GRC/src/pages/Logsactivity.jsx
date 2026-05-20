@@ -59,10 +59,10 @@ function getLevelFromAction(action) {
   const normalized = action.toUpperCase();
   const baseAction = normalized.split("_")[0];
   const levels = {
-    "DELETE": "INFO",
+    "DELETE": "ERROR",
     "LOGIN_FAILED": "ERROR",
     "ACCESS_DENIED": "ERROR",
-    "UPDATE": "INFO",
+    "UPDATE": "WARNING",
     "CREATE": "INFO",
     "LOGIN": "INFO",
     "LOGOUT": "INFO",
@@ -417,7 +417,7 @@ export default function LogsActivity() {
 
       console.log("Fetching logs from /api/logs...");
 
-      const response = await fetch("http://localhost:3000/api/logs?category=SECURITY", {
+      const response = await fetch("http://localhost:3000/api/logs?category=Activity", {
         method: "GET",
         credentials: "include",
         headers: {
@@ -645,7 +645,7 @@ export default function LogsActivity() {
               margin: 0,
             }}
           >
-            Event Log
+            Activity Log
           </h1>
           <p style={{ color: C.textSub, margin: "4px 0 0", fontSize: 13 }}>
             Monitor system activities, user actions and security events
@@ -726,7 +726,7 @@ export default function LogsActivity() {
         {uniqueActions.length > 0 && (
           <select value={actionFilter} onChange={(e) => { setActionFilter(e.target.value); setCurrentPage(1); }} style={selectStyle}>
             <option value="all">All actions</option>
-            {uniqueActions.map(a => <option key={a} value={a}>{a}</option>)}
+            {uniqueActions.map(a => <option key={a} value={a}>{formatAction(a)}</option>)}
           </select>
         )}
 

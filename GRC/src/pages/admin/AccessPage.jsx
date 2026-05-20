@@ -1,5 +1,20 @@
 import React, { useState, useEffect } from "react";
 import { Trash2 } from "lucide-react";
+const C = {
+  bg: "#F8FAFF", surface: "#FFFFFF", surfaceAlt: "#F0F4FF",
+  border: "#E2E8F8", borderStrong: "#C7D2F0",
+  wow: "#3B6FFF", accentLight: "#EEF2FF", accentHover: "#2D5CE8",
+  purple: "#6D28D9", purpleLight: "#F5F0FF",
+  success: "#059669", successLight: "#ECFDF5",
+  warning: "#061585", warningLight: "#FFFBEB",
+  danger: "#DC2626", dangerLight: "#FEF2F2",
+  info: "#0891B2", infoLight: "#ECFEFF",
+  text: "#0F172A", textMid: "#475569", textMuted: "#94A3B8",
+  shadow: "0 1px 3px rgba(15,23,42,0.07)",
+  shadowMd: "0 4px 12px rgba(15,23,42,0.09)",
+  shadowLg: "0 10px 30px rgba(15,23,42,0.13)",
+};
+C.accent = `linear-gradient(135deg, ${C.wow}, ${C.warning})`;
 
 function UserFormModal({ newUser, handleChange, handleAddUser, companies, role, setShowForm, inputStyle, buttonStyle,emailError, setEmailError}) {
   const emailRegex = /^[a-zA-Z0-9._-]+@[a-zA-Z.-]+\.[a-zA-Z]{2,}$/;
@@ -177,7 +192,7 @@ function UserFormModal({ newUser, handleChange, handleAddUser, companies, role, 
               padding: "11px",
               border: "none",
               borderRadius: "10px",
-              background: "linear-gradient(135deg,#3B6FFF,#6D28D9)",
+              background: C.accent,
               color: "#fff",
               fontSize: "13px",
               fontWeight: "600",
@@ -328,16 +343,6 @@ const handleChange = (e) => {
     <div style={{ padding: "36px", display: "flex", flexDirection: "column", gap: "24px" }}>
 
       <div>
-        <p style={{
-          color: "#94A3B8",
-          fontSize: "11px",
-          letterSpacing: "0.12em",
-          textTransform: "uppercase",
-          marginBottom: "5px",
-          fontWeight: "600"
-        }}>
-          Administration
-        </p>
 
         <h1 style={{
           color: "#0F172A",
@@ -373,7 +378,7 @@ const handleChange = (e) => {
             <button
               onClick={() => setShowForm(true)}
               style={{
-                background: "linear-gradient(135deg,#3B6FFF,#6D28D9)",
+                background: C.accent,
                 border: "none",
                 borderRadius: "8px",
                 padding: "7px 14px",
@@ -406,27 +411,40 @@ const handleChange = (e) => {
             </thead>
 
             <tbody>
-              {users.map(u => (
-                <tr key={u.id}>
-                  <td style={{ padding: "13px 22px" }}>{u.first_name}</td>
-                  <td style={{ padding: "13px 22px" }}>{u.last_name}</td>
-                  <td style={{ padding: "13px 22px" }}>{u.email}</td>
-                  
-                  <td style={{ padding: "13px 22px" }}>{u.organization}</td>
-                  <td style={{ padding: "13px 22px" }}>{u.role}</td>
-                  <td style={{ padding: "13px 22px" }}>
-                  <button onClick={() => onDelete(u.id)} style={{ background: "#FEF2F2", border: "none", borderRadius: "7px", width: "28px", height: "28px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#EF4444" }}
-                            onMouseEnter={e => e.currentTarget.style.background = "#FEE2E2"}
-                            onMouseLeave={e => e.currentTarget.style.background = "#FEF2F2"}
-                    >
-                            <Trash2 size={13} />
-                    </button>
-                      
-                  </td>
-  
-                </tr>
-              ))}
-            </tbody>
+  {users
+    .filter(u => u.role === "admin" || u.role === "user")
+    .map(u => (
+      <tr key={u.id}>
+        <td style={{ padding: "13px 22px" }}>{u.first_name}</td>
+        <td style={{ padding: "13px 22px" }}>{u.last_name}</td>
+        <td style={{ padding: "13px 22px" }}>{u.email}</td>
+        <td style={{ padding: "13px 22px" }}>{u.organization}</td>
+        <td style={{ padding: "13px 22px" }}>{u.role}</td>
+
+        <td style={{ padding: "13px 22px" }}>
+          <button
+            onClick={() => onDelete(u.id)}
+            style={{
+              background: "#FEF2F2",
+              border: "none",
+              borderRadius: "7px",
+              width: "28px",
+              height: "28px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              color: "#EF4444"
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = "#FEE2E2"}
+            onMouseLeave={e => e.currentTarget.style.background = "#FEF2F2"}
+          >
+            <Trash2 size={13} />
+          </button>
+        </td>
+      </tr>
+    ))}
+</tbody>
           </table>
         </div>
       )}

@@ -5,7 +5,16 @@ import {requirePermission} from "../middlewares/rbac.js";
 import { authMiddleware } from "../middlewares/rbac.js";
 
 const router = express.Router();
-router.post("/", activityLogger("ADD_risk"), authMiddleware,requirePermission("create_risks"), async (req, res) => {
+router.post(
+  "/",
+  (req, res, next) => {
+    req.logTarget = req.body.intitule; // 👈 IMPORTANT
+    next();
+  },
+  activityLogger("ADD_RISK"),
+  authMiddleware,
+  requirePermission("create_risks"),
+  async (req, res) => {
   try {
     const {
       intitule,
@@ -22,6 +31,7 @@ router.post("/", activityLogger("ADD_risk"), authMiddleware,requirePermission("c
       threats,
       vulnerabilities,
     } = req.body;
+    req.logTarget = intitule;
 
     // 1. Insert risk
     const [result] = await db.query(

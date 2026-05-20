@@ -4,10 +4,10 @@ import { useNavigate } from "react-router-dom";
 const C = {
   bg: "#F8FAFF", surface: "#FFFFFF", surfaceAlt: "#F0F4FF",
   border: "#E2E8F8", borderStrong: "#C7D2F0",
-  accent: "#3B6FFF", accentLight: "#EEF2FF", accentHover: "#2D5CE8",
+  wow: "#3B6FFF", accentLight: "#EEF2FF", accentHover: "#2D5CE8",
   purple: "#6D28D9", purpleLight: "#F5F0FF",
   success: "#059669", successLight: "#ECFDF5",
-  warning: "#D97706", warningLight: "#FFFBEB",
+  warning: "#061585", warningLight: "#FFFBEB",
   danger: "#DC2626", dangerLight: "#FEF2F2",
   info: "#0891B2", infoLight: "#ECFEFF",
   text: "#0F172A", textMid: "#475569", textMuted: "#94A3B8",
@@ -15,6 +15,7 @@ const C = {
   shadowMd: "0 4px 12px rgba(15,23,42,0.09)",
   shadowLg: "0 10px 30px rgba(15,23,42,0.13)",
 };
+C.accent = `linear-gradient(135deg, ${C.wow}, ${C.warning})`;
 const F = { display: "'Fraunces', Georgia, serif", body: "'DM Sans', system-ui, sans-serif" };
 
 // Composant pour afficher un contrôle enfant
@@ -600,7 +601,7 @@ export default function Exceptions() {
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:16 }}>
           <div>
             <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:5 }}>
-              <h1 style={{ fontFamily:F.display, fontSize:28, fontWeight:900, color:C.text, margin:0 }}>Policy Exceptions</h1>
+              <h1 style={{ fontSize:28, fontWeight:900, color:C.text, margin:0 }}>Policy Exceptions</h1>
             </div>
             <p style={{ fontFamily:F.body, fontSize:13, color:C.textMid, margin:0 }}>
               Policies that have been excluded from compliance scope. These will not be considered in compliance checks.
@@ -639,7 +640,7 @@ export default function Exceptions() {
                 borderRadius:20,
                 border:"none",
                 cursor:"pointer",
-                background: filterLevel === level ? `linear-gradient(135deg,${C.accent},${C.accentHover})` : C.surfaceAlt,
+                background: filterLevel === level ? `linear-gradient(135deg, ${C.wow}, ${C.warning})` : C.surfaceAlt,
                 color: filterLevel === level ? "#fff" : C.textMid,
                 fontFamily:F.body,
                 fontSize:12,

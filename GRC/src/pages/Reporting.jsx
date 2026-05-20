@@ -12,6 +12,21 @@ const CLASSIFICATION_OPTIONS = [
   { value: "secret",       label: "Secret",       color: "#dc2626", bg: "#fee2e2" },
   { value: "tres_secret",  label: "Top Secret",   color: "#7c3aed", bg: "#ede9fe" },
 ];
+const C = {
+  bg: "#F8FAFF", surface: "#FFFFFF", surfaceAlt: "#F0F4FF",
+  border: "#E2E8F8", borderStrong: "#C7D2F0",
+  wow: "#3B6FFF", accentLight: "#EEF2FF", accentHover: "#2D5CE8",
+  purple: "#6D28D9", purpleLight: "#F5F0FF",
+  success: "#059669", successLight: "#ECFDF5",
+  warning: "#061585", warningLight: "#FFFBEB",
+  danger: "#DC2626", dangerLight: "#FEF2F2",
+  info: "#0891B2", infoLight: "#ECFEFF",
+  text: "#0F172A", textMid: "#475569", textMuted: "#94A3B8",
+  shadow: "0 1px 3px rgba(15,23,42,0.07)",
+  shadowMd: "0 4px 12px rgba(15,23,42,0.09)",
+  shadowLg: "0 10px 30px rgba(15,23,42,0.13)",
+};
+C.accent = `linear-gradient(135deg, ${C.wow}, ${C.warning})`;
 
 const REPORT_TYPES = [
   "Compliance Audit", "Risk Analysis", "Incident Report",
@@ -335,7 +350,7 @@ export default function Reporting() {
 
       {/* Header */}
       <div style={{ marginBottom: 28 }}>
-        <h1 style={{ fontSize: 25, fontWeight: 900, color: "#0F172A", margin: 0, fontFamily: "'Fraunces',serif" }}>Reports & Analyses</h1>
+        <h1 style={{ fontSize: 26, fontWeight: 900, color: "#0F172A", margin: 0 }}>Reporting</h1>
         <p style={{ color: "#64748b", fontSize: 14, margin: "4px 0 0" }}>
           View finalized compliance analyses and generate reports — auto-filled from your analysis data.
         </p>
@@ -346,7 +361,7 @@ export default function Reporting() {
         {[{ k: "analyses", l: `Analyses (${analyses.length})` }, { k: "reports", l: `Reports (${reports.length})` }].map(t => (
           <button key={t.k} onClick={() => setTab(t.k)}
             style={{ padding: "10px 18px", border: "none", background: "transparent",
-                     color: tab === t.k ? "#3B6FFF" : "#64748B", fontSize: 13, fontWeight: 700, cursor: "pointer",
+                     color: tab === t.k ? "#2c2098": "#64748B", fontSize: 13, fontWeight: 700, cursor: "pointer",
                      borderBottom: `2px solid ${tab === t.k ? "#3B6FFF" : "transparent"}`,
                      marginBottom: -2, fontFamily: "'DM Sans',sans-serif" }}>
             {t.l}
@@ -508,7 +523,7 @@ function AnalysisCard({ analysis, onOpen, onGenerate }) {
               View
             </button>
             <button onClick={e => { e.stopPropagation(); onGenerate(); }}
-              style={{ padding: "6px 12px", borderRadius: 7, border: "none", background: "linear-gradient(135deg,#3B6FFF,#6D28D9)", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+              style={{ padding: "6px 12px", borderRadius: 7, border: "none", background: `linear-gradient(135deg, ${C.wow}, ${C.warning})`, color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
               Generate Report
             </button>
           </div>

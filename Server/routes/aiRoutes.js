@@ -1,11 +1,27 @@
-// backend/routes/aiRoutes.js
-// =====================================================================
-//  Changements vs version précédente :
-//   ✅ Le champ `comment` est maintenant propagé jusqu'au frontend
-//   ✅ Les fallbacks ne produisent plus jamais de phrases comme
-//      "No mention of X" ou "Add a documented procedure for X"
-//   ✅ Si Python échoue, on dit honnêtement "Manual review required"
-// =====================================================================
+// backend/routes/aiRoutes.js — v2 (ensureAllItemsPresent inspired by v9)
+//
+// Key guarantee:
+//   ✅ EVERY imported framework item (every clause-chapter item AND
+//      every annex control, except policy_exceptions) appears in the
+//      response, either with a real LLM verdict or — if the LLM was
+//      not confident / silent — with an honest "Manual review
+//      required" placeholder. Nothing is silently dropped.
+//
+//   ✅ Per-policy assessment lists are NOT padded with fake items.
+//      Each policy carries the verdicts the LLM produced for it
+//      (which can include "Not relevant to this policy" rows when
+//      the per-policy filter rejected an item — those are tagged
+//      with _source: "filtered" so the UI can compute meaningful
+//      per-policy KPIs).
+//
+//   ✅ `out.results` is the single source of truth for the GLOBAL
+//      framework coverage (one entry per imported item).
+//
+//   ✅ Comment field is always a string, statuses are normalized.
+//      No more synthetic boilerplate like "No mention of X" or
+//      "Add a documented procedure for X" — if Python could not
+//      classify a control, the comment honestly says so.
+//
 import express from "express";
 import multer from "multer";
 import fs from "fs";
@@ -45,7 +61,11 @@ function mapStatus(status) {
   return "Not covered";
 }
 
-// ───── filtering (unchanged from your existing code) ─────────────────────
+// ───── filtering: builds the imported-items payload for one standard ──
+// Active policy_exceptions on a family (chapter) or a single control are
+// applied here BEFORE we hand the items to Python, so the LLM never even
+// sees the exception controls. Everything else IS sent — clause-chapter
+// items, annex families and their controls.
 async function buildItemsForStandard(standardId) {
   const [exRows] = await db.query(
     `SELECT entity_id, entity_type FROM policy_exceptions
@@ -57,26 +77,56 @@ async function buildItemsForStandard(standardId) {
     `SELECT id, name, version, description FROM ciso_standards WHERE id = ?`, [standardId]);
   const standard = stdRows[0] || { id: standardId, name: standardId };
 
+  // ── Core chapters (the structural headers: 4, 5, 6, 6.1, …) ────────
   const [coreRows] = await db.query(
-    `SELECT id, ref_id, title, description FROM ciso_core_chapters
+    `SELECT id, ref_id, title, description, parent_id FROM ciso_core_chapters
      WHERE standard_id = ? ORDER BY display_order ASC, ref_id ASC`, [standardId]);
-  const coreItems = coreRows.map(c => ({
+
+  // An exception with entity_type 'chapter' can target a core chapter OR
+  // an annex family. A core chapter counts as excepted if it — or any of
+  // its ancestors — is excepted (exceptions cascade down the tree).
+  const chapterById = new Map(coreRows.map(c => [c.id, c]));
+  const isCoreChapterExcepted = (id) => {
+    let cur = id, guard = 0;
+    while (cur && guard++ < 100) {
+      if (exceptedFamilies.has(cur)) return true;          // 'chapter' exceptions
+      cur = chapterById.get(cur)?.parent_id || null;
+    }
+    return false;
+  };
+  const keptCoreChapters   = coreRows.filter(c => !isCoreChapterExcepted(c.id));
+  const keptCoreChapterIds = new Set(keptCoreChapters.map(c => c.id));
+
+  const coreChapterItems = keptCoreChapters.map(c => ({
     id: c.id, type: "core_chapter", standard_id: standardId,
     ref_id: c.ref_id, title: c.title, description: c.description || "",
     mandatory: true,
   }));
 
+  // ── Annex families ─────────────────────────────────────────────────
   const [familyRows] = await db.query(
     `SELECT id, ref_id, name, description FROM ciso_families
      WHERE standard_id = ? ORDER BY display_order ASC, ref_id ASC`, [standardId]);
   const keptFamilies = familyRows.filter(f => !exceptedFamilies.has(f.id));
   const keptFamilyIds = new Set(keptFamilies.map(f => f.id));
 
+  // ── Controls — core requirements AND annex controls share this table.
+  //    Core requirements (4.1, 4.2, 5.1 …) carry core_chapter_id and have
+  //    family_id = NULL. The OLD filter (`keptFamilyIds.has(c.family_id)`)
+  //    was false for every core requirement, so they were ALL dropped —
+  //    that is why an annex-excepted import sent only the bare chapter
+  //    headers. Now each control is routed by its real parent. ─────────
   const [controlRows] = await db.query(
-    `SELECT id, ref_id, name, description, family_id FROM ciso_controls
+    `SELECT id, ref_id, name, description, family_id, core_chapter_id
+     FROM ciso_controls
      WHERE standard_id = ? ORDER BY ref_id ASC`, [standardId]);
-  const keptControls = controlRows.filter(
-    c => keptFamilyIds.has(c.family_id) && !exceptedControls.has(c.id));
+
+  const keptControls = controlRows.filter(c => {
+    if (exceptedControls.has(c.id)) return false;
+    if (c.core_chapter_id) return keptCoreChapterIds.has(c.core_chapter_id); // core requirement
+    if (c.family_id)       return keptFamilyIds.has(c.family_id);            // annex control
+    return true; // orphan control with no parent — keep so nothing is lost
+  });
 
   const familyItems = keptFamilies.map(f => ({
     id: f.id, type: "annex_family", standard_id: standardId,
@@ -84,17 +134,23 @@ async function buildItemsForStandard(standardId) {
     mandatory: false,
   }));
   const controlItems = keptControls.map(c => ({
-    id: c.id, type: "annex_control", standard_id: standardId,
-    family_id: c.family_id, ref_id: c.ref_id, title: c.name,
-    description: c.description || "", mandatory: false,
+    id: c.id,
+    type: c.core_chapter_id ? "core_control" : "annex_control",
+    standard_id: standardId,
+    family_id: c.family_id || null,
+    core_chapter_id: c.core_chapter_id || null,
+    ref_id: c.ref_id, title: c.name,
+    description: c.description || "",
+    mandatory: !!c.core_chapter_id,
   }));
 
   return {
     standard,
-    items: [...coreItems, ...familyItems, ...controlItems],
+    items: [...coreChapterItems, ...familyItems, ...controlItems],
     stats: {
       standard_id: standardId, standard_name: standard.name,
       core_chapters_total: coreRows.length,
+      core_chapters_kept:  keptCoreChapters.length,
       families_total: familyRows.length, families_kept: keptFamilies.length,
       controls_total: controlRows.length, controls_kept: keptControls.length,
     },
@@ -138,7 +194,7 @@ router.post("/analyze-pdf", upload.single("pdf"), async (req, res) => {
     }
     if (!standardsPayload.length) return res.status(400).json({ error: "Nothing to analyze." });
 
-    log("INFO", "🚀 Calling Python analyzer…");
+    log("INFO", `🚀 Calling Python analyzer for ${allInputItems.length} item(s)…`);
     let pyResult = null;
     try {
       pyResult = await analyzeDocumentWithPython({
@@ -154,13 +210,13 @@ router.post("/analyze-pdf", upload.single("pdf"), async (req, res) => {
 
     const ensured = ensureAllItemsPresent(pyResult, allInputItems);
 
-    // Normalize statuses and propagate comment field
+    // Normalize statuses + propagate comment field everywhere
     if (Array.isArray(ensured.policies)) {
       ensured.policies = ensured.policies.map(p => ({
         ...p,
         assessments: (p.assessments || []).map(a => ({
           ...a,
-          status: mapStatus(a.status),
+          status:  mapStatus(a.status),
           comment: typeof a.comment === "string" ? a.comment : "",
         })),
       }));
@@ -185,8 +241,9 @@ router.post("/analyze-pdf", upload.single("pdf"), async (req, res) => {
 });
 
 /**
- * If Python crashed, build placeholders that are HONEST about the failure
- * — no fake "No mention of X" / "Add a documented procedure" anymore.
+ * If Python crashed entirely, build honest placeholders for every item.
+ * No fake "No mention of X" or "Add a documented procedure for X"
+ * anymore — the comment plainly says automated analysis failed.
  */
 function buildHonestFallback(docName, items, errorMsg) {
   const flat = {};
@@ -204,6 +261,7 @@ function buildHonestFallback(docName, items, errorMsg) {
       risks:    [],
       gaps:     [],
       remediation: "",
+      _source:  "uncertain",
     };
   }
   return {
@@ -220,8 +278,13 @@ function buildHonestFallback(docName, items, errorMsg) {
 }
 
 /**
- * Make sure every imported item appears in results AND in every policy's
- * assessments — uses HONEST placeholders, not fake "No mention of X".
+ * Makes sure EVERY imported item has an entry in `out.results` (the
+ * global view). Per-policy `assessments` are left alone — they carry
+ * only what each policy actually evaluated.
+ *
+ * This is the heart of "every imported control must be visible" — even
+ * when no detected policy claimed an item, the global table still
+ * shows it with an honest placeholder.
  */
 function ensureAllItemsPresent(pyResult, items) {
   const out = pyResult || {};
@@ -230,6 +293,7 @@ function ensureAllItemsPresent(pyResult, items) {
 
   const itemsById = Object.fromEntries(items.map(it => [it.id, it]));
 
+  // 1) make sure `out.results` has an entry for every imported item
   for (const it of items) {
     if (!out.results[it.id]) {
       out.results[it.id] = {
@@ -237,56 +301,55 @@ function ensureAllItemsPresent(pyResult, items) {
         type: it.type || "", status: "Not covered", conf: 0,
         comment: "AI did not return a confident assessment for this control. Manual review required.",
         evidence: [], risks: [], gaps: [], remediation: "",
+        _source: "uncertain",
       };
     } else {
       const r = out.results[it.id];
       r.item_id = r.item_id || it.id;
       r.ref_id  = r.ref_id  || it.ref_id || "";
-      r.title   = r.title   || it.title || "";
-      r.type    = r.type    || it.type || "";
+      r.title   = r.title   || it.title  || "";
+      r.type    = r.type    || it.type   || "";
       if (typeof r.comment !== "string") r.comment = "";
     }
   }
 
+  // 2) ensure at least one policy bucket exists (frontend always renders ≥1)
   if (!out.policies.length) {
     out.policies = [{
       policy_name: "General Information Security Policy",
       policy_summary: "Default view (no specific policy detected in the document).",
-      assessments: [],
+      assessments: Object.values(out.results),
     }];
   }
 
-  const allAssessments = Object.values(out.results);
+  // 3) per-policy normalisation — DO NOT force-inject items the policy
+  //    did not actually analyse. Each policy keeps its own verdicts.
   for (const p of out.policies) {
-    if (!Array.isArray(p.assessments) || !p.assessments.length) {
-      p.assessments = allAssessments;
-    } else {
-      // ── ensure every imported item is also in this policy's assessments
-      const existingIds = new Set(p.assessments.map(a => a.item_id));
-      for (const it of items) {
-        if (!existingIds.has(it.id)) {
-          p.assessments.push(out.results[it.id]);
-        }
-      }
-      p.assessments = p.assessments.map(a => {
-        const meta = itemsById[a.item_id] || {};
-        return {
-          item_id: a.item_id,
-          ref_id:  a.ref_id || meta.ref_id || "",
-          title:   a.title  || meta.title  || "",
-          type:    a.type   || meta.type   || "",
-          status:  a.status || "Not covered",
-          conf:    typeof a.conf === "number" ? a.conf : 0,
-          comment: typeof a.comment === "string" ? a.comment : "",
-          evidence: Array.isArray(a.evidence) ? a.evidence : [],
-          risks:    Array.isArray(a.risks)    ? a.risks    : [],
-          gaps:     Array.isArray(a.gaps)     ? a.gaps     : [],
-          remediation: typeof a.remediation === "string" ? a.remediation : "",
-        };
-      });
-    }
+    if (!Array.isArray(p.assessments)) p.assessments = [];
+
+    p.assessments = p.assessments.map(a => {
+      const meta = itemsById[a.item_id] || {};
+      return {
+        item_id:     a.item_id,
+        ref_id:      a.ref_id || meta.ref_id || "",
+        title:       a.title  || meta.title  || "",
+        type:        a.type   || meta.type   || "",
+        status:      a.status || "Not covered",
+        conf:        typeof a.conf === "number" ? a.conf : 0,
+        comment:     typeof a.comment === "string" ? a.comment : "",
+        evidence:    Array.isArray(a.evidence) ? a.evidence : [],
+        risks:       Array.isArray(a.risks)    ? a.risks    : [],
+        gaps:        Array.isArray(a.gaps)     ? a.gaps     : [],
+        remediation: typeof a.remediation === "string" ? a.remediation : "",
+        _source:     a._source || "llm",
+      };
+    });
   }
 
+  // 4) global compliance — fallback computation if Python didn't set one.
+  //    Note: this is the SIMPLE item-weighted average across the global
+  //    `results` view. The UI re-computes a policy-weighted figure
+  //    (avg of per-policy scores) on top of `policies[*].assessments`.
   if (!out.global_compliance_percentage) {
     const score = { Covered: 100, Partial: 50, "Not covered": 0 };
     const vals = Object.values(out.results);

@@ -12,6 +12,15 @@ import { ShieldCheck, Clock, ChevronRight, TrendingUp, TrendingDown, Minus } fro
 
 const API_BASE = "http://localhost:3000/api/dashboard";
 
+// ─── Design tokens ───────────────────────────────────────────
+const C = {
+  wow: "#3B6FFF",
+  warning: "#061585",
+};
+C.accent = `linear-gradient(135deg, ${C.wow}, ${C.warning})`;
+// Couleur unie proche du dégradé (texte / bordures, où le dégradé est impossible)
+C.accentSolid = "#2A4AD0";
+
 // ─── All known norms (metadata only). A card is rendered ONLY if the API
 //     returns a matching standard_id in the standards[] array.
 const NORM_META = {
@@ -144,7 +153,7 @@ export default function Dashboard() {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "60vh" }}>
         <div style={{ textAlign: "center", color: "#94A3B8" }}>
-          <div style={{ width: 40, height: 40, borderRadius: "50%", border: "3px solid #E2E8F0", borderTop: "3px solid #3B6FFF", animation: "spin .8s linear infinite", margin: "0 auto 12px" }} />
+          <div style={{ width: 40, height: 40, borderRadius: "50%", border: "3px solid #E2E8F0", borderTop: `3px solid ${C.accentSolid}`, animation: "spin .8s linear infinite", margin: "0 auto 12px" }} />
           <p style={{ fontSize: 13 }}>Loading dashboard…</p>
         </div>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
@@ -167,11 +176,11 @@ export default function Dashboard() {
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 28, paddingTop: 4 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: "#0F172A", margin: 0, fontFamily: "'Fraunces',serif" }}>GRC Dashboard</h1>
+          <h1 style={{ fontSize: 25, fontWeight: 800, color: "#0F172A", margin: 0 }}> Dashboard</h1>
           <p style={{ color: "#94A3B8", margin: "4px 0 0", fontSize: 13 }}>
             Consolidated view of compliance and priority actions
             {analysedStandards.length > 0 && (
-              <span style={{ marginLeft: 8, color: "#3B6FFF", fontWeight: 600 }}>
+              <span style={{ marginLeft: 8, color: C.accentSolid, fontWeight: 600 }}>
                 · {analysedStandards.length} norm{analysedStandards.length > 1 ? "s" : ""} analysed
               </span>
             )}
@@ -184,7 +193,7 @@ export default function Dashboard() {
 
         {/* Overall compliance */}
         <div className="fade norm-card" style={{ background: "#fff", border: "1px solid #F1F5F9", borderRadius: 14, padding: "22px 26px", boxShadow: "0 1px 8px rgba(0,0,0,0.04)", display: "flex", alignItems: "center", gap: 22 }}>
-          <div style={{ width: 56, height: 56, borderRadius: 13, background: "linear-gradient(135deg,#3B6FFF,#6D28D9)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: "0 6px 20px rgba(59,111,255,0.28)" }}>
+          <div style={{ width: 56, height: 56, borderRadius: 13, background: C.accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: "0 6px 20px rgba(59,111,255,0.28)" }}>
             <ShieldCheck size={24} color="#fff" />
           </div>
           <div style={{ flex: 1 }}>
@@ -193,7 +202,7 @@ export default function Dashboard() {
               {overview.globalScore}<span style={{ fontSize: 17, fontWeight: 600 }}>%</span>
             </div>
             <div style={{ marginTop: 10, height: 4, borderRadius: 3, background: "#F1F5F9", overflow: "hidden" }}>
-              <div style={{ height: "100%", width: `${overview.globalScore}%`, background: "linear-gradient(90deg,#3B6FFF,#6D28D9)", borderRadius: 3, transition: "width 1s ease" }} />
+              <div style={{ height: "100%", width: `${overview.globalScore}%`, background: C.accent, borderRadius: 3, transition: "width 1s ease" }} />
             </div>
             <div style={{ fontSize: 11, color: "#CBD5E1", marginTop: 5 }}>
               Average across {analysedStandards.length} analysed norm{analysedStandards.length !== 1 ? "s" : ""}
@@ -203,12 +212,12 @@ export default function Dashboard() {
 
         {/* Last analysis */}
         <div className="fade norm-card" style={{ background: "#fff", border: "1px solid #F1F5F9", borderRadius: 14, padding: "22px 26px", boxShadow: "0 1px 8px rgba(0,0,0,0.04)", display: "flex", alignItems: "center", gap: 22 }}>
-          <div style={{ width: 56, height: 56, borderRadius: 13, background: "#EEF4FF", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, border: "1.5px solid #DBEAFE" }}>
-            <Clock size={24} color="#3B6FFF" />
+          <div style={{ width: 56, height: 56, borderRadius: 13, background: C.accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, border: "1.5px solid transparent" }}>
+            <Clock size={24} color="#fff" />
           </div>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: "#94A3B8", marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.06em" }}>Last analysis</div>
-            <div style={{ fontSize: 36, fontWeight: 800, color: "#3B6FFF", lineHeight: 1, fontFamily: "'Fraunces',serif" }}>
+            <div style={{ fontSize: 36, fontWeight: 800, color: C.accentSolid, lineHeight: 1, fontFamily: "'Fraunces',serif" }}>
               {overview.lastAuditDays === 999 ? "—" : overview.lastAuditDays}
               <span style={{ fontSize: 14, fontWeight: 500, color: "#94A3B8", marginLeft: 6 }}>
                 {overview.lastAuditDays === 999 ? "No analysis yet" : "days ago"}
@@ -295,7 +304,7 @@ export default function Dashboard() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: "#0F172A", textTransform: "uppercase", letterSpacing: "0.07em" }}>Priority actions</div>
           {actions.length > 0 && (
-            <span style={{ fontSize: 12, fontWeight: 700, color: "#3B6FFF", background: "#EEF4FF", border: "1.5px solid #DBEAFE", borderRadius: 20, padding: "3px 12px" }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: "#fff", background: C.accent, border: "1.5px solid transparent", borderRadius: 20, padding: "3px 12px" }}>
               {actions.length} action{actions.length > 1 ? "s" : ""}
             </span>
           )}
@@ -308,10 +317,10 @@ export default function Dashboard() {
             {/* "All" tab */}
             <button onClick={() => setActiveNorm("all")}
               style={{ padding: "5px 14px", borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: "pointer",
-                       border: `1.5px solid ${activeNorm === "all" ? "#3B6FFF" : "#E2E8F0"}`,
-                       background: activeNorm === "all" ? "#EEF4FF" : "#fff",
-                       color: activeNorm === "all" ? "#3B6FFF" : "#64748B",
-                       boxShadow: activeNorm === "all" ? "0 2px 8px rgba(59,111,255,0.12)" : "none" }}>
+                       border: `1.5px solid ${activeNorm === "all" ? C.accentSolid : "#E2E8F0"}`,
+                       background: "#fff",
+                       color: activeNorm === "all" ? C.accentSolid : "#64748B",
+                       boxShadow: activeNorm === "all" ? `0 2px 8px ${C.accentSolid}22` : "none" }}>
               All standards
             </button>
 

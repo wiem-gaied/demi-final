@@ -28,7 +28,7 @@ const THEME = {
     errorLight: "#FEF2F2",
   },
   gradients: {
-    button: "linear-gradient(135deg, #6366F1, #4F46E5)",
+    button: "linear-gradient(135deg, #3B6FFF,#061585)",
     cardHover: "linear-gradient(135deg, rgba(99,102,241,0.02), rgba(139,92,246,0.02))",
   },
   shadows: {
@@ -386,14 +386,7 @@ function AssetCard({ asset, isOpen, onToggle, onEdit, onDelete, onEditRisk, onDe
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <div style={{
-              width: 40, height: 40, borderRadius: 12,
-              background: THEME.colors.primaryBg,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              color: THEME.colors.primary
-            }}>
-              {getAssetIcon(asset.type)}
-            </div>
+            
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
                 <span style={{ fontWeight: 700, fontSize: 16, color: THEME.colors.textDark }}>{asset.intitule}</span>
@@ -799,7 +792,7 @@ export default function Assets() {
       <div style={{ marginBottom: 22 }}>
         <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", flexWrap: "wrap", gap: 16, marginBottom: 14 }}>
           <div>
-            <div style={{ color: THEME.colors.primary, fontSize: "11px", letterSpacing: "0.12em", textTransform: "uppercase", fontWeight: "700", marginBottom: "8px" }}>Asset Management</div>
+            
             <h1 style={{ fontSize: 28, fontWeight: 900, color: THEME.colors.textDark, margin: 0 }}>Assets Management</h1>
             <p style={{ fontSize: 14, color: THEME.colors.textGray, margin: "5px 0 0" }}>
               Manage organizational assets and track associated risks. Click on an asset to expand and view its details.

@@ -18,6 +18,21 @@ const T = {
   warning: "#F59E0B",
   info: "#06B6D4",
 };
+const C = {
+  bg: "#F8FAFF", surface: "#FFFFFF", surfaceAlt: "#F0F4FF",
+  border: "#E2E8F8", borderStrong: "#C7D2F0",
+  wow: "#3B6FFF", accentLight: "#EEF2FF", accentHover: "#2D5CE8",
+  purple: "#6D28D9", purpleLight: "#F5F0FF",
+  success: "#059669", successLight: "#ECFDF5",
+  warning: "#061585", warningLight: "#FFFBEB",
+  danger: "#DC2626", dangerLight: "#FEF2F2",
+  info: "#0891B2", infoLight: "#ECFEFF",
+  text: "#0F172A", textMid: "#475569", textMuted: "#94A3B8",
+  shadow: "0 1px 3px rgba(15,23,42,0.07)",
+  shadowMd: "0 4px 12px rgba(15,23,42,0.09)",
+  shadowLg: "0 10px 30px rgba(15,23,42,0.13)",
+};
+C.accent = `linear-gradient(135deg, ${C.wow}, ${C.warning})`;
 
 // Utility helpers
 const avatarBg = (initials) => {
@@ -67,9 +82,9 @@ function GroupDetailsModal({ group, users, onClose }) {
       const response = await fetch("http://localhost:3000/api/permissions", {
         credentials: "include"
       });
-      
+
       if (!response.ok) throw new Error("Failed to fetch permissions");
-      
+
       const data = await response.json();
       setAvailablePermissions(data);
     } catch (error) {
@@ -113,7 +128,7 @@ function GroupDetailsModal({ group, users, onClose }) {
             <X size={18} />
           </button>
         </div>
-        
+
         <div style={{ padding: "24px 32px", display: "flex", flexDirection: "column", gap: 24 }}>
           {/* Description */}
           {group.description && (
@@ -231,7 +246,7 @@ function GroupsModal({ group, users, onClose, onSave }) {
   const groupsColors = ["#3B6FFF", "#6D28D9", "#10B981", "#F59E0B", "#EF4444", "#06B6D4"];
   const [availablePermissions, setAvailablePermissions] = useState([]);
   const [loadingPermissions, setLoadingPermissions] = useState(true);
-  
+
   const [form, setForm] = useState({
     name: "",
     description: "",
@@ -251,9 +266,9 @@ function GroupsModal({ group, users, onClose, onSave }) {
       const response = await fetch("http://localhost:3000/api/permissions", {
         credentials: "include"
       });
-      
+
       if (!response.ok) throw new Error("Failed to fetch permissions");
-      
+
       const data = await response.json();
       setAvailablePermissions(data);
     } catch (error) {
@@ -263,7 +278,7 @@ function GroupsModal({ group, users, onClose, onSave }) {
       setLoadingPermissions(false);
     }
   };
-  
+
   useEffect(() => {
     if (group) {
       setForm({
@@ -285,9 +300,9 @@ function GroupsModal({ group, users, onClose, onSave }) {
   }, [group]);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
-  const toggleMember = (uid) => set("members", 
-    form.members.includes(uid) 
-      ? form.members.filter(m => m !== uid) 
+  const toggleMember = (uid) => set("members",
+    form.members.includes(uid)
+      ? form.members.filter(m => m !== uid)
       : [...form.members, uid]
   );
 
@@ -380,7 +395,7 @@ function GroupsModal({ group, users, onClose, onSave }) {
           <div>
             <div
               style={{
-                fontFamily: "Fraunces, Georgia, serif",
+
                 fontSize: 20,
                 fontWeight: 700,
                 color: T.text,
@@ -423,7 +438,7 @@ function GroupsModal({ group, users, onClose, onSave }) {
               style={inputStyle}
             />
           </Field>
-          
+
           <Field label="Description">
             <textarea
               value={form.description}
@@ -442,9 +457,9 @@ function GroupsModal({ group, users, onClose, onSave }) {
                   style={{
                     padding: "6px 12px",
                     borderRadius: 20,
-                    border: `2px solid ${form.members.includes(u.id) ? T.purple : T.border}`,
-                    background: form.members.includes(u.id) ? T.purple + "15" : "transparent",
-                    color: form.members.includes(u.id) ? T.purple : T.muted,
+                    border: `2px solid ${form.members.includes(u.id) ? C.wow : T.border}`,
+                    background: form.members.includes(u.id) ? C.wow + "15" : "transparent",
+                    color: form.members.includes(u.id) ? C.wow : T.muted,
                     fontSize: 12,
                     cursor: "pointer",
                     display: "flex",
@@ -458,7 +473,7 @@ function GroupsModal({ group, users, onClose, onSave }) {
               ))}
             </div>
           </Field>
-          
+
           <Field label="Permissions">
             {loadingPermissions ? (
               <div style={{ textAlign: "center", padding: "20px", color: T.muted }}>
@@ -475,10 +490,10 @@ function GroupsModal({ group, users, onClose, onSave }) {
                   }, {})
                 ).map(([category, perms]) => (
                   <div key={category}>
-                    <div style={{ 
-                      fontSize: 11, 
-                      fontWeight: 700, 
-                      color: T.muted, 
+                    <div style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: T.muted,
                       textTransform: "uppercase",
                       letterSpacing: 0.8,
                       marginBottom: 8,
@@ -494,12 +509,12 @@ function GroupsModal({ group, users, onClose, onSave }) {
                           style={{
                             padding: "6px 12px",
                             borderRadius: 20,
-                            border: `2px solid ${form.permissions.includes(p.id) ? T.primary : T.border}`,
+                            border: `2px solid ${form.permissions.includes(p.id) ? C.wow : T.border}`,
                             background: form.permissions.includes(p.id)
-                              ? T.primary + "15"
+                              ? C.wow + "15"
                               : "transparent",
                             color: form.permissions.includes(p.id)
-                              ? T.primary
+                              ? C.wow
                               : T.muted,
                             fontSize: 12,
                             cursor: "pointer",
@@ -551,12 +566,12 @@ function GroupsModal({ group, users, onClose, onSave }) {
               padding: "10px 28px",
               borderRadius: 12,
               border: "none",
-              background: `linear-gradient(135deg, ${T.purple}, #5B21B6)`,
+              background: C.accent,
               color: "#fff",
               fontWeight: 700,
               fontSize: 14,
               cursor: "pointer",
-              boxShadow: `0 4px 16px ${T.purple}44`,
+              boxShadow: `0 4px 16px ${C.wow}44`,
             }}
           >
             {group ? "Save Changes" : "Create Group"}
@@ -585,9 +600,9 @@ export default function GroupsTab({ groups, users, setGroups }) {
       const response = await fetch("http://localhost:3000/api/settings/groups", {
         credentials: "include"
       });
-      
+
       if (!response.ok) throw new Error("Failed to fetch groups");
-      
+
       const data = await response.json();
       setGroups(data);
     } catch (error) {
@@ -605,7 +620,7 @@ export default function GroupsTab({ groups, users, setGroups }) {
         : [...prev, g]
     );
   };
-  
+
   const deleteGroups = async (id) => {
     try {
       const response = await fetch(`http://localhost:3000/api/settings/groups/${id}`, {
@@ -630,7 +645,7 @@ export default function GroupsTab({ groups, users, setGroups }) {
   if (loading) {
     return (
       <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "400px" }}>
-        <div style={{ color: T.primary }}>Loading groups...</div>
+        <div style={{ color: C.wow }}>Loading groups...</div>
       </div>
     );
   }
@@ -657,12 +672,12 @@ export default function GroupsTab({ groups, users, setGroups }) {
             padding: "10px 20px",
             borderRadius: 12,
             border: "none",
-            background: `linear-gradient(135deg, ${T.primary}, ${T.primaryDark})`,
+            background: C.accent,
             color: "#fff",
             fontWeight: 700,
             fontSize: 13,
             cursor: "pointer",
-            boxShadow: `0 4px 16px ${T.purple}44`,
+            boxShadow: `0 4px 16px ${C.wow}44`,
           }}
         >
           <Plus size={16} /> New Group
@@ -702,7 +717,7 @@ export default function GroupsTab({ groups, users, setGroups }) {
                 e.currentTarget.style.boxShadow = "0 2px 12px rgba(59,111,255,0.06)";
               }}
             >
-              <div style={{ height: 5, background: g.color || T.primary }} />
+              <div style={{ height: 5, background: g.color || C.accent }} />
               <div style={{ padding: "20px 22px" }}>
                 <div
                   style={{
@@ -742,7 +757,7 @@ export default function GroupsTab({ groups, users, setGroups }) {
                         borderRadius: 8,
                         padding: "6px 10px",
                         cursor: "pointer",
-                        color: g.color || T.primary,
+                        color: g.color || C.wow,
                       }}
                     >
                       <Edit3 size={14} />
@@ -856,7 +871,7 @@ export default function GroupsTab({ groups, users, setGroups }) {
                       style={{
                         verticalAlign: -2,
                         marginRight: 5,
-                        color: g.color || T.primary,
+                        color: g.color || C.wow,
                       }}
                     />
                     {permCount} permission{permCount !== 1 ? "s" : ""}
@@ -877,8 +892,8 @@ export default function GroupsTab({ groups, users, setGroups }) {
                         <span
                           key={pid}
                           style={{
-                            background: (g.color || T.primary) + "16",
-                            color: g.color || T.primary,
+                            background: (g.color || C.wow) + "16",
+                            color: g.color || C.wow,
                             fontSize: 9,
                             fontWeight: 700,
                             padding: "2px 7px",
