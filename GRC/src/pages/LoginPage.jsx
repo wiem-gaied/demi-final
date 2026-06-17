@@ -42,7 +42,7 @@ const LBL = {
 
 const LOGIN_BTN = {
   width: "100%",
-  background: "linear-gradient(135deg,#7c3aed,#6d28d9)",
+  background: "linear-gradient(135deg,#3B6FFF,#061585)",
   color: "#fff",
   padding: "12px",
   border: "none",
@@ -93,7 +93,7 @@ function PlatformHeader() {
         display: "flex", alignItems: "center", justifyContent: "center",
         boxShadow: "0 2px 8px rgba(109,40,217,0.15)",
       }}>
-        <ShieldCheck size={22} color="#7c3aed" />
+        <ShieldCheck size={22} color="#0a23ad" />
       </div>
       <div>
         <div style={{ fontWeight: 800, fontSize: 19, color: "#0f172a", fontFamily: "'DM Sans', sans-serif" }}>GRC Platform</div>
@@ -107,12 +107,12 @@ function IconField({ icon: Icon, value, onChange, onKeyDown, type = "text", plac
   const [focused, setFocused] = useState(false);
   return (
     <div style={{ position: "relative" }}>
-      <Icon size={15} color={focused ? "#7c3aed" : "#94a3b8"}
+      <Icon size={15} color={focused ? "#0a23ad" : "#94a3b8"}
         style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", transition: "color .15s", pointerEvents: "none" }} />
       <input
         style={{
           ...INPUT,
-          borderColor: focused ? "#7c3aed" : "#e2e8f0",
+          borderColor: focused ? "#0a23ad" : "#e2e8f0",
           boxShadow: focused ? "0 0 0 3px rgba(124,58,237,0.10)" : "none",
           paddingRight: rightSlot ? 40 : 12,
         }}
@@ -397,7 +397,7 @@ export  default function LoginPage({ onClose, onForgotPassword}){
           <div>
             <label style={LBL}>Email</label>
             <IconField
-              icon={Mail}
+              icon={Mail} 
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               onKeyDown={handleKey}
@@ -424,7 +424,7 @@ export  default function LoginPage({ onClose, onForgotPassword}){
                   cursor: "pointer",
                   fontSize: 12,
                   fontWeight: 600,
-                  color: "#7c3aed",
+                  color: "#0a23ad",
                   fontFamily: "inherit",
                   padding: 0,
                 }}

@@ -33,26 +33,28 @@ C.accent = `linear-gradient(135deg, ${C.wow}, ${C.warning})`;
 
 const LEVEL_META = {
   ERROR:   { color: C.danger,  bg: C.dangerLight,  border: "#FECACA", icon: "✕", label: "Error" },
-  WARNING: { color: "#D97706", bg: "#FFFBEB",       border: "#FCD34D", icon: "⚠", label: "Warning" },
+  WARNING: { color: "#D97706", bg: "#FFFBEB",       border: "#FCD34D", label: "Warning" },
   INFO:    { color: C.wow,     bg: C.accentLight,   border: "#BFD0FF", icon: "ℹ", label: "Info" },
 };
 
+// 1. Corrige getLevelFromAction
 function getLevelFromAction(action) {
   const normalized = action.toUpperCase();
-  const baseAction = normalized.split("_")[0];
   const levels = {
-    "DELETE": "INFO",
-    "LOGIN_FAILED": "ERROR",
+    "LOGIN_FAILED":  "WARNING",  // aligné avec le backend
+    "MFA_FAILED":    "WARNING",
     "ACCESS_DENIED": "ERROR",
-    "UPDATE": "INFO",
-    "CREATE": "INFO",
-    "LOGIN": "INFO",
-    "LOGOUT": "INFO",
-    "VIEW": "INFO",
-    "EXPORT": "INFO"
+    "DELETE":        "INFO",
+    "UPDATE":        "INFO",
+    "CREATE":        "INFO",
+    "LOGIN":         "INFO",
+    "LOGOUT":        "INFO",
+    "VIEW":          "INFO",
+    "EXPORT":        "INFO",
   };
-  return levels[baseAction] || "INFO";
+  return levels[normalized] || levels[normalized.split("_")[0]] || "INFO";
 }
+
 
 function getSourceFromAction(action) {
   if (action === "LOGIN" || action === "LOGOUT") return "auth";
@@ -142,13 +144,16 @@ function SrcTag({ source }) {
 
 function ActionTag({ action }) {
   const colors = {
-    'CREATE': { bg: C.successLight, color: C.success },
-    'UPDATE': { bg: "#FFFBEB",      color: "#D97706" },
-    'DELETE': { bg: C.dangerLight,  color: C.danger  },
-    'LOGIN':  { bg: C.accentLight,  color: C.wow     },
-    'LOGOUT': { bg: C.surfaceAlt,   color: C.textMuted },
-    'VIEW':   { bg: C.surfaceAlt,   color: C.textMuted },
-    'EXPORT': { bg: C.purpleLight,  color: C.purple  }
+    'CREATE':       { bg: C.successLight, color: C.success  },
+    'UPDATE':       { bg: "#FFFBEB",      color: "#D97706"  },
+    'DELETE':       { bg: C.dangerLight,  color: C.danger   },
+    'LOGIN':        { bg: C.accentLight,  color: C.wow      },
+    'LOGOUT':       { bg: C.surfaceAlt,   color: C.textMuted },
+    'VIEW':         { bg: C.surfaceAlt,   color: C.textMuted },
+    'EXPORT':       { bg: C.purpleLight,  color: C.purple   },
+    'LOGIN_FAILED': { bg: C.dangerLight,  color: C.danger   }, // ← ajouté
+    'MFA_FAILED':   { bg: "#FFFBEB",      color: "#D97706"  }, // ← ajouté
+    'ACCESS_DENIED':{ bg: C.dangerLight,  color: C.danger   }, // ← ajouté
   };
   const style = colors[action] || { bg: C.surfaceAlt, color: C.textMuted };
   return (
@@ -157,7 +162,7 @@ function ActionTag({ action }) {
       fontSize: 9, fontWeight: 600,
       background: style.bg, color: style.color
     }}>
-      {action || "UNKNOWN"}
+      {formatAction(action)}  {/* ← formatAction ici, pas dans l'appel */}
     </span>
   );
 }
@@ -423,7 +428,7 @@ export default function Logs() {
     return (
       <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
         <div style={{ textAlign: "center", maxWidth: 500, padding: 24, background: C.surface, borderRadius: 12, boxShadow: C.shadowLg }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
+          <div style={{ fontSize: 48, marginBottom: 16 }}></div>
           <div style={{ color: C.danger, marginBottom: 16, fontWeight: 500 }}>{error}</div>
           <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 20 }}>
             Check that:

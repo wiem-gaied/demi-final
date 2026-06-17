@@ -11,8 +11,8 @@ const Footer = () => {
                 }
             `}</style>
             
-            <footer className="flex flex-col items-center justify-center w-full py-12 bg-gradient-to-b from-[#5524B7] to-[#380B60] text-white/70">
-                <p className="text-center text-white/60 text-sm">
+           <footer className="flex flex-col items-center justify-center w-full py-5 bg-gradient-to-b text-black">
+                <p className="text-center text-black text-sm">
                     © 2026 GRC Platform. All rights reserved.
                 </p>
             </footer>

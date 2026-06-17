@@ -171,8 +171,8 @@ function ChapterExceptionCard({ exception, onRemove, childControls = [] }) {
           </div>
           
           <div style={{ display:"flex", gap:16, fontFamily:F.body, fontSize:11, color:C.textMuted, flexWrap:"wrap" }}>
-            <span>📅 Excluded on: {exception.excludedAt ? new Date(exception.excludedAt).toLocaleDateString() : new Date().toLocaleDateString()}</span>
-            <span>👤 By: {exception.excludedBy || "CISO"}</span>
+            <span> Excluded on: {exception.excludedAt ? new Date(exception.excludedAt).toLocaleDateString() : new Date().toLocaleDateString()}</span>
+            
           </div>
         </div>
         
@@ -297,8 +297,8 @@ function ItemExceptionCard({ exception, onRemove }) {
           </div>
           
           <div style={{ display:"flex", gap:16, fontFamily:F.body, fontSize:11, color:C.textMuted, flexWrap:"wrap" }}>
-            <span>📅 Excluded on: {exception.excludedAt ? new Date(exception.excludedAt).toLocaleDateString() : new Date().toLocaleDateString()}</span>
-            <span>👤 By: {exception.excludedBy || "CISO"}</span>
+            <span> Excluded on: {exception.excludedAt ? new Date(exception.excludedAt).toLocaleDateString() : new Date().toLocaleDateString()}</span>
+            
           </div>
         </div>
         
@@ -595,13 +595,13 @@ export default function Exceptions() {
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <path d="M10 12L6 8L10 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
-          Back to Policy Library
+          Back to Frameworks
         </button>
         
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:16 }}>
           <div>
             <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:5 }}>
-              <h1 style={{ fontSize:28, fontWeight:900, color:C.text, margin:0 }}>Policy Exceptions</h1>
+              <h1 style={{ fontSize:28, fontWeight:900, color:C.text, margin:0 }}>Exceptions</h1>
             </div>
             <p style={{ fontFamily:F.body, fontSize:13, color:C.textMid, margin:0 }}>
               Policies that have been excluded from compliance scope. These will not be considered in compliance checks.
@@ -610,24 +610,7 @@ export default function Exceptions() {
         </div>
       </div>
 
-      <div style={{ display:"flex", gap:12, marginBottom:24, flexWrap:"wrap" }}>
-        <div style={{ background:C.surface, borderRadius:12, padding:"12px 20px", border:`1px solid ${C.border}`, flex:1, minWidth:100 }}>
-          <div style={{ fontSize:24, fontWeight:800, color:C.text }}>{stats.total}</div>
-          <div style={{ fontSize:11, color:C.textMuted }}>Total exceptions</div>
-        </div>
-        <div style={{ background:C.surface, borderRadius:12, padding:"12px 20px", border:`1px solid ${C.border}`, flex:1, minWidth:100 }}>
-          <div style={{ fontSize:24, fontWeight:800, color:"#EA580C" }}>{stats.packages}</div>
-          <div style={{ fontSize:11, color:C.textMuted }}>Frameworks</div>
-        </div>
-        <div style={{ background:C.surface, borderRadius:12, padding:"12px 20px", border:`1px solid ${C.border}`, flex:1, minWidth:100 }}>
-          <div style={{ fontSize:24, fontWeight:800, color:"#0891B2" }}>{stats.chapters}</div>
-          <div style={{ fontSize:11, color:C.textMuted }}>Chapters</div>
-        </div>
-        <div style={{ background:C.surface, borderRadius:12, padding:"12px 20px", border:`1px solid ${C.border}`, flex:1, minWidth:100 }}>
-          <div style={{ fontSize:24, fontWeight:800, color:C.accent }}>{stats.items}</div>
-          <div style={{ fontSize:11, color:C.textMuted }}>Controls</div>
-        </div>
-      </div>
+      
 
       <div style={{ display:"flex", gap:10, marginBottom:20, flexWrap:"wrap", alignItems:"center" }}>
         <div style={{ display:"flex", gap:6 }}>

@@ -148,7 +148,13 @@ async function importOneFramework(conn, fw, presetStandardId = null) {
     );
     for (const item of (node.items || node.controls || [])) {
       ctrlSeq++;
-      const cid = `${standardId}__cc_${ctrlSeq}_${safeFragment(item.ref_id, "ctl")}`.slice(0, 100);
+      
+      const safeRef = String(ctrl.ref_id || ctrl.name || `c${ctrlIdx}`)
+  .replace(/[^a-zA-Z0-9.]/g, "_")
+  .replace(/_+/g, "_")
+  .slice(0, 30);
+
+const cid = `${standardId}__fam_${famIdx}__ctrl_${safeRef}_${ctrlIdx}`.slice(0, 100);
       await conn.query(
         `INSERT INTO ciso_controls
          (id, family_id, core_chapter_id, standard_id, ref_id, name, description, implementation_guidance)
@@ -597,6 +603,55 @@ router.get("/json-files", async (req, res) => {
     res.json({ directory: DATA_DIR, total_files: files.length, frameworks });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+// DELETE /api/ciso/packages/:id  → suppression complète d'un framework
+// DELETE /api/ciso/packages/:id  → suppression complète d'un framework
+router.delete("/packages/:id", async (req, res) => {
+  const conn = await db.getConnection();
+  try {
+    const standardId = req.params.id;
+    await conn.beginTransaction();
+
+    // 1. Liens risk_controls (sinon la FK bloque la suppression des ciso_controls)
+    await conn.query(
+      `DELETE rc FROM risk_controls rc
+         JOIN ciso_controls cc ON cc.id = rc.control_id
+        WHERE cc.standard_id = ?`,
+      [standardId]
+    );
+
+    // 2. Exceptions
+    await conn.query(`DELETE FROM policy_exceptions WHERE standard_id = ?`, [standardId]);
+
+    // 3. Imports
+    await conn.query(`DELETE FROM imported_policies WHERE standard_id = ?`, [standardId]);
+
+    // 4. Contrôles
+    await conn.query(`DELETE FROM ciso_controls WHERE standard_id = ?`, [standardId]);
+
+    // 5. Familles (annex)
+    await conn.query(`DELETE FROM ciso_families WHERE standard_id = ?`, [standardId]);
+
+    // 6. Sous-chapitres
+    await conn.query(`DELETE FROM ciso_chapters WHERE standard_id = ?`, [standardId]);
+
+    // 7. Chapitres principaux
+    await conn.query(`DELETE FROM ciso_core_chapters WHERE standard_id = ?`, [standardId]);
+
+    // 8. ⭐ LA TABLE MAÎTRE — c'est elle que /packages lit
+    await conn.query(`DELETE FROM ciso_standards WHERE id = ?`, [standardId]);
+
+    // NB : on NE touche PAS à compliance_analyses (historique conservé)
+
+    await conn.commit();
+    res.json({ success: true, deleted: standardId });
+  } catch (e) {
+    await conn.rollback();
+    console.error("delete package error:", e);
+    res.status(500).json({ error: e.message });
+  } finally {
+    conn.release();
   }
 });
 

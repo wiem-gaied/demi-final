@@ -52,10 +52,10 @@ const THEME = {
     background: "#F9FAFB",
   },
   gradients: {
-    hero: "linear-gradient(135deg, #0B0F2A 0%, #0F1535 50%, #1A1F4A 100%)",
+    hero: "linear-gradient(135deg, #2c3467 0%, #151d4f 50%, #1A1F4A 100%)",
     cta: "linear-gradient(135deg, #0B0F2A 0%, #1A1F4A 100%)",
-    button: "linear-gradient(135deg, #6366F1, #8B5CF6)",
-    text: "linear-gradient(135deg, #818CF8, #A855F7, #F472B6)",
+    button: "linear-gradient(135deg, #6366F1, #061585)",
+    text: "linear-gradient(135deg, #818CF8, #1b1b9b, #061585)",
   },
   shadows: {
     button: "0 8px 28px rgba(99,102,241,0.4)",
@@ -92,7 +92,7 @@ const benefits = [
 const Hero = ({ onAccessPlatform }) => {
   const styles = {
     section: {
-      minHeight: "90vh",
+      minHeight: "9vh",
       padding: "140px 24px 100px",
       background: THEME.gradients.hero,
       position: "relative",
@@ -102,8 +102,8 @@ const Hero = ({ onAccessPlatform }) => {
       position: "absolute",
       top: "10%",
       left: "-5%",
-      width: "400px",
-      height: "400px",
+      width: "40px",
+      height: "40px",
       borderRadius: "50%",
       background: "radial-gradient(circle, rgba(99,102,241,0.3) 0%, transparent 70%)",
       filter: "blur(60px)",

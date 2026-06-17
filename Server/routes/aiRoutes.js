@@ -1,26 +1,6 @@
-// backend/routes/aiRoutes.js — v2 (ensureAllItemsPresent inspired by v9)
+// backend/routes/aiRoutes.js — v4 (FIXED for multiple files)
 //
-// Key guarantee:
-//   ✅ EVERY imported framework item (every clause-chapter item AND
-//      every annex control, except policy_exceptions) appears in the
-//      response, either with a real LLM verdict or — if the LLM was
-//      not confident / silent — with an honest "Manual review
-//      required" placeholder. Nothing is silently dropped.
-//
-//   ✅ Per-policy assessment lists are NOT padded with fake items.
-//      Each policy carries the verdicts the LLM produced for it
-//      (which can include "Not relevant to this policy" rows when
-//      the per-policy filter rejected an item — those are tagged
-//      with _source: "filtered" so the UI can compute meaningful
-//      per-policy KPIs).
-//
-//   ✅ `out.results` is the single source of truth for the GLOBAL
-//      framework coverage (one entry per imported item).
-//
-//   ✅ Comment field is always a string, statuses are normalized.
-//      No more synthetic boilerplate like "No mention of X" or
-//      "Add a documented procedure for X" — if Python could not
-//      classify a control, the comment honestly says so.
+// Fixed: Better error handling for multer and file uploads
 //
 import express from "express";
 import multer from "multer";
@@ -35,15 +15,32 @@ const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Configure multer with better error handling
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const tempDir = os.tmpdir();
+    console.log(`[MULTER] Saving file to: ${tempDir}`);
+    cb(null, tempDir);
+  },
+  filename: (req, file, cb) => {
+    const safe = file.originalname.replace(/[^\w.\-]/g, "_");
+    const filename = `${Date.now()}_${safe}`;
+    console.log(`[MULTER] Generated filename: ${filename}`);
+    cb(null, filename);
+  },
+});
+
 const upload = multer({
-  storage: multer.diskStorage({
-    destination: (req, file, cb) => cb(null, os.tmpdir()),
-    filename: (req, file, cb) => {
-      const safe = file.originalname.replace(/[^\w.\-]/g, "_");
-      cb(null, `${Date.now()}_${safe}`);
-    },
-  }),
-  limits: { fileSize: 50 * 1024 * 1024 },
+  storage: storage,
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB per file
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'];
+    if (allowedTypes.includes(file.mimetype) || file.originalname.match(/\.(pdf|doc|docx|txt)$/i)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only PDF, DOC, DOCX, and TXT files are allowed.'));
+    }
+  },
 });
 
 const log = (type, msg, data = null) => {
@@ -55,17 +52,16 @@ const log = (type, msg, data = null) => {
 function mapStatus(status) {
   if (!status) return "Not covered";
   const v = status.toString().trim().toLowerCase();
+  if (v.includes("applicable") && v.includes("not")) return "Not applicable";
   if (v === "covered" || (v.includes("cover") && !v.includes("not"))) return "Covered";
   if (v.includes("partial")) return "Partial";
   if (v.includes("not")) return "Not covered";
   return "Not covered";
 }
 
+const SCORE = { "Covered": 100, "Partial": 50, "Not covered": 0 };
+
 // ───── filtering: builds the imported-items payload for one standard ──
-// Active policy_exceptions on a family (chapter) or a single control are
-// applied here BEFORE we hand the items to Python, so the LLM never even
-// sees the exception controls. Everything else IS sent — clause-chapter
-// items, annex families and their controls.
 async function buildItemsForStandard(standardId) {
   const [exRows] = await db.query(
     `SELECT entity_id, entity_type FROM policy_exceptions
@@ -77,19 +73,15 @@ async function buildItemsForStandard(standardId) {
     `SELECT id, name, version, description FROM ciso_standards WHERE id = ?`, [standardId]);
   const standard = stdRows[0] || { id: standardId, name: standardId };
 
-  // ── Core chapters (the structural headers: 4, 5, 6, 6.1, …) ────────
   const [coreRows] = await db.query(
     `SELECT id, ref_id, title, description, parent_id FROM ciso_core_chapters
      WHERE standard_id = ? ORDER BY display_order ASC, ref_id ASC`, [standardId]);
 
-  // An exception with entity_type 'chapter' can target a core chapter OR
-  // an annex family. A core chapter counts as excepted if it — or any of
-  // its ancestors — is excepted (exceptions cascade down the tree).
   const chapterById = new Map(coreRows.map(c => [c.id, c]));
   const isCoreChapterExcepted = (id) => {
     let cur = id, guard = 0;
     while (cur && guard++ < 100) {
-      if (exceptedFamilies.has(cur)) return true;          // 'chapter' exceptions
+      if (exceptedFamilies.has(cur)) return true;
       cur = chapterById.get(cur)?.parent_id || null;
     }
     return false;
@@ -103,19 +95,12 @@ async function buildItemsForStandard(standardId) {
     mandatory: true,
   }));
 
-  // ── Annex families ─────────────────────────────────────────────────
   const [familyRows] = await db.query(
     `SELECT id, ref_id, name, description FROM ciso_families
      WHERE standard_id = ? ORDER BY display_order ASC, ref_id ASC`, [standardId]);
   const keptFamilies = familyRows.filter(f => !exceptedFamilies.has(f.id));
   const keptFamilyIds = new Set(keptFamilies.map(f => f.id));
 
-  // ── Controls — core requirements AND annex controls share this table.
-  //    Core requirements (4.1, 4.2, 5.1 …) carry core_chapter_id and have
-  //    family_id = NULL. The OLD filter (`keptFamilyIds.has(c.family_id)`)
-  //    was false for every core requirement, so they were ALL dropped —
-  //    that is why an annex-excepted import sent only the bare chapter
-  //    headers. Now each control is routed by its real parent. ─────────
   const [controlRows] = await db.query(
     `SELECT id, ref_id, name, description, family_id, core_chapter_id
      FROM ciso_controls
@@ -123,9 +108,9 @@ async function buildItemsForStandard(standardId) {
 
   const keptControls = controlRows.filter(c => {
     if (exceptedControls.has(c.id)) return false;
-    if (c.core_chapter_id) return keptCoreChapterIds.has(c.core_chapter_id); // core requirement
-    if (c.family_id)       return keptFamilyIds.has(c.family_id);            // annex control
-    return true; // orphan control with no parent — keep so nothing is lost
+    if (c.core_chapter_id) return keptCoreChapterIds.has(c.core_chapter_id);
+    if (c.family_id)       return keptFamilyIds.has(c.family_id);
+    return true;
   });
 
   const familyItems = keptFamilies.map(f => ({
@@ -158,27 +143,61 @@ async function buildItemsForStandard(standardId) {
 }
 
 // ───── /analyze-pdf ──────────────────────────────────────────────────────
-router.post("/analyze-pdf", upload.single("pdf"), async (req, res) => {
-  let tmpFilePath = null;
+router.post("/analyze-pdf", (req, res, next) => {
+  // Handle multer errors
+  upload.array("pdfs", 50)(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      log("ERROR", `Multer error: ${err.message}`);
+      return res.status(400).json({ error: `Upload error: ${err.message}` });
+    } else if (err) {
+      log("ERROR", `Unknown upload error: ${err.message}`);
+      return res.status(400).json({ error: err.message });
+    }
+    next();
+  });
+}, async (req, res) => {
+  const tempFiles = [];
   try {
     log("INFO", "📥 [ANALYZE-PDF] Request received");
-    if (!req.file?.path) return res.status(400).json({ error: "No file uploaded" });
-    tmpFilePath = req.file.path;
-    log("INFO", `📄 ${req.file.originalname} -> ${tmpFilePath}`);
+    
+    // Check if files were uploaded
+    if (!req.files || req.files.length === 0) {
+      log("ERROR", "No files uploaded");
+      return res.status(400).json({ error: "No files uploaded. Please select at least one PDF, DOC, or TXT file." });
+    }
+    
+    log("INFO", `📄 Received ${req.files.length} file(s): ${req.files.map(f => f.originalname).join(", ")}`);
+    
+    // Store temp file paths for cleanup
+    req.files.forEach(file => {
+      tempFiles.push(file.path);
+      log("INFO", `   - ${file.originalname} -> ${file.path}`);
+    });
 
     let standardIds = [];
     try {
-      if (req.body.standardIds) standardIds = JSON.parse(req.body.standardIds);
-    } catch (e) { log("WARN", "Invalid standardIds JSON"); }
+      if (req.body.standardIds) {
+        standardIds = typeof req.body.standardIds === 'string' 
+          ? JSON.parse(req.body.standardIds) 
+          : req.body.standardIds;
+      }
+    } catch (e) { 
+      log("WARN", "Invalid standardIds JSON", e.message); 
+    }
+    
     if (!Array.isArray(standardIds) || !standardIds.length) {
-      const [imp] = await db.query(`SELECT standard_id FROM imported_policies`);
+      const [imp] = await db.query(`SELECT DISTINCT standard_id FROM imported_policies`);
       standardIds = imp.map(r => r.standard_id);
     }
-    if (!standardIds.length) return res.status(400).json({ error: "No imported standard found." });
+    
+    if (!standardIds.length) {
+      return res.status(400).json({ error: "No imported standard found. Please import a framework first." });
+    }
 
     const standardsPayload = [];
     const aggregatedStats = [];
     const allInputItems = [];
+    
     for (const sid of standardIds) {
       const built = await buildItemsForStandard(sid);
       log("INFO", `📦 ${sid} => items: ${built.items.length}`);
@@ -192,43 +211,55 @@ router.post("/analyze-pdf", upload.single("pdf"), async (req, res) => {
       aggregatedStats.push(built.stats);
       allInputItems.push(...built.items);
     }
-    if (!standardsPayload.length) return res.status(400).json({ error: "Nothing to analyze." });
+    
+    if (!standardsPayload.length) {
+      return res.status(400).json({ error: "No items to analyze. The selected framework might be empty." });
+    }
 
-    log("INFO", `🚀 Calling Python analyzer for ${allInputItems.length} item(s)…`);
+    log("INFO", `🚀 Calling Python analyzer with ${req.files.length} file(s) for ${allInputItems.length} item(s)…`);
+    
     let pyResult = null;
     try {
+      // ─── NEW: pass ALL uploaded files to Python (1 file = 1 policy) ───
+      const documents = req.files.map(f => ({
+        path: f.path,
+        name: f.originalname,
+      }));
+
+      const combinedName = req.files.length === 1
+        ? req.files[0].originalname
+        : `${req.files.length} files: ${req.files.map(f => f.originalname).join(", ")}`;
+
+      log("INFO", `📚 Passing ${documents.length} document(s) to Python (1 file = 1 policy)`);
+      documents.forEach(d => log("INFO", `   • ${d.name}`));
+
       pyResult = await analyzeDocumentWithPython({
-        documentPath: tmpFilePath,
-        documentName: req.file.originalname,
+        documents,                                // ← NEW: array of {path, name}
+        documentPath: req.files[0].path,          // kept for backward-compat
+        documentName: combinedName,
         standards: standardsPayload,
       });
-      log("INFO", `✅ Python: ${Object.keys(pyResult?.results || {}).length} item(s), ${pyResult?.policies?.length || 0} policy(ies)`);
+
+      log("INFO", `✅ Python: ${(pyResult?.items?.length || 0)} item(s), `
+        + `${pyResult?.policies_detected?.length || 0} policy(ies)`);
     } catch (pyErr) {
       log("ERROR", "Python failed → fallback", pyErr.message);
-      pyResult = buildHonestFallback(req.file.originalname, allInputItems, pyErr.message);
+      pyResult = buildHonestFallback(
+        req.files.map(f => f.originalname).join(", "),
+        allInputItems,
+        pyErr.message,
+      );
     }
 
     const ensured = ensureAllItemsPresent(pyResult, allInputItems);
-
-    // Normalize statuses + propagate comment field everywhere
-    if (Array.isArray(ensured.policies)) {
-      ensured.policies = ensured.policies.map(p => ({
-        ...p,
-        assessments: (p.assessments || []).map(a => ({
-          ...a,
-          status:  mapStatus(a.status),
-          comment: typeof a.comment === "string" ? a.comment : "",
-        })),
-      }));
-    }
-    for (const k of Object.keys(ensured.results || {})) {
-      ensured.results[k].status = mapStatus(ensured.results[k].status);
-      if (typeof ensured.results[k].comment !== "string") ensured.results[k].comment = "";
-    }
+    
+    // Add multi-file info to response
+    ensured.processed_files = req.files.map(f => f.originalname);
+    ensured.file_count = req.files.length;
 
     return res.json({
       success: true,
-      document: req.file.originalname,
+      document: req.files.length === 1 ? req.files[0].originalname : `${req.files.length} files processed`,
       stats: aggregatedStats,
       ...ensured,
     });
@@ -236,134 +267,116 @@ router.post("/analyze-pdf", upload.single("pdf"), async (req, res) => {
     log("ERROR", "analyze-pdf error", err.message || err);
     return res.status(500).json({ error: err.message || String(err) });
   } finally {
-    if (tmpFilePath) fs.unlink(tmpFilePath, () => {});
+    // Clean up temp files
+    for (const filePath of tempFiles) {
+      fs.unlink(filePath, (err) => {
+        if (err) log("WARN", `Failed to delete temp file ${filePath}:`, err.message);
+      });
+    }
   }
 });
 
 /**
- * If Python crashed entirely, build honest placeholders for every item.
- * No fake "No mention of X" or "Add a documented procedure for X"
- * anymore — the comment plainly says automated analysis failed.
+ * Python crashed entirely → return every item as "Not applicable" with an
+ * honest comment so the UI still shows the imported framework.
  */
 function buildHonestFallback(docName, items, errorMsg) {
-  const flat = {};
   const truncated = (errorMsg || "unknown error").slice(0, 120);
-  for (const it of items) {
-    flat[it.id] = {
-      item_id: it.id,
-      ref_id:  it.ref_id || "",
-      title:   it.title  || "",
-      type:    it.type   || "",
-      status:  "Not covered",
-      conf:    0,
-      comment: `Automated analysis failed (${truncated}). Manual review required for this control.`,
-      evidence: [],
-      risks:    [],
-      gaps:     [],
-      remediation: "",
-      _source:  "uncertain",
-    };
-  }
+  const itemsArr = items.map(it => ({
+    item_id:       it.id,
+    ref_id:        it.ref_id || "",
+    title:         it.title || "",
+    type:          it.type || "",
+    is_applicable: false,
+    status:        "Not applicable",
+    conf:          0,
+    fallback_note: `Automated analysis failed (${truncated}). Manual review required.`,
+    policy_assessments: [],
+  }));
   return {
     document_name: docName,
     global_compliance_percentage: 0,
-    policies: [{
-      policy_name: "General Information Security Policy",
-      policy_summary: "Automated analysis unavailable — please review each control manually.",
-      assessments: Object.values(flat),
-    }],
-    results: flat,
+    policies_detected: [],
+    items: itemsArr,
     error: errorMsg,
   };
 }
 
 /**
- * Makes sure EVERY imported item has an entry in `out.results` (the
- * global view). Per-policy `assessments` are left alone — they carry
- * only what each policy actually evaluated.
- *
- * This is the heart of "every imported control must be visible" — even
- * when no detected policy claimed an item, the global table still
- * shows it with an honest placeholder.
+ * Ensure every imported item has an entry in `out.items`.
  */
 function ensureAllItemsPresent(pyResult, items) {
   const out = pyResult || {};
-  out.policies = Array.isArray(out.policies) ? out.policies : [];
-  out.results  = (out.results && typeof out.results === "object") ? out.results : {};
+  out.items             = Array.isArray(out.items) ? out.items : [];
+  out.policies_detected = Array.isArray(out.policies_detected) ? out.policies_detected : [];
 
+  const seen = new Set(out.items.map(it => it.item_id));
   const itemsById = Object.fromEntries(items.map(it => [it.id, it]));
 
-  // 1) make sure `out.results` has an entry for every imported item
+  // Add missing items as "Not applicable"
   for (const it of items) {
-    if (!out.results[it.id]) {
-      out.results[it.id] = {
-        item_id: it.id, ref_id: it.ref_id || "", title: it.title || "",
-        type: it.type || "", status: "Not covered", conf: 0,
-        comment: "AI did not return a confident assessment for this control. Manual review required.",
-        evidence: [], risks: [], gaps: [], remediation: "",
-        _source: "uncertain",
-      };
-    } else {
-      const r = out.results[it.id];
-      r.item_id = r.item_id || it.id;
-      r.ref_id  = r.ref_id  || it.ref_id || "";
-      r.title   = r.title   || it.title  || "";
-      r.type    = r.type    || it.type   || "";
-      if (typeof r.comment !== "string") r.comment = "";
-    }
-  }
-
-  // 2) ensure at least one policy bucket exists (frontend always renders ≥1)
-  if (!out.policies.length) {
-    out.policies = [{
-      policy_name: "General Information Security Policy",
-      policy_summary: "Default view (no specific policy detected in the document).",
-      assessments: Object.values(out.results),
-    }];
-  }
-
-  // 3) per-policy normalisation — DO NOT force-inject items the policy
-  //    did not actually analyse. Each policy keeps its own verdicts.
-  for (const p of out.policies) {
-    if (!Array.isArray(p.assessments)) p.assessments = [];
-
-    p.assessments = p.assessments.map(a => {
-      const meta = itemsById[a.item_id] || {};
-      return {
-        item_id:     a.item_id,
-        ref_id:      a.ref_id || meta.ref_id || "",
-        title:       a.title  || meta.title  || "",
-        type:        a.type   || meta.type   || "",
-        status:      a.status || "Not covered",
-        conf:        typeof a.conf === "number" ? a.conf : 0,
-        comment:     typeof a.comment === "string" ? a.comment : "",
-        evidence:    Array.isArray(a.evidence) ? a.evidence : [],
-        risks:       Array.isArray(a.risks)    ? a.risks    : [],
-        gaps:        Array.isArray(a.gaps)     ? a.gaps     : [],
-        remediation: typeof a.remediation === "string" ? a.remediation : "",
-        _source:     a._source || "llm",
-      };
+    if (seen.has(it.id)) continue;
+    out.items.push({
+      item_id:            it.id,
+      ref_id:             it.ref_id || "",
+      title:              it.title || "",
+      type:               it.type || "",
+      is_applicable:      false,
+      status:             "Not applicable",
+      conf:               0,
+      fallback_note:      "No relevant policy detected in the uploaded document for this control.",
+      policy_assessments: [],
     });
   }
 
-  // 4) global compliance — fallback computation if Python didn't set one.
-  //    Note: this is the SIMPLE item-weighted average across the global
-  //    `results` view. The UI re-computes a policy-weighted figure
-  //    (avg of per-policy scores) on top of `policies[*].assessments`.
-  if (!out.global_compliance_percentage) {
-    const score = { Covered: 100, Partial: 50, "Not covered": 0 };
-    const vals = Object.values(out.results);
-    if (vals.length) {
-      out.global_compliance_percentage = Math.round(
-        vals.reduce((s, v) => s + (score[mapStatus(v.status)] || 0), 0) / vals.length
-      );
-    }
+  // Normalize every item
+  out.items = out.items.map(it => {
+    const meta = itemsById[it.item_id] || {};
+    const isApplicable = it.is_applicable !== false && (it.policy_assessments?.length > 0);
+    const status = mapStatus(it.status || (isApplicable ? "Not covered" : "Not applicable"));
+
+    const policy_assessments = Array.isArray(it.policy_assessments)
+      ? it.policy_assessments.map(a => ({
+          policy_name:    a.policy_name || "",
+          policy_summary: a.policy_summary || "",
+          status:         mapStatus(a.status),
+          conf:           typeof a.conf === "number" ? a.conf : 0,
+          comment:        typeof a.comment === "string" ? a.comment : "",
+          risks:          Array.isArray(a.risks) ? a.risks.filter(x => (x || "").toString().trim()) : [],
+          gaps:           Array.isArray(a.gaps)  ? a.gaps.filter(x => (x || "").toString().trim())  : [],
+          remediation:    typeof a.remediation === "string" ? a.remediation : "",
+          _source:        a._source || "llm",
+        }))
+      : [];
+
+    return {
+      item_id:            it.item_id,
+      ref_id:             it.ref_id || meta.ref_id || "",
+      title:              it.title  || meta.title  || "",
+      type:               it.type   || meta.type   || "",
+      is_applicable:      isApplicable,
+      status:             isApplicable ? status : "Not applicable",
+      conf:               typeof it.conf === "number" ? it.conf : 0,
+      fallback_note:      it.fallback_note || "",
+      policy_assessments,
+    };
+  });
+
+  // Compute global compliance % if Python didn't
+  const applicable = out.items.filter(it => it.is_applicable);
+  if (applicable.length > 0) {
+    out.global_compliance_percentage = Math.round(
+      applicable.reduce((s, it) => s + (SCORE[it.status] ?? 0), 0) / applicable.length
+    );
+  } else if (!out.global_compliance_percentage) {
+    out.global_compliance_percentage = 0;
   }
+
   return out;
 }
 
 router.get("/test", (_req, res) => {
-  res.json({ message: "AI route working", timestamp: new Date().toISOString() });
+  res.json({ message: "AI route working (v3 item-centric)", timestamp: new Date().toISOString() });
 });
 
 export default router;

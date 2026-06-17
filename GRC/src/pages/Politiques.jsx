@@ -1,4 +1,4 @@
-// politique.jsx
+// framewokauditor.jsx
 import { useState, useEffect, useCallback } from "react";
 import {
   Shield, Search, ChevronDown, ChevronRight, Plus,
@@ -265,7 +265,7 @@ function ScrapeFrameworkModal({ onClose, onConfirm }) {
           padding: "20px 24px 16px", borderBottom: `1px solid ${C.border}`,
         }}>
           <span style={{  fontSize: 18, fontWeight: 700, color: C.text }}>
-            Scrape Security Framework
+            Import Framework
           </span>
           <button onClick={onClose} style={{
             background: "none", border: "none", cursor: "pointer",
@@ -376,7 +376,6 @@ function ScrapeFrameworkModal({ onClose, onConfirm }) {
 
           {selected && selected.versions.length > 0 && (
             <div style={{ marginBottom: 16 }}>
-              
             </div>
           )}
 
@@ -407,15 +406,266 @@ function ScrapeFrameworkModal({ onClose, onConfirm }) {
 }
 
 // ============================================================
+// Modal — pick controls to inherit from a parent framework
+// ============================================================
+function InheritPickerModal({ frameworkName, hierarchy, onClose, onApply }) {
+  const mapControl = (it) => ({
+    ref_id: it.ref_id || "", name: it.name || "", description: it.description || "",
+  });
+
+  const cleanName = (node) => {
+    let name = node.title || node.name || "";
+    if (node.ref_id && name.includes(node.ref_id)) {
+      name = name.replace(`${node.ref_id} - `, "").replace(`${node.ref_id} `, "").trim();
+    }
+    return name;
+  };
+
+  // Flatten hierarchy into render groups — recurse into children for BOTH
+  // core and annex (annex controls can be nested under families/sub-families).
+  const groups = [];
+  const walk = (node, isAnnex, parentRef) => {
+    const label = [parentRef, node.ref_id, node.title].filter(Boolean).join(" ");
+    const ctrls = (node.items || []).map(it => ({ id: String(it.id), ref_id: it.ref_id, name: it.name }));
+    if (ctrls.length) groups.push({ id: String(node.id), label, isAnnex, controls: ctrls });
+    const trail = [parentRef, node.ref_id].filter(Boolean).join(" ");
+    (node.children || []).forEach(c => walk(c, isAnnex, trail));
+  };
+  for (const section of hierarchy || []) {
+    walk(section, !!section.isAnnex, "");
+  }
+
+  const allIds = groups.flatMap(g => g.controls.map(c => c.id));
+  const [selected, setSelected] = useState(() => new Set(allIds)); // default: all checked
+
+  const toggle = (id) => setSelected(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+  const toggleGroup = (g, on) => setSelected(prev => {
+    const next = new Set(prev);
+    g.controls.forEach(c => on ? next.add(c.id) : next.delete(c.id));
+    return next;
+  });
+
+  // Core: recursive prune, preserving the chapter tree.
+  const pruneChapter = (node) => {
+    const controls = (node.items || []).filter(it => selected.has(String(it.id))).map(mapControl);
+    const children = (node.children || []).map(pruneChapter).filter(Boolean);
+    if (!controls.length && !children.length) return null;
+    return { ref_id: node.ref_id || "", title: node.title || "", description: node.description || "", controls, children };
+  };
+  // Annex: builder model is flat (family -> controls), so flatten any nesting
+  // into one family per node that carries selected controls.
+  const collectAnnexFamilies = (node, acc) => {
+    const controls = (node.items || []).filter(it => selected.has(String(it.id))).map(mapControl);
+    if (controls.length) {
+      acc.push({ ref_id: node.ref_id || "", name: cleanName(node) || "Annex", description: node.description || "", controls });
+    }
+    (node.children || []).forEach(c => collectAnnexFamilies(c, acc));
+  };
+
+  const handleApply = () => {
+    const cores = [];
+    const annexes = [];
+    for (const section of hierarchy || []) {
+      if (section.isAnnex) {
+        collectAnnexFamilies(section, annexes);
+      } else {
+        const secControls = (section.items || []).filter(it => selected.has(String(it.id))).map(mapControl);
+        if (secControls.length) {
+          cores.push({ ref_id: section.ref_id || "", title: section.title || "Core", description: "", controls: secControls, children: [] });
+        }
+        (section.children || []).forEach(ch => { const p = pruneChapter(ch); if (p) cores.push(p); });
+      }
+    }
+    onApply({ cores, annexes });
+    onClose();
+  };
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 1200,
+      background: "rgba(10,20,50,.45)", backdropFilter: "blur(4px)",
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+    }} onClick={onClose}>
+      <div style={{
+        background: C.card, borderRadius: 16, width: 720, maxWidth: "95vw",
+        maxHeight: "90vh", display: "flex", flexDirection: "column",
+        boxShadow: "0 24px 60px rgba(59,111,255,.18)", border: `1px solid ${C.border}`,
+      }} onClick={(e) => e.stopPropagation()}>
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "20px 24px 16px", borderBottom: `1px solid ${C.border}`,
+        }}>
+          <span style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 18, fontWeight: 700, color: C.text }}>
+            Select controls from {frameworkName}
+          </span>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: C.muted, padding: 4 }}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <div style={{ padding: "12px 24px", display: "flex", gap: 10, alignItems: "center", borderBottom: `1px solid ${C.border}` }}>
+          <span style={{ fontSize: 12, color: C.muted }}>{selected.size} / {allIds.length} selected</span>
+          <button onClick={() => setSelected(new Set(allIds))} style={{
+            marginLeft: "auto", padding: "4px 10px", borderRadius: 6, border: `1px solid ${C.border}`,
+            background: "transparent", color: C.text, fontSize: 11, cursor: "pointer",
+          }}>Select all</button>
+          <button onClick={() => setSelected(new Set())} style={{
+            padding: "4px 10px", borderRadius: 6, border: `1px solid ${C.border}`,
+            background: "transparent", color: C.text, fontSize: 11, cursor: "pointer",
+          }}>Clear</button>
+        </div>
+
+        <div style={{ padding: 24, overflowY: "auto", flex: 1 }}>
+          {groups.length === 0 && (
+            <div style={{ textAlign: "center", color: C.muted, fontSize: 13, padding: 24 }}>
+              This framework has no controls to inherit.
+            </div>
+          )}
+          {groups.map(g => {
+            const allOn = g.controls.every(c => selected.has(c.id));
+            return (
+              <div key={g.id} style={{ marginBottom: 16, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden" }}>
+                <label style={{
+                  display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", cursor: "pointer",
+                  background: g.isAnnex ? `${C.purple}0c` : `${C.accent}0c`,
+                }}>
+                  <input type="checkbox" checked={allOn} onChange={(e) => toggleGroup(g, e.target.checked)} />
+                  <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{g.label || "Untitled"}</span>
+                  <span style={{
+                    marginLeft: "auto", fontSize: 10, fontWeight: 600,
+                    color: g.isAnnex ? C.purple : C.accent,
+                    background: g.isAnnex ? `${C.purple}18` : `${C.accent}18`,
+                    padding: "2px 8px", borderRadius: 10,
+                  }}>{g.isAnnex ? "Annex" : "Core"}</span>
+                </label>
+                <div style={{ padding: "6px 12px" }}>
+                  {g.controls.map(c => (
+                    <label key={c.id} style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "5px 0", cursor: "pointer" }}>
+                      <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggle(c.id)} style={{ marginTop: 3 }} />
+                      <span style={{ fontSize: 13, color: C.text }}>
+                        <strong>{c.ref_id || "N/A"}</strong> — {c.name}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", padding: "16px 24px", borderTop: `1px solid ${C.border}` }}>
+          <button onClick={onClose} style={{
+            padding: "10px 20px", borderRadius: 8, border: `1.5px solid ${C.border}`,
+            background: "transparent", cursor: "pointer", fontSize: 13,
+          }}>Cancel</button>
+          <button onClick={handleApply} disabled={selected.size === 0} style={{
+            padding: "10px 24px", borderRadius: 8, border: "none",
+            background: selected.size === 0 ? C.muted : `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
+            color: "#fff", fontSize: 13, fontWeight: 600,
+            cursor: selected.size === 0 ? "not-allowed" : "pointer",
+          }}>Add {selected.size} control(s)</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
 // Modal — Add custom framework
 // ============================================================
-function AddCustomFrameworkModal({ onClose, onConfirm }) {
+function AddCustomFrameworkModal({ onClose, onConfirm, frameworks = [], fetchHierarchy }) {
   const [meta, setMeta] = useState({ name: "", version: "1.0", provider: "", description: "" });
   const [coreChapters, setCoreChapters] = useState([
     { ref_id: "", title: "", description: "", controls: [], children: [] }
   ]);
   const [annexFamilies, setAnnexFamilies] = useState([]);
   const [submitting, setSubmitting] = useState(false);
+
+  // ── Inheritance via control picker ──────────────────────────────────
+  const [inheritId, setInheritId] = useState("");
+  const [inheritLoading, setInheritLoading] = useState(false);
+  const [pickerHierarchy, setPickerHierarchy] = useState(null); // opens picker when set
+
+  const countControls = (ch) =>
+    (ch.controls?.length || 0) + (ch.children || []).reduce((n, c) => n + countControls(c), 0);
+
+  const openPicker = async () => {
+    if (!inheritId) {
+      showToast({ type: "warning", title: "No framework selected", message: "Pick a framework to inherit from." });
+      return;
+    }
+    setInheritLoading(true);
+    try {
+      const hierarchy = fetchHierarchy ? await fetchHierarchy(inheritId) : [];
+      setPickerHierarchy(hierarchy || []);
+    } catch (e) {
+      showToast({ type: "error", title: "Load failed", message: e.message });
+    } finally {
+      setInheritLoading(false);
+    }
+  };
+
+    // ── Merge helpers (so a 2nd inherit ADDS to the 1st, no overwrite) ──
+    const ctrlKey = (c) => `${(c.ref_id || "").trim()}||${(c.name || "").trim()}`;
+    const mergeControls = (a = [], b = []) => {
+      const seen = new Set(a.map(ctrlKey));
+      const out = [...a];
+      for (const c of b) {
+        const k = ctrlKey(c);
+        if (!seen.has(k)) { seen.add(k); out.push(c); }
+      }
+      return out;
+    };
+    const chapKey = (c) => `${(c.ref_id || "").trim()}||${(c.title || "").trim()}`;
+    const mergeChapters = (existing = [], incoming = []) => {
+      const out = existing.map(c => ({ ...c, controls: [...(c.controls || [])], children: [...(c.children || [])] }));
+      for (const inc of incoming) {
+        const idx = out.findIndex(c => chapKey(c) === chapKey(inc));
+        if (idx >= 0) {
+          out[idx] = {
+            ...out[idx],
+            controls: mergeControls(out[idx].controls, inc.controls),
+            children: mergeChapters(out[idx].children, inc.children || []),
+          };
+        } else {
+          out.push(inc);
+        }
+      }
+      return out;
+    };
+    const famKey = (f) => `${(f.ref_id || "").trim()}||${(f.name || "").trim()}`;
+    const mergeFamilies = (existing = [], incoming = []) => {
+      const out = existing.map(f => ({ ...f, controls: [...(f.controls || [])] }));
+      for (const inc of incoming) {
+        const idx = out.findIndex(f => famKey(f) === famKey(inc));
+        if (idx >= 0) out[idx] = { ...out[idx], controls: mergeControls(out[idx].controls, inc.controls) };
+        else out.push(inc);
+      }
+      return out;
+    };
+    const isBlankChapter = (c) =>
+      !c.ref_id?.trim() && !c.title?.trim() && !(c.controls?.length) && !(c.children?.length);
+
+    const applyInherited = ({ cores, annexes }) => {
+      if (cores.length) {
+        setCoreChapters(prev => {
+          const base = prev.filter(c => !isBlankChapter(c)); // drop the initial empty chapter
+          const merged = mergeChapters(base, cores);
+          return merged.length ? merged : [{ ref_id: "", title: "", description: "", controls: [], children: [] }];
+        });
+      }
+      if (annexes.length) {
+        setAnnexFamilies(prev => mergeFamilies(prev, annexes));
+      }
+      const total =
+        cores.reduce((n, ch) => n + countControls(ch), 0) +
+        annexes.reduce((n, f) => n + f.controls.length, 0);
+      showToast({ type: "success", title: "Controls inherited", message: `${total} control(s) added — edit freely before creating.` });
+    };
 
   const updateAtPath = (list, path, updater) => {
     if (path.length === 0) return updater(list);
@@ -632,6 +882,7 @@ function AddCustomFrameworkModal({ onClose, onConfirm }) {
   );
 
   return (
+    <>
     <div style={{
       position: "fixed", inset: 0, zIndex: 1000,
       background: "rgba(10,20,50,.45)", backdropFilter: "blur(4px)",
@@ -662,6 +913,34 @@ function AddCustomFrameworkModal({ onClose, onConfirm }) {
             Build your own framework. The Core part is mandatory and cannot be excepted.
             The Annex part is optional and supports exceptions.
           </p>
+
+          {/* ── Inherit from an existing framework ─────────────────────── */}
+          <div style={{
+            display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+            padding: "12px 14px", marginBottom: 16,
+            border: `1.5px dashed ${C.accent}`, borderRadius: 10, background: `${C.accent}07`,
+          }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: C.accent }}>Inherit from</span>
+            <select value={inheritId} onChange={(e) => setInheritId(e.target.value)}
+              style={{
+                flex: 1, minWidth: 180, padding: "8px 10px",
+                border: `1.5px solid ${C.border}`, borderRadius: 8, fontSize: 13, background: C.card,
+              }}>
+              <option value="">— Select an existing framework —</option>
+              {frameworks.map(fw => (
+                <option key={fw.id} value={fw.id}>{fw.name}{fw.version ? ` (v${fw.version})` : ""}</option>
+              ))}
+            </select>
+            <button type="button" onClick={openPicker} disabled={!inheritId || inheritLoading}
+              style={{
+                padding: "8px 14px", borderRadius: 8, border: "none",
+                background: (!inheritId || inheritLoading) ? C.muted : `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
+                color: "#fff", fontSize: 12, fontWeight: 600,
+                cursor: (!inheritId || inheritLoading) ? "not-allowed" : "pointer",
+              }}>
+              {inheritLoading ? "Loading..." : "Browse & select controls"}
+            </button>
+          </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 10, marginBottom: 12 }}>
             <input placeholder="Framework name *" value={meta.name}
@@ -770,6 +1049,16 @@ function AddCustomFrameworkModal({ onClose, onConfirm }) {
         </div>
       </div>
     </div>
+
+    {pickerHierarchy && (
+      <InheritPickerModal
+        frameworkName={frameworks.find(f => String(f.id) === String(inheritId))?.name || "framework"}
+        hierarchy={pickerHierarchy}
+        onClose={() => setPickerHierarchy(null)}
+        onApply={applyInherited}
+      />
+    )}
+    </>
   );
 }
 
@@ -1517,6 +1806,22 @@ export default function Policies() {
     return [];
   }, []);
 
+  const fetchHierarchy = useCallback(async (standardId) => {
+    if (!standardId) return [];
+    try {
+      const res = await fetch(`http://localhost:3000/api/ciso/packages/${standardId}/hierarchy`, {
+        credentials: "include",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return Array.isArray(data?.hierarchy) ? data.hierarchy : [];
+      }
+    } catch (e) {
+      console.error("Error fetching hierarchy:", e);
+    }
+    return [];
+  }, []);
+
   const refreshAllData = useCallback(async () => {
     setRefreshing(true);
     try {
@@ -1695,7 +2000,7 @@ export default function Policies() {
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
           <h1 style={{ color: "#0F172A", fontSize: 26, fontWeight: "800" }}>
-            Policies Library
+            Frameworks
           </h1>
           <div style={{ position: "relative" }}>
             <Search size={16} style={{
@@ -1787,6 +2092,8 @@ export default function Policies() {
         <AddCustomFrameworkModal
           onClose={() => setAddCustomModal(false)}
           onConfirm={handleAddCustomFramework}
+          frameworks={availableFrameworks}
+          fetchHierarchy={fetchHierarchy}
         />
       )}
       {addFrameworkModal && (

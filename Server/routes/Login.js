@@ -38,18 +38,14 @@ router.post("/login", async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
-      await pool.query(
-        `INSERT INTO logs (user_email, role, action, target, extra_info, level)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [
-          email,
-          user.role,
-          "LOGIN_FAILED",
-          email,
-          JSON.stringify({ reason: "Wrong password" }),
-          "ERROR",
-        ]
-      );
+      // Juste avant l'appel activityLogger pour LOGIN_FAILED
+      console.log("🔴 LOGIN_FAILED - about to log");
+      console.log("🔴 req.body.email =", req.body?.email);
+      console.log("🔴 req.session.user =", req.session?.user);
+
+      
+      await activityLogger("LOGIN_FAILED")(req, res, () => {});
+      console.log("🔴 LOGIN_FAILED - logger called");
 
       return res.status(401).json({ message: "Invalid credentials" });
     }
@@ -89,18 +85,15 @@ if (!user.mfa_secret) {
     });
 
     if (!verified) {
-      await pool.query(
-        `INSERT INTO logs (user_email, role, action, target, extra_info, level)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [
-          user.email,
-          user.role,
-          "MFA_FAILED",
-          user.email,
-          JSON.stringify({ reason: "Invalid MFA code" }),
-          "WARNING",
-        ]
-      );
+      // Pareil pour MFA_FAILED
+      console.log("🔴 MFA_FAILED - about to log");
+      console.log("🔴 req.body.email =", req.body?.email);
+      console.log("🔴 req.session.user =", req.session?.user);
+
+      
+      await activityLogger("MFA_FAILED")(req, res, () => {});
+      console.log("🔴 MFA_FAILED - logger called");
+
 
       return res.status(401).json({ message: "Invalid MFA code" });
     }

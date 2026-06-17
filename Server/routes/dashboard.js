@@ -4,40 +4,27 @@ import db from "../db.js";
 
 const router = express.Router();
 
-// ---------------------------------------------------------------------
-// Canonicalise a messy standard id/name into one of the 3 known norms.
-// The stored standard_id is a CISO library id (e.g. "library iso2"),
-// so we look at BOTH the id and the saved standard_name to decide.
-// ---------------------------------------------------------------------
+// ─── Canonicalise la norme ───────────────────────────────────────────
 function canonicalStandard(standardId, standardName) {
   const s = `${standardId || ""} ${standardName || ""}`.toLowerCase();
 
-  if (s.includes("27001"))
-    return {
-      id: "international_standard_iso_iec_27001_2022",
-      name: "ISO/IEC 27001:2022",
-      short: "ISO 27001",
-      desc: "Information security",
-    };
-  if (s.includes("22301"))
-    return {
-      id: "international_standard_iso_iec_22301_2019",
-      name: "ISO/IEC 22301:2019",
-      short: "ISO 22301",
-      desc: "Business continuity",
-    };
-  if (s.includes("nist"))
-    return {
-      id: "nist_csf_2_0",
-      name: "NIST CSF 2.0",
-      short: "NIST CSF",
-      desc: "Cybersecurity Framework",
-    };
+  if (s.includes("27001")) return {
+    id: "international_standard_iso_iec_27001_2022",
+    name: "ISO/IEC 27001:2022", short: "ISO 27001",
+    desc: "Information security",
+  };
+  if (s.includes("22301")) return {
+    id: "international_standard_iso_iec_22301_2019",
+    name: "ISO/IEC 22301:2019", short: "ISO 22301",
+    desc: "Business continuity",
+  };
+  if (s.includes("nist")) return {
+    id: "nist_csf_2_0",
+    name: "NIST CSF 2.0", short: "NIST CSF",
+    desc: "Cybersecurity Framework",
+  };
 
-  // Unknown norm — keep it visible but with a cleaned-up label
-  const clean = String(standardName || standardId || "Unknown")
-    .replace(/_/g, " ")
-    .trim();
+  const clean = String(standardName || standardId || "Unknown").replace(/_/g, " ").trim();
   return {
     id: standardId || clean,
     name: clean,
@@ -48,37 +35,52 @@ function canonicalStandard(standardId, standardName) {
 
 // =====================================================================
 // GET /api/dashboard/overview
+//   - global_score recalculé depuis analysis_items.ciso_status
+//   - chaque norme : score actuel + score de l'analyse précédente
 // =====================================================================
 router.get("/overview", async (_req, res) => {
   try {
-    // All finalized analyses (oldest -> newest) so we can group by the
-    // real norm and compute the trend vs the previous analysis.
     const [rows] = await db.query(`
       SELECT
-        standard_id,
-        standard_name,
-        global_score,
-        DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%sZ') AS created_at_str,
-        UNIX_TIMESTAMP(created_at)                    AS created_at_unix
-      FROM   compliance_analyses
-      WHERE  status = 'finalized'
-        AND  standard_id IS NOT NULL
-      ORDER  BY created_at ASC
+        a.id,
+        a.standard_id,
+        a.standard_name,
+        COALESCE(stats.computed_score, a.global_score, 0) AS global_score,
+        DATE_FORMAT(a.created_at, '%Y-%m-%dT%H:%i:%sZ')   AS created_at_str,
+        UNIX_TIMESTAMP(a.created_at)                      AS created_at_unix
+      FROM compliance_analyses a
+      LEFT JOIN (
+        SELECT
+          analysis_id,
+          ROUND(AVG(
+            CASE COALESCE(NULLIF(ciso_status, ''), ai_status)
+              WHEN 'Covered'     THEN 100
+              WHEN 'Partial'     THEN  50
+              WHEN 'Not covered' THEN   0
+            END
+          )) AS computed_score
+        FROM analysis_items
+        WHERE COALESCE(NULLIF(ciso_status, ''), ai_status) <> 'Not applicable'
+        GROUP BY analysis_id
+      ) stats ON stats.analysis_id = a.id
+      WHERE a.status = 'finalized'
+        AND a.standard_id IS NOT NULL
+      ORDER BY a.created_at ASC
     `);
 
-    // Group by canonical norm, keeping the score history (ascending)
+    // Group by canonical norm, keep score history (ascending by date)
     const groups = new Map();
     for (const r of rows) {
       const c = canonicalStandard(r.standard_id, r.standard_name);
       if (!groups.has(c.id)) groups.set(c.id, { meta: c, hist: [] });
       groups.get(c.id).hist.push({
-        score: r.global_score ?? 0,
+        score: Number(r.global_score) || 0,
         str:   r.created_at_str,
         unix:  Number(r.created_at_unix),
       });
     }
 
-    // One card per analysed norm — latest score + trend vs previous
+    // Une carte par norme analysée — latest + previous
     const standards = [];
     for (const { meta, hist } of groups.values()) {
       const latest = hist[hist.length - 1];
@@ -89,32 +91,33 @@ router.get("/overview", async (_req, res) => {
         short_name:    meta.short,
         description:   meta.desc,
         score:         latest.score,
+        prev_score:    prev ? prev.score : null,
+        prev_at:       prev ? prev.str   : null,
         trend:         prev ? latest.score - prev.score : 0,
         last_at:       latest.str,
         last_unix:     latest.unix,
+        nb_analyses:   hist.length,
       });
     }
 
-    // Global score = average of each analysed norm's latest score
+    // Global score = moyenne des scores latest de chaque norme
     const globalScore = standards.length
-      ? Math.round(
-          standards.reduce((sum, s) => sum + s.score, 0) / standards.length
-        )
+      ? Math.round(standards.reduce((sum, s) => sum + s.score, 0) / standards.length)
       : 0;
 
-    // lastAuditDays — separate query so analyses without a standard_id
-    // still count towards "days since last analysis"
+    // lastAuditDays — jours depuis la dernière analyse finalisée (toutes normes)
     const [latestRow] = await db.query(`
       SELECT UNIX_TIMESTAMP(MAX(created_at)) AS latest_unix
-      FROM   compliance_analyses
-      WHERE  status = 'finalized'
+      FROM compliance_analyses
+      WHERE status = 'finalized'
     `);
-
     let lastAuditDays = 999;
     const latestUnix = Number(latestRow[0]?.latest_unix ?? 0);
     if (latestUnix > 0) {
-      const nowUnix = Math.floor(Date.now() / 1000);
-      lastAuditDays = Math.max(0, Math.floor((nowUnix - latestUnix) / 86_400));
+      lastAuditDays = Math.max(
+        0,
+        Math.floor((Math.floor(Date.now() / 1000) - latestUnix) / 86_400)
+      );
     }
 
     res.json({ globalScore, lastAuditDays, standards });
@@ -126,6 +129,8 @@ router.get("/overview", async (_req, res) => {
 
 // =====================================================================
 // GET /api/dashboard/priority-actions
+//   Toutes les normes (pas juste ISO 27001),
+//   exclut les risques Resolved/Closed et les actions Done/Completed.
 // =====================================================================
 router.get("/priority-actions", async (_req, res) => {
   try {
@@ -141,22 +146,20 @@ router.get("/priority-actions", async (_req, res) => {
         r.id              AS risk_id,
         r.intitule        AS risk_title,
         r.statut          AS risk_status,
+        r.analysis_id,
         ca.standard_id    AS norm_id,
         ca.standard_name  AS norm_name
       FROM mitigation_plans mp
-      JOIN risks r
-        ON mp.risk_id = r.id
-      LEFT JOIN compliance_analyses ca
-        ON r.analysis_id = ca.id
-      WHERE r.statut  != 'Resolved'
-        AND mp.status != 'Done'
+      JOIN risks r ON mp.risk_id = r.id
+      LEFT JOIN compliance_analyses ca ON r.analysis_id = ca.id
+      WHERE (r.statut  IS NULL OR r.statut  NOT IN ('Resolved', 'Closed'))
+        AND (mp.status IS NULL OR mp.status NOT IN ('Done', 'Completed'))
       ORDER BY
         FIELD(mp.priority, 'Critical', 'High', 'Medium', 'Low'),
         mp.due_date ASC
-      LIMIT 50
     `);
 
-    // Expose the canonical norm id so the UI shows "ISO 27001" etc.
+    // Expose l'id canonique de la norme pour que le front affiche "ISO 27001" etc.
     const out = rows.map(r => ({
       ...r,
       norm: r.norm_id ? canonicalStandard(r.norm_id, r.norm_name).id : null,

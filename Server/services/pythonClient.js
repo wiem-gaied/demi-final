@@ -1,14 +1,11 @@
 // backend/services/pythonClient.js
 // =====================================================================
-//  Profile: PARTIAL-OFFLOAD GPU (e.g. ollama ps shows "29%/71% CPU/GPU")
-//  Goal: ~25-35 min for 10 policies × 30 controls, 0 items lost.
-//
-//  Key strategy:
-//   • AGGRESSIVE filter — only ~8 controls assessed per policy
-//     (the rest are auto-marked "Not relevant to this policy"
-//      WITHOUT any LLM call, so they cost nothing in time)
-//   • SMALL stable batch (3) — fits comfortably in partial-offload VRAM
-//   • SINGLE retry pass at batch=1 (no intermediate batch=2 step)
+//  v3 — FULL TEXT MODE
+//   • 1 policy per LLM call (always)
+//   • Full policy text (MAX_POLICY_CHARS=8000) sent to LLM
+//   • Per-item time budget (MAX_TIME_PER_ITEM=1800s)
+//   • Stall detection (OLLAMA_STALL_TIMEOUT=180s)
+//   • Adapts to ANY number of policies per item
 // =====================================================================
 import { spawn } from "child_process";
 import fs from "fs";
@@ -24,11 +21,12 @@ const PYTHON_BIN    = process.env.PYTHON_BIN    || "python";
 const PYTHON_SCRIPT = path.join(PYTHON_DIR, "main.py");
 
 const NODE_SIDE_TIMEOUT_MS = parseInt(
-  process.env.NODE_SIDE_TIMEOUT_MS || "604800000",  // 7j
+  process.env.NODE_SIDE_TIMEOUT_MS || "604800000",  // 7 days = effectively no kill
   10
 );
 
 export function analyzeDocumentWithPython({
+  documents,
   documentPath,
   documentName,
   standards,
@@ -37,11 +35,23 @@ export function analyzeDocumentWithPython({
     const payloadPath    = path.join(os.tmpdir(), `compliance_payload_${Date.now()}.json`);
     const checkpointPath = payloadPath + ".checkpoint.json";
 
-    fs.writeFileSync(
-      payloadPath,
-      JSON.stringify({ document_name: documentName, standards }),
-      "utf-8"
-    );
+    const payload = {
+      document_name: documentName || "document",
+      standards,
+    };
+
+    const multiFileMode = Array.isArray(documents) && documents.length > 0;
+    if (multiFileMode) {
+      payload.documents = documents.map(d => ({
+        path: d.path,
+        name: d.name,
+      }));
+    }
+
+    fs.writeFileSync(payloadPath, JSON.stringify(payload), "utf-8");
+
+    const firstDocPath = documentPath
+                      || (multiFileMode ? documents[0].path : "");
 
     const env = {
       ...process.env,
@@ -51,54 +61,65 @@ export function analyzeDocumentWithPython({
       OLLAMA_MODEL:       process.env.OLLAMA_MODEL       || "mistral:7b",
 
       // ─── coverage ─────────────────────────────────────────────────
-      MAX_POLICIES:       process.env.MAX_POLICIES       || "10",
+      MAX_POLICIES:       process.env.MAX_POLICIES       || "20",
 
-      // ─── batch sizing ─────────────────────────────────────────────
-      OLLAMA_BATCH_SIZE:  process.env.OLLAMA_BATCH_SIZE  || "3",   // stable on partial offload
-      OLLAMA_NUM_PREDICT: process.env.OLLAMA_NUM_PREDICT || "280", // enough for 3 JSON objects
-      OLLAMA_NUM_CTX:     process.env.OLLAMA_NUM_CTX     || "2048",
-      OLLAMA_TIMEOUT:        process.env.OLLAMA_TIMEOUT        || "3600",
+      // ─── BATCH = 1 (mandatory for full-text mode) ─────────────────
+      POLICY_BATCH_SIZE:  process.env.POLICY_BATCH_SIZE  || "1",
+      OLLAMA_BATCH_SIZE:  process.env.OLLAMA_BATCH_SIZE  || "1",
+      RETRY_BATCH_SIZES:  process.env.RETRY_BATCH_SIZES  || "1",
+
+      // ─── prediction & context ─────────────────────────────────────
+      OLLAMA_NUM_PREDICT: process.env.OLLAMA_NUM_PREDICT || "350",
+      OLLAMA_NUM_CTX:     process.env.OLLAMA_NUM_CTX     || "8192",
+
+      // ─── timeouts (large for full-text mode) ──────────────────────
+      OLLAMA_TIMEOUT:        process.env.OLLAMA_TIMEOUT        || "1800",  // 30 min/call
       OLLAMA_WARMUP_TIMEOUT: process.env.OLLAMA_WARMUP_TIMEOUT || "1800",
+      OLLAMA_STALL_TIMEOUT:  process.env.OLLAMA_STALL_TIMEOUT  || "180",   // 3 min stall = abort
+      MAX_TIME_PER_ITEM:     process.env.MAX_TIME_PER_ITEM     || "1800",  // 30 min/item
+
       OLLAMA_PARALLEL:    process.env.OLLAMA_PARALLEL    || "1",
-      // ✅ 12 = a good default for a 16-core/16-thread CPU (leaves 4 cores
-      //    for the OS, browser, Node and ollama's own scheduler — pushing
-      //    higher tends to OVER-subscribe on Windows and actually slows
-      //    inference down). Override OLLAMA_NUM_THREAD in your env to
-      //    match your physical core count if it isn't 16.
       OLLAMA_NUM_THREAD:  process.env.OLLAMA_NUM_THREAD  || "8",
 
-      // ─── single retry pass at batch=1 (no intermediate batch=2) ──
-      RETRY_BATCH_SIZES:  process.env.RETRY_BATCH_SIZES  || "3",
-
-      // ─── document & policy text sizing ────────────────────────────
+      // ─── document & policy sizing (FULL TEXT) ─────────────────────
       MAX_DOC_CHARS:      process.env.MAX_DOC_CHARS      || "4000",
-      MAX_POLICY_CHARS:   process.env.MAX_POLICY_CHARS   || "1000",
+      MAX_POLICY_CHARS:   process.env.MAX_POLICY_CHARS   || "8000",
 
-      // ─── AGGRESSIVE filter — biggest speed win on partial offload ─
-      // With these settings, each policy gets ~6-10 relevant controls
-      // analysed (instead of 30). The other 20-24 controls per policy
-      // are auto-marked "Not relevant to this policy" with NO LLM call.
-      // → 3-4× fewer LLM calls overall, same number of policies covered.
-      FILTER_ITEMS_PER_POLICY: process.env.FILTER_ITEMS_PER_POLICY || "1",
-      FILTER_MIN_OVERLAP:      process.env.FILTER_MIN_OVERLAP      || "2",
-      MAX_ITEMS_PER_POLICY:    process.env.MAX_ITEMS_PER_POLICY    || "12",
+      // ─── embedding ────────────────────────────────────────────────
+      EMBED_CHUNK_SIZE:       process.env.EMBED_CHUNK_SIZE    || "1000",
+      EMBED_CHUNK_OVERLAP:    process.env.EMBED_CHUNK_OVERLAP || "200",
+      MAX_CHUNKS_PER_POLICY:  process.env.MAX_CHUNKS_PER_POLICY || "20",
 
-      // ─── quality knobs ────────────────────────────────────────────
-      // FAST_MODE=0 keeps RAG and full-quality risks/gaps/mitigation
+      // ─── relevance ────────────────────────────────────────────────
+      USE_SEMANTIC:           process.env.USE_SEMANTIC        || "1",
+      SEMANTIC_THRESHOLD:     process.env.SEMANTIC_THRESHOLD  || "0.35",
+      SEMANTIC_MODEL:         process.env.SEMANTIC_MODEL      || "sentence-transformers/all-MiniLM-L6-v2",
+      FILTER_MIN_OVERLAP:     process.env.FILTER_MIN_OVERLAP  || "2",
+
+      // ─── quality ──────────────────────────────────────────────────
       FAST_MODE:          process.env.FAST_MODE          || "0",
       USE_RAG:            process.env.USE_RAG            || "1",
-
-      MODE:               process.env.MODE               || "per_policy",
+      MODE:               process.env.MODE               || "per_item",
     };
 
     console.log(
-      `[pythonClient] timeout=${NODE_SIDE_TIMEOUT_MS / 60000} min, ` +
-      `model=${env.OLLAMA_MODEL}, batch=${env.OLLAMA_BATCH_SIZE} (retry ${env.RETRY_BATCH_SIZES}), ` +
-      `max_policies=${env.MAX_POLICIES}, filter=${env.FILTER_ITEMS_PER_POLICY} (max=${env.MAX_ITEMS_PER_POLICY}, overlap=${env.FILTER_MIN_OVERLAP}), ` +
+      `[pythonClient] mode=${multiFileMode ? `MULTI-FILE (${documents.length} docs)` : "single-file"}, ` +
+      `timeout=${NODE_SIDE_TIMEOUT_MS / 60000} min, ` +
+      `llm=${env.OLLAMA_MODEL}, policy_batch=${env.POLICY_BATCH_SIZE} (FULL TEXT), ` +
+      `ollama_timeout=${env.OLLAMA_TIMEOUT}s, stall=${env.OLLAMA_STALL_TIMEOUT}s, ` +
+      `item_budget=${env.MAX_TIME_PER_ITEM}s, max_policy_chars=${env.MAX_POLICY_CHARS}, ` +
+      `semantic=${env.USE_SEMANTIC} (threshold=${env.SEMANTIC_THRESHOLD}), ` +
       `RAG=${env.USE_RAG}, threads=${env.OLLAMA_NUM_THREAD}`
     );
 
-    const proc = spawn(PYTHON_BIN, [PYTHON_SCRIPT, documentPath, payloadPath], {
+    if (multiFileMode) {
+      console.log(`[pythonClient] documents:`);
+      documents.forEach((d, i) =>
+        console.log(`   ${i + 1}. ${d.name}  ←  ${d.path}`)
+      );
+    }
+
+    const proc = spawn(PYTHON_BIN, [PYTHON_SCRIPT, firstDocPath, payloadPath], {
       cwd: PYTHON_DIR,
       env,
     });
@@ -145,10 +166,11 @@ export function analyzeDocumentWithPython({
           const ck = JSON.parse(fs.readFileSync(checkpointPath, "utf-8"));
           console.log(
             `[pythonClient] 💾 Recovered from checkpoint: ` +
-            `${ck?.policies?.length || 0} policies, ${Object.keys(ck?.results || {}).length} items`
+            `${ck?.policies_detected?.length || ck?.policies?.length || 0} policies, ` +
+            `${ck?.items?.length || Object.keys(ck?.results || {}).length} items`
           );
           if (killedByTimeout) {
-            ck.error = `Analysis cut at ${NODE_SIDE_TIMEOUT_MS / 60000} min (Node timeout). Recovered ${ck?.policies?.length || 0} policy/policies.`;
+            ck.error = `Analysis cut at ${NODE_SIDE_TIMEOUT_MS / 60000} min (Node timeout). Recovered partial result.`;
           } else if (!ck.error && !ck.info) {
             ck.info = "Recovered partial result from checkpoint.";
           }

@@ -27,6 +27,7 @@ import Settingsprofile from "./pages/Settingsprofile.jsx";
 import ProtectedRoute from "./components/ProtectedRoute";
 import LogsActivity from "./pages/Logsactivity.jsx";
 import LogsActivityadmin from "./pages/admin/LogsActivityadmin.jsx";
+import RiskDetailDrawer from "./pages/RiskDetailDrawer.jsx";
 
 
 

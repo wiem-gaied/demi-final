@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Outlet } from "react-router-dom";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, ShieldCheck, Bell, ChevronLeft, ChevronRight,
   Users, Key, Settings, LogOut, UserCircle, Building2, Plus, X,
@@ -382,6 +382,7 @@ const checkBackendConnection = async () => {
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function AdminLayout() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [page, setPage]               = useState("dashboard");
   const [showNotif, setShowNotif]     = useState(false);
@@ -407,10 +408,10 @@ export default function AdminLayout() {
   const navItems = [
     { to: '/admin/dashboard',  id: "dashboard",  label: "Managed companies",        icon: LayoutDashboard },
     { to: '/admin/access',     id: "access",     label: "Access & Controls", icon: ShieldCheck     },
-    { to: '/admin/frameworks', id: "frameworks", label: "Policies Library",        icon: Layers          },
-    {  icon: FileText, label: "Logs", subOptions: [
-      { to: "/admin/log", icon: FileText, label: " Event Log"},
-      { to: "/admin/LogsActivityadmin", icon: FileText, label: " Activity Log"}
+    { to: '/admin/frameworks', id: "frameworks", label: "Frameworks",        icon: Layers          },
+    {  id:"logss", icon: FileText, label: "Logs", subOptions: [
+      { to: "/admin/log", id:"log", icon: FileText, label: " Event Log"},
+      { to: "/admin/LogsActivityadmin",id:"logs", icon: FileText, label: " Activity Log"}
       ]
     },
     
@@ -459,9 +460,13 @@ export default function AdminLayout() {
           <nav style={{ flex: 1, padding: "10px 7px", display: "flex", flexDirection: "column", gap: "2px" }}>
             {navItems.map(item => {
   const Icon = item.icon;
-  const active = page === item.id;
   const hasSubOptions = item.subOptions?.length > 0;
   const isOpen = openSubMenu === item.id;
+
+  // ── actif si l'URL correspond exactement (ou commence par /admin/log)
+  const isActive = hasSubOptions
+  ? false  // ← le parent n'est jamais "actif", seulement ouvert
+  : location.pathname === item.to;
 
   return (
     <div key={item.id}>
@@ -470,23 +475,30 @@ export default function AdminLayout() {
           if (hasSubOptions) {
             setOpenSubMenu(isOpen ? null : item.id);
           } else {
-            setPage(item.id);
             navigate(item.to);
           }
         }}
         style={{
           display: "flex", alignItems: "center", gap: "10px",
           padding: "10px 11px", borderRadius: "9px",
-          border: active ? `2px solid ${C.accentSolid}` : "2px solid transparent",
+          border: isActive ? `2px solid ${C.accentSolid}` : "2px solid transparent",
           background: "transparent",
-          color: active ? C.accentSolid : "#64748B",
+          color: isActive ? C.accentSolid : "#64748B",
           cursor: "pointer", width: "100%", whiteSpace: "nowrap", overflow: "hidden",
         }}
       >
         <Icon size={17} style={{ flexShrink: 0 }} />
-        {sidebarOpen && <span style={{ fontSize: "13px", fontWeight: active ? "700" : "500" }}>{item.label}</span>}
+        {sidebarOpen && (
+          <span style={{ fontSize: "13px", fontWeight: isActive ? "700" : "500" }}>
+            {item.label}
+          </span>
+        )}
         {sidebarOpen && hasSubOptions && (
-          <ChevronRight size={13} style={{ marginLeft: "auto", transform: isOpen ? "rotate(90deg)" : "none", transition: "transform 0.2s" }} />
+          <ChevronRight size={13} style={{
+            marginLeft: "auto",
+            transform: isOpen ? "rotate(90deg)" : "none",
+            transition: "transform 0.2s"
+          }} />
         )}
       </button>
 
@@ -495,18 +507,20 @@ export default function AdminLayout() {
         <div style={{ paddingLeft: "16px", display: "flex", flexDirection: "column", gap: "2px", marginTop: "2px" }}>
           {item.subOptions.map(sub => {
             const SubIcon = sub.icon;
+            const subActive = location.pathname === sub.to;
             return (
               <button
                 key={sub.to}
-                onClick={() => { setPage(item.id); navigate(sub.to); }}
+                onClick={() => navigate(sub.to)}
                 style={{
                   display: "flex", alignItems: "center", gap: "8px",
-                  padding: "8px 11px", borderRadius: "8px", border: "none",
-                  background: "transparent", color: "#64748B",
+                  padding: "8px 11px", borderRadius: "8px",
+                  border: subActive ? `2px solid ${C.accentSolid}` : "2px solid transparent",
+                  background: subActive ? "#EEF4FF" : "transparent",
+                  color: subActive ? C.accentSolid : "#64748B",
                   cursor: "pointer", fontSize: "12px", width: "100%",
+                  fontWeight: subActive ? "700" : "500",
                 }}
-                onMouseEnter={e => { e.currentTarget.style.background = "#F8FAFC"; e.currentTarget.style.color = "#0F172A"; }}
-                onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#64748B"; }}
               >
                 <SubIcon size={14} style={{ flexShrink: 0 }} />
                 {sub.label}
@@ -545,7 +559,16 @@ export default function AdminLayout() {
               <span style={{ color: "#CBD5E1", fontSize: "13px" }}>Admin</span>
               <span style={{ color: "#E2E8F0" }}>/</span>
               <span style={{ color: "#0F172A", fontSize: "13px", fontWeight: "600" }}>
-                {navItems.find(n => n.id === page)?.label ?? "Dashboard"}
+                {(() => {
+  for (const item of navItems) {
+    if (item.subOptions) {
+      const sub = item.subOptions.find(s => location.pathname === s.to);
+      if (sub) return sub.label;
+    }
+    if (location.pathname === item.to) return item.label;
+  }
+  return "Dashboard";
+})()}
               </span>
             </div>
 

@@ -45,9 +45,9 @@ const menuItems = [
   { to: "/layout/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   {
     icon: CheckCircle, label: "Compliance", subOptions: [
-      { to: "/layout/conformite/Politiques", label:"Policies Library" },
-      { to: "/layout/conformite", label: "Policies analysis" },
-      { to: "/layout/exception", label: " Policy Exception " },
+      { to: "/layout/conformite/Politiques", label:"Frameworks" },
+      { to: "/layout/conformite", label: "Compliance check" },
+      { to: "/layout/exception", label: " Exception " },
     ],
   },
   {
@@ -757,9 +757,7 @@ const Layout = () => {
               <div style={{ fontWeight: 800, fontSize: 15, color: "#0F172A", fontFamily: "'Fraunces', serif" }}>
                 GRC Platform
               </div>
-              <div style={{ fontSize: 10, color: "#94A3B8", fontWeight: 500 }}>
-                Sécurité & Conformité
-              </div>
+              
             </div>
           )}
         </div>
@@ -779,7 +777,7 @@ const Layout = () => {
               letterSpacing: "0.1em", textTransform: "uppercase",
               padding: "2px 11px 8px", whiteSpace: "nowrap",
             }}>
-              Navigation
+              Browsing
             </div>
           )}
 

@@ -1,7 +1,101 @@
-// src/pages/Reporting.jsx — fixed organisation + department display
+// src/pages/Reporting.jsx — fixed organisation + department display + risks aggregation
 
 import { useState, useRef, useEffect } from "react";
 import ComplianceReport from "../components/ComplianceReport";
+
+// ─── Conformity-aligned constants ──────────────────────────────────────────
+const STATUS_META_V2 = {
+  Covered:          { label: "Covered",        color: "#16A34A", bg: "#F0FDF4", border: "#86EFAC", score: 100 },
+  Partial:          { label: "Partial",        color: "#D97706", bg: "#FFFBEB", border: "#FCD34D", score: 50 },
+  "Not covered":    { label: "Not covered",    color: "#DC2626", bg: "#FEF2F2", border: "#FCA5A5", score: 0 },
+  "Not applicable": { label: "Not applicable", color: "#64748B", bg: "#F1F5F9", border: "#CBD5E1", score: null },
+};
+const statusFromScoreV2 = (s) => s >= 80 ? "Covered" : s >= 30 ? "Partial" : "Not covered";
+
+// Build item-centric data from `full` (handles both formats from backend)
+function getItemCentricData(full) {
+  if (Array.isArray(full?.items) && full.items.length > 0) return full.items;
+
+  const map = new Map();
+  for (const p of (full?.policies || [])) {
+    for (const it of (p.items || [])) {
+      if (!map.has(it.id || it.item_id)) {
+        map.set(it.id || it.item_id, {
+          item_id:       it.id || it.item_id,
+          ref_id:        it.ref_id,
+          title:         it.title,
+          type:          it.type,
+          is_applicable: it.is_applicable !== false,
+          ai_status:     it.ai_status || it.status,
+          ai_confidence: it.score || it.ai_confidence || 0,
+          ciso_status:   it.ciso_status,
+          ciso_comment:  it.ciso_comment,
+          ciso_promoted: it.ciso_promoted || false,
+          policy_assessments: [],
+        });
+      }
+      const target = map.get(it.id || it.item_id);
+      target.policy_assessments.push({
+        policy_name:    p.policy_name,
+        policy_summary: p.policy_summary || "",
+        status:         it.ai_status || it.status,
+        ciso_status:    it.ciso_status,
+        conf:           it.score || 0,
+        comment:        it.comment || "",
+        risks:          it.risks || [],
+        gaps:           it.gaps || [],
+        remediation:    it.remediation || "",
+      });
+    }
+  }
+  return Array.from(map.values());
+}
+
+// Compute KPIs exactly like Conformity does
+function computeKPIsFromItems(items) {
+  let covered = 0, partial = 0, notCovered = 0, notApplicable = 0;
+  let scoreSum = 0, scoredCount = 0, cisoValidations = 0;
+
+  for (const it of items) {
+    const cisoOverride = it.ciso_status;
+    const aiNA = !it.is_applicable || it.ai_status === "Not applicable";
+    const promotedByCiso = aiNA && cisoOverride && cisoOverride !== "Not applicable";
+    const isApplicable = (!aiNA && cisoOverride !== "Not applicable") || promotedByCiso;
+
+    if (!isApplicable) { notApplicable++; continue; }
+
+    let itemScore;
+    if (cisoOverride) {
+      itemScore = STATUS_META_V2[cisoOverride]?.score ?? 0;
+      cisoValidations++;
+    } else {
+      itemScore = it.ai_confidence ?? STATUS_META_V2[it.ai_status]?.score ?? 0;
+    }
+    const effStatus = statusFromScoreV2(itemScore);
+    scoredCount++;
+    scoreSum += itemScore;
+    if (effStatus === "Covered")      covered++;
+    else if (effStatus === "Partial") partial++;
+    else                              notCovered++;
+  }
+
+  for (const it of items) {
+    for (const pa of (it.policy_assessments || [])) {
+      if (pa.risks?.length)                  cisoValidations++;
+      if (pa.gaps?.length)                   cisoValidations++;
+      if ((pa.remediation || "").trim())     cisoValidations++;
+    }
+  }
+
+  const globalScore = scoredCount ? Math.round(scoreSum / scoredCount) : 0;
+  return {
+    analyzed: scoredCount,
+    covered, partial, notCovered, notApplicable,
+    validated: cisoValidations,
+    globalScore,
+    globalStatus: statusFromScoreV2(globalScore),
+  };
+}
 
 const API_BASE = "http://localhost:3000/api/analyses";
 
@@ -43,11 +137,6 @@ const classificationOf = (val) =>
   CLASSIFICATION_OPTIONS.find(c => c.value === val) || CLASSIFICATION_OPTIONS[1];
 
 // ─── helpers ───────────────────────────────────────────────────────────────
-function statusFromScore(score) {
-  if (score >= 80) return { key: "compliant",     label: "Conforme" };
-  if (score >= 50) return { key: "partial",       label: "Partiellement conforme" };
-  return                  { key: "non-compliant", label: "Non conforme" };
-}
 function severityFromImpactProba(impact, proba) {
   const s = (impact || 1) * (proba || 1);
   if (s >= 12) return "critical";
@@ -62,112 +151,173 @@ function priorityToSeverity(priority) {
 }
 
 // ─── Mapper ────────────────────────────────────────────────────────────────
-// ✅ FIX: We now read organisation/department from `full.analysis` (the DB row
-//         returned by GET /api/analyses/:id) which always has these columns,
-//         instead of from the lightweight list row that omits them.
 function buildReportDataFromAnalysis({ full, formData }) {
-  // `full` is the object returned by GET /api/analyses/:id:
-  //   { analysis: {...}, policies: [...], asset_risks: [...], business_risks: [...] }
   const analysisRow = full?.analysis || {};
-  const score       = analysisRow.global_score || 0;
-  const overall     = statusFromScore(score);
-
-  // ✅ Organisation & department come from the full DB row
-  const organisation = analysisRow.created_by_organisation
-                    || analysisRow.created_by_organization   // fallback spelling
-                    || "—";
-  const department   = analysisRow.created_by_department || "—";
-  const auditor      = analysisRow.created_by_name        || "—";
-  const frameworks   = analysisRow.standard_name          || "—";
-
   const cls = classificationOf(formData.classification);
-  const dt  = analysisRow.created_at
-    ? new Date(analysisRow.created_at).toLocaleDateString("fr-FR", {
-        day: "numeric", month: "long", year: "numeric",
-      })
-    : new Date().toLocaleDateString("fr-FR", {
-        day: "numeric", month: "long", year: "numeric",
+  const dt = analysisRow.created_at
+    ? new Date(analysisRow.created_at).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })
+    : new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+
+  const organisation = analysisRow.created_by_organisation
+                    || analysisRow.created_by_organization || "—";
+  const department   = analysisRow.created_by_department || "—";
+  const auditor      = analysisRow.created_by_name || "—";
+  const frameworks   = analysisRow.standard_name || "—";
+
+  // 1. Item-centric items
+  const allItems = getItemCentricData(full);
+
+  // 2. Split applicable vs not-applicable
+  const applicableItems = [];
+  const notApplicableItems = [];
+
+  for (const it of allItems) {
+    const cisoOverride = it.ciso_status;
+    const aiNA = !it.is_applicable || it.ai_status === "Not applicable";
+    const promotedByCiso = aiNA && cisoOverride && cisoOverride !== "Not applicable";
+    const isApplicable = (!aiNA && cisoOverride !== "Not applicable") || promotedByCiso;
+
+    if (isApplicable) {
+      let score;
+      if (cisoOverride) {
+        score = STATUS_META_V2[cisoOverride]?.score ?? 0;
+      } else {
+        score = it.ai_confidence ?? STATUS_META_V2[it.ai_status]?.score ?? 0;
+      }
+      const effStatus = statusFromScoreV2(score);
+      applicableItems.push({
+        ...it,
+        effectiveStatus: effStatus,
+        effectiveScore: Math.round(score),
+        policies: it.policy_assessments || [],
       });
-
-  // Domains
-  const domains = (full?.policies || []).map(p => {
-    const st          = statusFromScore(p.policy_score || 0);
-    const itemSummary = (p.items || [])
-      .filter(it => (it.ciso_status || it.ai_status) !== "Covered")
-      .slice(0, 3)
-      .map(it => `${it.ref_id || ""} ${it.title}`.trim())
-      .filter(Boolean)
-      .join(" · ");
-    const fallback = itemSummary
-      ? `Points d'attention : ${itemSummary}.`
-      : "Tous les contrôles évalués sont alignés avec les exigences du référentiel.";
-    return {
-      name:         p.policy_name || "Policy",
-      ref:          frameworks,
-      score:        p.policy_score || 0,
-      status:       st.key,
-      comment:      p.policy_summary || fallback,
-      gaps:         p.gaps         || p.policy_gaps        || [],
-      remediations: p.remediations || p.analysis_remediations || [],
-      items:        p.items        || [],
-    };
-  });
-
-  // Risks (asset + business, deduped by title)
-  const allRisks = [
-    ...(full?.asset_risks    || []).map(r => ({ ...r, _kind: "asset" })),
-    ...(full?.business_risks || []).map(r => ({ ...r, _kind: "business" })),
-  ];
-  const seenTitles = new Set();
-  const risks = [];
-  for (const r of allRisks) {
-    const title = (r.intitule || r.title || "").trim();
-    if (!title || seenTitles.has(title.toLowerCase())) continue;
-    seenTitles.add(title.toLowerCase());
-    risks.push({
-      title,
-      severity: severityFromImpactProba(r.impact, r.probabilite ?? r.probability),
-    });
+    } else {
+      notApplicableItems.push(it);
+    }
   }
 
-  // Mitigations
+  // 3. KPIs — use stored values from BDD (same as analysis card)
+  // 3. KPIs — toujours recalcul depuis les items (qui contiennent ciso_status à jour)
+const computedKpis = computeKPIsFromItems(allItems);
+const kpis = {
+  analyzed:      computedKpis.analyzed,
+  covered:       computedKpis.covered,
+  partial:       computedKpis.partial,
+  notCovered:    computedKpis.notCovered,
+  notApplicable: computedKpis.notApplicable,
+  validated:     computedKpis.validated,
+  globalScore:   computedKpis.globalScore,
+  globalStatus:  computedKpis.globalStatus,
+};
+
+  // 4. Aggregate risks — use top-level asset_risks / business_risks
+  //    (your backend stores them here with item_id traceability)
+  const itemById = {};
+  for (const it of allItems) itemById[it.item_id] = it;
+
+  const seenRisks = new Set();
+  const aggregatedRisks = [];
+
+  const pushRisk = (r) => {
+    if (!r) return;
+    const title = (r.intitule || r.description || r.title || "").trim();
+    if (!title) return;
+    const key = title.toLowerCase();
+    if (seenRisks.has(key)) return;
+    seenRisks.add(key);
+
+    const linkedItem = r.item_id ? itemById[r.item_id] : null;
+    const itemLabel = linkedItem
+      ? `${linkedItem.ref_id || ""} ${linkedItem.title}`.trim()
+      : "";
+
+    aggregatedRisks.push({
+      title,
+      description: r.description || "",
+      severity: severityFromImpactProba(r.impact, r.probabilite ?? r.probability),
+      impact:  r.impact,
+      proba:   r.probabilite ?? r.probability,
+      item:    itemLabel,
+      policy:  r.policy_name || "",
+      risk_class: r.risk_class || r.riskClass || "asset",
+      owner:   r.owner  || "",
+      statut:  r.statut || "",
+    });
+  };
+
+  for (const r of (full?.asset_risks    || [])) pushRisk(r);
+  for (const r of (full?.business_risks || [])) pushRisk(r);
+
+  // Also try nested locations (in case backend ever returns them embedded)
+  for (const it of applicableItems) {
+    for (const pa of (it.policies || [])) {
+      for (const r of (pa.risks || [])) pushRisk({
+        ...r,
+        item_id: it.item_id,
+        policy_name: pa.policy_name,
+      });
+    }
+  }
+
+  // 5. Aggregate mitigations
   const seenMit = new Set();
-  const mitigations = [];
+  const aggregatedMitigations = [];
+
+  const pushMit = (text, priority, ctx) => {
+    const lines = (text || "").split("\n").map(s => s.trim()).filter(Boolean);
+    for (const line of lines) {
+      const key = line.toLowerCase();
+      if (seenMit.has(key)) continue;
+      seenMit.add(key);
+      aggregatedMitigations.push({
+        title: line,
+        priority: priority || "moderate",
+        item:   ctx?.item   || "",
+        policy: ctx?.policy || "",
+      });
+    }
+  };
+
+  for (const it of applicableItems) {
+    for (const pa of (it.policies || [])) {
+      pushMit(pa.remediation || pa.mitigation || "", "moderate", {
+        item:   `${it.ref_id || ""} ${it.title}`.trim(),
+        policy: pa.policy_name,
+      });
+    }
+  }
   for (const p of (full?.policies || [])) {
     for (const r of (p.remediations || [])) {
-      const action = (r.action || "").trim();
-      if (!action || seenMit.has(action.toLowerCase())) continue;
-      seenMit.add(action.toLowerCase());
-      mitigations.push({ title: action, priority: priorityToSeverity(r.priority) });
-    }
-  }
-  // Fallback from gaps if no remediations
-  if (mitigations.length === 0) {
-    for (const p of (full?.policies || [])) {
-      for (const g of (p.gaps || [])) {
-        const txt = (typeof g === "string" ? g : g.description || "").trim();
-        if (!txt) continue;
-        mitigations.push({ title: `Combler le gap : ${txt}`, priority: "high" });
-      }
+      const text     = typeof r === "string" ? r : (r.action || r.description || "");
+      const priority = priorityToSeverity(r.priority);
+      pushMit(text, priority, { policy: p.policy_name });
     }
   }
 
+  const overallStatusKey = kpis.globalStatus === "Covered"  ? "compliant"
+                         : kpis.globalStatus === "Partial"  ? "partial"
+                         : "non-compliant";
+  const overallStatusLabel = kpis.globalStatus === "Covered"  ? "Compliant"
+                           : kpis.globalStatus === "Partial"  ? "Partially compliant"
+                           : "Non-compliant";
+
   return {
-    // ✅ Always populated from the full DB row
-    organisation,
-    department,
-    auditor,
-    frameworks,
-    date:               dt,
-    version:            "v1.0",
-    classification:     `Rapport ${cls.label.toLowerCase()}`,
-    scope:              formData.scope || analysisRow.document_name || "—",
-    overallStatus:      overall.key,
-    overallStatusLabel: overall.label,
-    global_score:       score,
-    domains,
-    risks,
-    mitigations,
+    organisation, department, auditor, frameworks,
+    date: dt,
+    version: "v1.0",
+    classification: `${cls.label} Report`,
+    scope: formData.scope || analysisRow.document_name || "—",
+
+    global_score: kpis.globalScore,
+    overallStatus: overallStatusKey,
+    overallStatusLabel,
+
+    kpis,
+    items: applicableItems,
+    notApplicableItems,
+
+    risks: aggregatedRisks,
+    mitigations: aggregatedMitigations,
   };
 }
 
@@ -190,24 +340,21 @@ function normalizeAnalysis(data) {
 export default function Reporting() {
   const [tab, setTab] = useState("analyses");
 
-  // analyses tab
   const [analyses, setAnalyses]               = useState([]);
   const [loadingAna, setLoadingAna]           = useState(true);
   const [searchAna, setSearchAna]             = useState("");
   const [detailAnalysis, setDetailAnalysis]   = useState(null);
   const [analysisFull, setAnalysisFull]       = useState(null);
 
-  // reports tab
   const [reports, setReports]                 = useState([]);
   const [search, setSearch]                   = useState("");
   const [filterClass, setFilterClass]         = useState("tous");
   const [sortBy, setSortBy]                   = useState("date");
   const [detailReport, setDetailReport]       = useState(null);
 
-  // generation modal
   const [showModal, setShowModal]             = useState(false);
   const [linkedFull, setLinkedFull]           = useState(null);
-  const [linkedAnalysis, setLinkedAnalysis]   = useState(null); // lightweight row (for display)
+  const [linkedAnalysis, setLinkedAnalysis]   = useState(null);
   const [form, setForm] = useState({
     name: "", type: "Compliance Audit", classification: "interne",
     organisation: "", department: "", scope: "",
@@ -215,7 +362,6 @@ export default function Reporting() {
   const [generating, setGenerating]           = useState(false);
   const [generatedReport, setGeneratedReport] = useState(null);
 
-  // ── Load lightweight analyses list ──────────────────────────────────────
   useEffect(() => {
     (async () => {
       try {
@@ -227,7 +373,6 @@ export default function Reporting() {
     })();
   }, []);
 
-  // ── Open analysis detail ─────────────────────────────────────────────────
   const openAnalysis = async (a) => {
     setDetailAnalysis(a);
     setAnalysisFull(null);
@@ -235,36 +380,32 @@ export default function Reporting() {
       const r = await fetch(`${API_BASE}/${a.id}`, { credentials: "include" });
       const d = await r.json();
       setAnalysisFull(normalizeAnalysis(d));
-    } catch (e) { console.error("Failed to load analysis detail:", e); }
+    } catch (e) {
+      console.error("Failed to load analysis detail:", e);
+    }
   };
 
-  // ── Open generation form ─────────────────────────────────────────────────
-  // ✅ FIX: We fetch the FULL detail immediately so organisation/department
-  //         are available when building the report data.
   const openGenerationForm = async (a) => {
     setLinkedAnalysis(a);
     setLinkedFull(null);
     setGeneratedReport(null);
 
-    // Pre-fill form with lightweight data first
     setForm({
       name:           `${a.title} - Compliance Report`,
       type:           "Compliance Audit",
       classification: "interne",
-      organisation:   "",   // will be overwritten once full detail loads
-      department:     "",   // will be overwritten once full detail loads
+      organisation:   "",
+      department:     "",
       scope:          a.document_name || "",
     });
     setShowModal(true);
 
-    // ✅ Fetch full detail — this gives us created_by_organisation & created_by_department
     try {
       const r = await fetch(`${API_BASE}/${a.id}`, { credentials: "include" });
       const d = await r.json();
       const normalized = normalizeAnalysis(d);
       setLinkedFull(normalized);
 
-      // ✅ Now update form with real org/dept from the DB row
       const row = normalized.analysis || {};
       setForm(prev => ({
         ...prev,
@@ -279,7 +420,6 @@ export default function Reporting() {
     }
   };
 
-  // ── Generate report ──────────────────────────────────────────────────────
   const handleGenerate = () => {
     if (!linkedFull) {
       alert("Analysis details are still loading. Please wait a moment.");
@@ -288,14 +428,12 @@ export default function Reporting() {
     if (!form.name.trim()) return;
     setGenerating(true);
     setTimeout(() => {
-      // ✅ Pass linkedFull (which contains full.analysis with org/dept)
       const data = buildReportDataFromAnalysis({ full: linkedFull, formData: form });
       setGeneratedReport(data);
       setGenerating(false);
     }, 400);
   };
 
-  // ── Save report locally ──────────────────────────────────────────────────
   const handleSaveReport = () => {
     if (!generatedReport) return;
     const newReport = {
@@ -321,7 +459,6 @@ export default function Reporting() {
     setForm({ name: "", type: "Compliance Audit", classification: "interne", organisation: "", department: "", scope: "" });
   };
 
-  // ── Filters ──────────────────────────────────────────────────────────────
   const filteredAnalyses = analyses.filter(a => {
     const q = searchAna.toLowerCase();
     return (a.title || "").toLowerCase().includes(q)
@@ -339,7 +476,6 @@ export default function Reporting() {
       ? b.createdAt.localeCompare(a.createdAt)
       : a.name.localeCompare(b.name));
 
-  // ────────────────────────────────────────────────────────────────────────
   return (
     <div style={{ minHeight: "100vh", background: "#F8FAFF", fontFamily: "'DM Sans', sans-serif", padding: "32px 40px" }}>
       <style>{`
@@ -348,7 +484,6 @@ export default function Reporting() {
         input:focus, select:focus, textarea:focus { border-color: #3B6FFF !important; box-shadow: 0 0 0 3px rgba(59,111,255,0.1); outline: none; }
       `}</style>
 
-      {/* Header */}
       <div style={{ marginBottom: 28 }}>
         <h1 style={{ fontSize: 26, fontWeight: 900, color: "#0F172A", margin: 0 }}>Reporting</h1>
         <p style={{ color: "#64748b", fontSize: 14, margin: "4px 0 0" }}>
@@ -356,7 +491,6 @@ export default function Reporting() {
         </p>
       </div>
 
-      {/* Tabs */}
       <div style={{ display: "flex", gap: 6, borderBottom: "2px solid #E2E8F0", marginBottom: 24 }}>
         {[{ k: "analyses", l: `Analyses (${analyses.length})` }, { k: "reports", l: `Reports (${reports.length})` }].map(t => (
           <button key={t.k} onClick={() => setTab(t.k)}
@@ -369,7 +503,6 @@ export default function Reporting() {
         ))}
       </div>
 
-      {/* ── ANALYSES TAB ── */}
       {tab === "analyses" && (
         <>
           <div style={{ position: "relative", marginBottom: 18, maxWidth: 380 }}>
@@ -401,7 +534,6 @@ export default function Reporting() {
         </>
       )}
 
-      {/* ── REPORTS TAB ── */}
       {tab === "reports" && (
         <>
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
@@ -456,7 +588,6 @@ export default function Reporting() {
         </>
       )}
 
-      {/* ── Modals ── */}
       {detailAnalysis && (
         <AnalysisDetailModal
           analysis={detailAnalysis}
@@ -535,30 +666,65 @@ function AnalysisCard({ analysis, onOpen, onGenerate }) {
 
 // ─── Analysis Detail Modal ─────────────────────────────────────────────────
 function AnalysisDetailModal({ analysis, full, onClose, onGenerate }) {
-  const score      = analysis.global_score || 0;
-  const scoreColor = score >= 75 ? "#16A34A" : score >= 50 ? "#D97706" : "#DC2626";
+  const rawItems = getItemCentricData(full);
 
-  // ✅ Show org/dept from full.analysis if available, else from lightweight row
-  const row = full?.analysis || analysis;
+  // Attach top-level risks to their items via item_id
+  const allFlatRisks = [
+    ...(full?.asset_risks    || []),
+    ...(full?.business_risks || []),
+  ];
+  const risksByItemId = {};
+  for (const r of allFlatRisks) {
+    if (!r.item_id) continue;
+    if (!risksByItemId[r.item_id]) risksByItemId[r.item_id] = [];
+    risksByItemId[r.item_id].push(r);
+  }
+  const items = rawItems.map(it => ({
+    ...it,
+    itemRisks: risksByItemId[it.item_id] || [],
+  }));
+
+  const computedKpis = computeKPIsFromItems(items);
+
+  // Use the stored values from the analysis row (same as card)
+  const row = full?.analysis || analysis || {};
+  const kpis = {
+  analyzed:      computedKpis.analyzed,
+  covered:       computedKpis.covered,
+  partial:       computedKpis.partial,
+  notCovered:    computedKpis.notCovered,
+  notApplicable: computedKpis.notApplicable,
+  validated:     computedKpis.validated,
+  globalScore:   computedKpis.globalScore,
+  globalStatus:  computedKpis.globalStatus,
+};
+
   const org  = row.created_by_organisation || row.created_by_organization || "—";
   const dept = row.created_by_department || "—";
+
+  const applicableItems = items.filter(it => {
+    const aiNA = !it.is_applicable || it.ai_status === "Not applicable";
+    const promoted = aiNA && it.ciso_status && it.ciso_status !== "Not applicable";
+    return (!aiNA && it.ciso_status !== "Not applicable") || promoted;
+  });
+  const notApplicableItems = items.filter(it => !applicableItems.includes(it));
 
   return (
     <div onClick={onClose}
       style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.5)",
                display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20 }}>
       <div onClick={e => e.stopPropagation()}
-        style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 900,
-                 maxHeight: "90vh", overflowY: "auto", boxShadow: "0 24px 64px rgba(15,23,42,0.18)" }}>
+        style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 1100,
+                 maxHeight: "92vh", overflowY: "auto", boxShadow: "0 24px 64px rgba(15,23,42,0.18)" }}>
 
-        <div style={{ padding: "22px 28px 16px", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", gap: 16 }}>
+        <div style={{ padding: "22px 28px 16px", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", gap: 16, position: "sticky", top: 0, background: "#fff", zIndex: 5 }}>
           <div style={{ flex: 1 }}>
             <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "#0f172a", fontFamily: "'Fraunces',serif" }}>
               {analysis.title}
             </h2>
             <p style={{ margin: "4px 0 0", fontSize: 12, color: "#94a3b8" }}>
               {analysis.standard_name} · By <strong>{analysis.created_by_name}</strong>
-              {org !== "—" && <> · 🏢 {org}</>}
+              {org !== "—"  && <> · 🏢 {org}</>}
               {dept !== "—" && <> · {dept}</>}
               &nbsp;· {new Date(analysis.created_at).toLocaleDateString("en-GB")}
             </p>
@@ -567,159 +733,304 @@ function AnalysisDetailModal({ analysis, full, onClose, onGenerate }) {
             style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid #e2e8f0", background: "#f8faff", cursor: "pointer", color: "#64748b", fontSize: 18 }}>×</button>
         </div>
 
-        <div style={{ padding: "20px 28px", borderBottom: "1px solid #f1f5f9", display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12 }}>
-          <KPI label="Global Score" value={`${score}%`}            color={scoreColor} />
-          <KPI label="Covered"      value={analysis.covered_count}     color="#16A34A" />
-          <KPI label="Partial"      value={analysis.partial_count}     color="#D97706" />
-          <KPI label="Not covered"  value={analysis.not_covered_count} color="#DC2626" />
-        </div>
+        {!full ? (
+          <div style={{ textAlign: "center", padding: 60, color: "#94a3b8" }}>
+            <div style={{ width: 28, height: 28, borderRadius: "50%", border: "3px solid #E2E8F0", borderTop: "3px solid #3B6FFF", animation: "spin .8s linear infinite", margin: "0 auto 10px" }} />
+            Loading details…
+          </div>
+        ) : (
+          <div style={{ padding: "20px 28px" }}>
 
-        <div style={{ padding: "22px 28px" }}>
-          {!full ? (
-            <div style={{ textAlign: "center", padding: 40, color: "#94a3b8" }}>
-              <div style={{ width: 28, height: 28, borderRadius: "50%", border: "3px solid #E2E8F0", borderTop: "3px solid #3B6FFF", animation: "spin .8s linear infinite", margin: "0 auto 10px" }} />
-              Loading details…
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, gap: 12, flexWrap: "wrap" }}>
+              <div style={{ background: "#fff", border: "1px solid #E2E8F0", borderRadius: 12, padding: "10px 18px", display: "flex", alignItems: "center", gap: 14, boxShadow: "0 1px 6px rgba(0,0,0,0.05)" }}>
+                <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em" }}>Overall Compliance (applicable items)</span>
+                <span style={{ fontFamily: "'Fraunces',serif", fontSize: 24, fontWeight: 900, color: STATUS_META_V2[kpis.globalStatus].color }}>{kpis.globalScore}%</span>
+                <div style={{ width: 120, height: 6, background: "#E2E8F0", borderRadius: 3, overflow: "hidden" }}>
+                  <div style={{ width: `${kpis.globalScore}%`, height: "100%", background: STATUS_META_V2[kpis.globalStatus].color, borderRadius: 3, transition: "width .4s ease" }} />
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 10, marginBottom: 24 }}>
+              {[
+                { label: "Items analyzed", value: kpis.analyzed,      color: "#3B6FFF" },
+                { label: "Covered",        value: kpis.covered,       color: "#16A34A" },
+                { label: "Partial",        value: kpis.partial,       color: "#061585" },
+                { label: "Not covered",    value: kpis.notCovered,    color: "#DC2626" },
+                { label: "Not applicable", value: kpis.notApplicable, color: "#64748B" },
+              ].map(k => (
+                <div key={k.label} style={{ background: "#fff", border: "1px solid #E2E8F0", borderRadius: 12, padding: "10px 12px", textAlign: "center", boxShadow: "0 1px 6px rgba(0,0,0,0.05)" }}>
+                  <div style={{ fontFamily: "'Fraunces',serif", fontSize: 22, fontWeight: 900, color: k.color }}>{k.value}</div>
+                  <div style={{ fontSize: 10, color: "#94a3b8", fontWeight: 500 }}>{k.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {applicableItems.length === 0 ? (
+              <div style={{ padding: 30, textAlign: "center", color: "#94a3b8", fontSize: 13, background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0" }}>
+                No applicable items in this analysis.
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {applicableItems.map(it => (
+                  <ItemCardRO key={it.item_id} item={it} />
+                ))}
+              </div>
+            )}
+
+            {notApplicableItems.length > 0 && (
+              <NotApplicableSectionRO items={notApplicableItems} />
+            )}
+
+            <button onClick={onGenerate}
+              style={{ marginTop: 24, width: "100%", padding: 12, borderRadius: 10, border: "none",
+                       background: "linear-gradient(135deg,#3B6FFF,#6D28D9)", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+              Generate Report from this Analysis
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Read-only Status Pill ─────────────────────────────────────────────────
+function StatusPillRO({ status, decision, big }) {
+  const eff = decision || status;
+  const s   = STATUS_META_V2[eff];
+  if (!s) return null;
+  const label = decision ? `CISO · ${decision}` : s.label;
+  return (
+    <span style={{
+      fontSize: big ? 12 : 10, padding: big ? "3px 10px" : "2px 8px",
+      borderRadius: 20, fontWeight: 700,
+      background: s.bg, color: s.color, border: `1px solid ${s.border || s.color}`,
+      display: "inline-block", fontFamily: "'DM Sans',sans-serif",
+    }}>{label}</span>
+  );
+}
+
+// ─── Read-only ItemCard (collapsible) ──────────────────────────────────────
+function ItemCardRO({ item }) {
+  const [open, setOpen] = useState(false);
+  const effectiveStatus = item.ciso_status || item.ai_status;
+  const meta = STATUS_META_V2[effectiveStatus] || STATUS_META_V2["Not covered"];
+
+  const cisoPromoted = !item.is_applicable && item.ciso_status && item.ciso_status !== "Not applicable";
+  const isNA = (!item.is_applicable && !cisoPromoted) || effectiveStatus === "Not applicable";
+
+  const policyAssessments = item.policy_assessments || [];
+  const typeLabel =
+    (item.type || "").startsWith("core")  ? "Core"  :
+    (item.type || "").startsWith("annex") ? "Annex" : "";
+
+  return (
+    <div style={{ borderRadius: 12, border: `1.5px solid ${open ? `${meta.color}55` : "#E2E8F8"}`, background: "#fff", overflow: "hidden", boxShadow: open ? `0 4px 16px ${meta.color}15` : "0 1px 6px rgba(0,0,0,0.05)" }}>
+      <button onClick={() => setOpen(o => !o)}
+        style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: open ? `linear-gradient(to right,${meta.bg},transparent)` : "#F0F4FF", border: "none", cursor: "pointer", textAlign: "left", borderBottom: open ? "1px solid #E2E8F8" : "none" }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 2 }}>
+            {item.ref_id && (
+              <span style={{ fontSize: 10, color: "#94a3b8", background: "#fff", padding: "1px 7px", borderRadius: 4, fontWeight: 700, border: "1px solid #E2E8F8" }}>{item.ref_id}</span>
+            )}
+            <span style={{ fontFamily: "'Fraunces',serif", fontSize: 14, fontWeight: 800, color: "#0F172A" }}>{item.title}</span>
+            {typeLabel && (
+              <span style={{ fontSize: 9, color: "#fff", background: "#3B6FFF", padding: "2px 7px", borderRadius: 3, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".03em" }}>{typeLabel}</span>
+            )}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "#94a3b8", flexWrap: "wrap" }}>
+            <StatusPillRO status={item.ai_status} decision={item.ciso_status} />
+            {isNA
+              ? <span>Not addressed by any policy in the uploaded document</span>
+              : <span>
+                  {policyAssessments.length} relevant {policyAssessments.length === 1 ? "policy" : "policies"}
+                  {cisoPromoted && <span style={{ marginLeft: 6, color: "#16A34A", fontWeight: 700 }}>(CISO validated)</span>}
+                </span>}
+          </div>
+        </div>
+        <svg width="14" height="14" viewBox="0 0 13 13" fill="none" style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform .2s" }}>
+          <path d="M2.5 5L6.5 9L10.5 5" stroke="#94a3b8" strokeWidth="1.8" strokeLinecap="round"/>
+        </svg>
+      </button>
+
+      {open && (
+        <div style={{ padding: "12px 16px" }}>
+          {isNA ? (
+            <div style={{ padding: "16px 12px", textAlign: "center", color: "#64748B", fontSize: 12, fontStyle: "italic" }}>
+              No policy in the uploaded document is relevant to this control. This item is marked Not applicable and ignored in the global score.
             </div>
           ) : (
             <>
-              {(full.policies || []).map(p => <PolicyDetailBlock key={p.id} policy={p} />)}
-              {((full.asset_risks?.length || 0) + (full.business_risks?.length || 0)) > 0 && (
-                <div style={{ marginTop: 24 }}>
-                  <h3 style={{ fontSize: 14, fontWeight: 800, color: "#0f172a", marginBottom: 12, fontFamily: "'Fraunces',serif" }}>
-                    Generated Risks ({(full.asset_risks?.length || 0) + (full.business_risks?.length || 0)})
-                  </h3>
-                  {(full.asset_risks    || []).map(r => <RiskRow key={`a${r.id}`} risk={r} kind="asset" />)}
-                  {(full.business_risks || []).map(r => <RiskRow key={`b${r.id}`} risk={r} kind="business" />)}
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>
+                Relevant policies ({policyAssessments.length})
+              </div>
+              {policyAssessments.map((pa, idx) => <PolicyBlockRO key={pa.policy_name + idx} pa={pa} />)}
+
+              {(item.itemRisks || []).length > 0 && (
+                <div style={{
+                  marginTop: 10, padding: "10px 12px",
+                  background: "#FEF2F2", border: "1px solid #FCA5A5",
+                  borderRadius: 8, borderLeft: "3px solid #DC2626",
+                }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#DC2626", marginBottom: 6, textTransform: "uppercase", letterSpacing: ".05em" }}>
+                    Identified risks ({item.itemRisks.length})
+                  </div>
+                  {item.itemRisks.map((r, i) => (
+                    <div key={r.id || i} style={{
+                      padding: "8px 10px", marginBottom: 6, background: "#fff",
+                      border: "1px solid #FECACA", borderRadius: 6,
+                    }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "#0F172A" }}>
+                        {r.intitule || r.description || "—"}
+                      </div>
+                      {r.description && r.description !== r.intitule && (
+                        <div style={{ fontSize: 11, color: "#475569", marginTop: 3, lineHeight: 1.5 }}>
+                          {r.description}
+                        </div>
+                      )}
+                      <div style={{ display: "flex", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
+                        <span style={{ fontSize: 10, padding: "1px 7px", borderRadius: 4, background: "#fee2e2", color: "#991b1b", fontWeight: 600 }}>
+                          I:{r.impact || 0} · P:{r.probabilite || 0}
+                        </span>
+                        {r.risk_class && (
+                          <span style={{ fontSize: 10, padding: "1px 7px", borderRadius: 4, background: r.risk_class === "business" ? "#F5F3FF" : "#EEF4FF", color: r.risk_class === "business" ? "#6D28D9" : "#3B6FFF", fontWeight: 600 }}>
+                            {r.risk_class}
+                          </span>
+                        )}
+                        {r.statut && (
+                          <span style={{ fontSize: 10, padding: "1px 7px", borderRadius: 4, background: "#F1F5F9", color: "#475569", fontWeight: 600 }}>
+                            {r.statut}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </>
           )}
-          <button onClick={onGenerate}
-            style={{ marginTop: 24, width: "100%", padding: 12, borderRadius: 10, border: "none",
-                     background: "linear-gradient(135deg,#3B6FFF,#6D28D9)", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
-            Generate Report from this Analysis
-          </button>
         </div>
-      </div>
+      )}
     </div>
   );
 }
 
-function KPI({ label, value, color }) {
-  return (
-    <div style={{ background: "#F8FAFF", border: "1px solid #E2E8F0", borderRadius: 10, padding: "12px 14px", textAlign: "center" }}>
-      <div style={{ fontSize: 22, fontWeight: 900, color, fontFamily: "'Fraunces',serif", lineHeight: 1.1 }}>{value}</div>
-      <div style={{ fontSize: 10, color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em", marginTop: 4 }}>{label}</div>
-    </div>
-  );
-}
-
-function PolicyDetailBlock({ policy }) {
-  const meta            = STATUS_PILL[policy.status] || STATUS_PILL["Not covered"];
-  const gapsList        = policy.gaps        || policy.policy_gaps || [];
-  const remediationsList= policy.remediations|| [];
+// ─── Read-only Policy Block ────────────────────────────────────────────────
+function PolicyBlockRO({ pa }) {
+  const eff  = pa.ciso_status || pa.status;
+  const meta = STATUS_META_V2[eff] || STATUS_META_V2["Not covered"];
+  const risks       = pa.risks || [];
+  const gaps        = pa.gaps  || [];
+  const remediation = pa.remediation || "";
+  const comment     = pa.comment || "";
 
   return (
-    <div style={{ marginBottom: 18, border: "1px solid #E2E8F0", borderRadius: 12, overflow: "hidden" }}>
-      <div style={{ padding: "12px 16px", background: meta.bg, borderBottom: "1px solid #E2E8F0", display: "flex", justifyContent: "space-between" }}>
-        <div>
-          <div style={{ fontSize: 14, fontWeight: 800, color: "#0F172A", fontFamily: "'Fraunces',serif" }}>{policy.policy_name}</div>
-          {policy.policy_summary && <div style={{ fontSize: 12, color: "#475569", marginTop: 2 }}>{policy.policy_summary}</div>}
-        </div>
-        <span style={{ fontSize: 14, fontWeight: 800, color: meta.color }}>{policy.policy_score}%</span>
-      </div>
-      <div style={{ padding: "14px 16px" }}>
-        {gapsList.length > 0 ? (
-          <DetailSection title="Identified Gaps" color="#DC2626" bg="#FEF2F2">
-            <ul style={{ margin: 0, paddingLeft: 18 }}>
-              {gapsList.map((gap, idx) => (
-                <li key={idx} style={{ fontSize: 12, marginBottom: 4 }}>
-                  {typeof gap === "string" ? gap : (gap.description || gap.title || "")}
-                </li>
-              ))}
-            </ul>
-          </DetailSection>
-        ) : (
-          (policy.items || []).filter(it => (it.ciso_status || it.ai_status) === "Not covered").length > 0 && (
-            <DetailSection title="Non-conformity Points" color="#DC2626" bg="#FEF2F2">
-              <ul style={{ margin: 0, paddingLeft: 18 }}>
-                {policy.items.filter(it => (it.ciso_status || it.ai_status) === "Not covered").map(it => (
-                  <li key={it.id} style={{ fontSize: 12, marginBottom: 4 }}>
-                    {it.ref_id && <strong>{it.ref_id} </strong>}{it.title}
-                  </li>
-                ))}
-              </ul>
-            </DetailSection>
-          )
-        )}
-
-        {remediationsList.length > 0 && (
-          <DetailSection title="Remediation Plan" color="#16A34A" bg="#F0FDF4">
-            <ul style={{ margin: 0, paddingLeft: 18 }}>
-              {remediationsList.map((rem, idx) => (
-                <li key={idx} style={{ fontSize: 12, marginBottom: 4 }}>
-                  {rem.action || rem.description || rem}
-                  {rem.priority && <span style={{ marginLeft: 8, fontSize: 10, color: "#94a3b8" }}>({rem.priority})</span>}
-                </li>
-              ))}
-            </ul>
-          </DetailSection>
-        )}
-
-        {(policy.items || []).length > 0 && (
-          <details style={{ marginTop: 8 }}>
-            <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#475569" }}>
-              {policy.items.length} evaluated controls
-            </summary>
-            <div style={{ marginTop: 8 }}>
-              {policy.items.map(it => {
-                const m = STATUS_PILL[it.ciso_status || it.ai_status] || STATUS_PILL["Not covered"];
-                return (
-                  <div key={it.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 10px", border: "1px solid #E2E8F0", borderRadius: 6, marginBottom: 4, background: "#fff" }}>
-                    <span style={{ fontSize: 12, color: "#0F172A" }}>{m.icon} {it.ref_id} · {it.title}</span>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: m.color }}>{it.score}%</span>
-                  </div>
-                );
-              })}
+    <div style={{ border: `1px solid ${meta.border}`, borderLeft: `4px solid ${meta.color}`, borderRadius: 10, padding: "12px 14px", marginBottom: 10, background: `${meta.bg}40` }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
+        <span style={{ fontFamily: "'Fraunces',serif", fontSize: 13, fontWeight: 800, color: "#0F172A" }}>{pa.policy_name}</span>
+        <StatusPillRO status={pa.status} decision={pa.ciso_status} />
+        {pa.conf > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ width: 70, height: 5, background: "#E2E8F8", borderRadius: 99, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${pa.conf}%`, background: meta.color, borderRadius: 99 }} />
             </div>
-          </details>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function DetailSection({ title, color, bg, children }) {
-  return (
-    <div style={{ background: bg, borderRadius: 8, padding: "10px 12px", marginBottom: 8, borderLeft: `3px solid ${color}` }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color, marginBottom: 5 }}>{title}</div>
-      <div style={{ color: "#475569" }}>{children}</div>
-    </div>
-  );
-}
-
-function RiskRow({ risk, kind }) {
-  const title = risk.intitule || risk.title;
-  return (
-    <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 12px", border: "1px solid #E2E8F0", borderRadius: 8, marginBottom: 6, background: "#fff" }}>
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: "#0F172A" }}>{title}</div>
-        {risk.description && (
-          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
-            {risk.description.slice(0, 120)}{risk.description.length > 120 && "…"}
+            <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>{pa.conf}%</span>
           </div>
         )}
       </div>
-      <div style={{ display: "flex", gap: 6, flexShrink: 0, alignItems: "center" }}>
-        <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, fontWeight: 700,
-                       background: kind === "business" ? "#F5F3FF" : "#EEF4FF",
-                       color: kind === "business" ? "#6D28D9" : "#3B6FFF" }}>
-          {kind === "business" ? "Business" : "Asset"}
-        </span>
-        <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 600 }}>
-          I:{risk.impact || 0}/P:{risk.probabilite || risk.probability || 0}
-        </span>
-      </div>
+
+      {pa.policy_summary && (
+        <div style={{ marginTop: 4, padding: "6px 10px", background: "#EEF2FF", border: "1px solid #3B6FFF25", borderRadius: 6, fontSize: 11.5, color: "#475569", lineHeight: 1.5 }}>
+          <span style={{ color: "#0F172A", fontWeight: 700 }}>Policy description:</span> {pa.policy_summary}
+        </div>
+      )}
+
+      {comment && (
+        <div style={{ marginTop: 8, padding: "8px 10px", background: "#fff", border: "1px solid #E2E8F8", borderRadius: 6 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#0F172A", marginBottom: 4 }}>How this policy addresses the item</div>
+          <div style={{ fontSize: 11.5, color: "#475569", lineHeight: 1.5 }}>{comment}</div>
+        </div>
+      )}
+
+      {risks.length > 0 && (
+        <div style={{ marginTop: 8, padding: "8px 10px", background: "#FEF2F2", borderRadius: 8, borderLeft: "3px solid #DC2626" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#DC2626", marginBottom: 4 }}>Risks ({risks.length})</div>
+          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 11.5, color: "#475569" }}>
+            {risks.map((r, i) => {
+              const desc = typeof r === "string" ? r : (r.description || r.intitule || "");
+              return (
+                <li key={r.id || i} style={{ marginBottom: 3 }}>
+                  {desc || <em>(empty)</em>}
+                  {(r.impact || r.probability || r.probabilite) && (
+                    <span style={{ marginLeft: 6, fontSize: 9.5, color: "#94a3b8" }}>
+                      · I:{r.impact}/P:{r.probability || r.probabilite}
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
+      {gaps.length > 0 && (
+        <div style={{ marginTop: 6, padding: "8px 10px", background: "#FFFBEB", borderRadius: 8, borderLeft: "3px solid #061585" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#061585", marginBottom: 4 }}>Gaps ({gaps.length})</div>
+          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 11.5, color: "#475569" }}>
+            {gaps.map((g, i) => <li key={i}>{typeof g === "string" ? g : (g.description || "")}</li>)}
+          </ul>
+        </div>
+      )}
+
+      {remediation && (
+        <div style={{ marginTop: 6, padding: "8px 10px", background: "#F0FDF4", borderRadius: 8, borderLeft: "3px solid #16A34A" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#16A34A", marginBottom: 4 }}>Mitigation Plan</div>
+          <div style={{ whiteSpace: "pre-wrap", fontSize: 11.5, color: "#475569", lineHeight: 1.5 }}>{remediation}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Read-only Not-Applicable Section ──────────────────────────────────────
+function NotApplicableSectionRO({ items }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ marginTop: 28, borderRadius: 12, border: "1.5px dashed #C7D2F0", background: "#F1F5F9", overflow: "hidden" }}>
+      <button onClick={() => setOpen(o => !o)}
+        style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "14px 18px", background: "transparent", border: "none", cursor: "pointer", textAlign: "left" }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: "'Fraunces',serif", fontSize: 14, fontWeight: 800, color: "#64748B", marginBottom: 2 }}>
+            {items.length} item{items.length === 1 ? "" : "s"} not applicable
+          </div>
+          <div style={{ fontSize: 12, color: "#475569", lineHeight: 1.5 }}>
+            These items are not addressed by any policy detected in the document and are excluded from the global compliance score.
+          </div>
+        </div>
+        <svg width="14" height="14" viewBox="0 0 13 13" fill="none" style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform .2s" }}>
+          <path d="M2.5 5L6.5 9L10.5 5" stroke="#94a3b8" strokeWidth="1.8" strokeLinecap="round"/>
+        </svg>
+      </button>
+      {open && (
+        <div style={{ padding: "4px 14px 14px", borderTop: "1px solid #E2E8F8", background: "#fff" }}>
+          {items.map(it => {
+            const typeLabel =
+              (it.type || "").startsWith("core")  ? "Core"  :
+              (it.type || "").startsWith("annex") ? "Annex" : "";
+            return (
+              <div key={it.item_id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderBottom: "1px solid #E2E8F8" }}>
+                {it.ref_id && (
+                  <span style={{ fontSize: 10, color: "#94a3b8", background: "#F0F4FF", padding: "1px 7px", borderRadius: 4, fontWeight: 700, border: "1px solid #E2E8F8" }}>{it.ref_id}</span>
+                )}
+                <span style={{ fontFamily: "'Fraunces',serif", fontSize: 12.5, fontWeight: 700, color: "#475569", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.title}</span>
+                {typeLabel && (
+                  <span style={{ fontSize: 9, color: "#fff", background: "#3B6FFF", padding: "2px 7px", borderRadius: 3, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".03em" }}>{typeLabel}</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -728,7 +1039,6 @@ function RiskRow({ risk, kind }) {
 function GenerationFormModal({ form, setForm, linkedAnalysis, linkedFull, generating, generatedReport, onGenerate, onSave, onClose }) {
   const reportRef = useRef(null);
 
-  // ✅ Show the org/dept that will appear in the report (read from full DB row)
   const row        = linkedFull?.analysis || {};
   const orgDisplay = row.created_by_organisation || row.created_by_organization || form.organisation || "—";
   const deptDisplay= row.created_by_department   || form.department || "—";
@@ -739,7 +1049,7 @@ function GenerationFormModal({ form, setForm, linkedAnalysis, linkedFull, genera
         <div style={{ background: "#fff", borderRadius: 14, width: "100%", maxWidth: 980, maxHeight: "92vh", overflow: "hidden", boxShadow: "0 24px 64px rgba(15,23,42,0.18)", display: "flex", flexDirection: "column" }}>
           <div style={{ padding: "16px 24px", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0, background: "#F8FAFF" }}>
             <div>
-              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "#0f172a", fontFamily: "'Fraunces',serif" }}>✅ Report generated — Preview</h2>
+              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "#0f172a", fontFamily: "'Fraunces',serif" }}>Report generated — Preview</h2>
               <p style={{ margin: "2px 0 0", fontSize: 11, color: "#94a3b8" }}>{form.name} · {orgDisplay} · {deptDisplay}</p>
             </div>
             <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid #e2e8f0", background: "#fff", cursor: "pointer", color: "#64748b", fontSize: 18 }}>×</button>
@@ -763,16 +1073,51 @@ function GenerationFormModal({ form, setForm, linkedAnalysis, linkedFull, genera
               }} style={{ padding: "9px 18px", borderRadius: 8, border: "none", background: "#0c0a63", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
                 Export HTML
               </button>
-              <button onClick={async () => {
-                const el = reportRef.current;
-                const origOverflow = el.style.overflow; const origHeight = el.style.height;
-                el.style.overflow = "visible"; el.style.height = "auto";
-                const html2pdf = (await import("html2pdf.js")).default;
-                await html2pdf().from(el).set({ margin: [10,10,10,10], filename: "compliance-report.pdf", html2canvas: { scale: 2, useCORS: true, scrollY: 0 }, jsPDF: { unit: "mm", format: "a4", orientation: "portrait" }, pagebreak: { mode: ["css","avoid-all","legacy"] } }).save();
-                el.style.overflow = origOverflow; el.style.height = origHeight;
-              }} style={{ padding: "9px 18px", borderRadius: 8, border: "none", background: "#0b256d", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
-                Export PDF
-              </button>
+<button onClick={async () => {
+  const el = reportRef.current;
+  if (!el) return;
+
+  try {
+    const res = await fetch("http://localhost:3000/api/reporting/export-compliance-report", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        html: el.innerHTML,
+        filename: form.name || "compliance-report",
+      }),
+    });
+
+    // ── Vérification correcte : ne pas appeler .json() sur un PDF ──
+    if (!res.ok) {
+      const contentType = res.headers.get("content-type") || "";
+      const errMsg = contentType.includes("application/json")
+        ? (await res.json()).details || "PDF generation failed"
+        : `Server error ${res.status}`;
+      throw new Error(errMsg);
+    }
+
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `${form.name || "compliance-report"}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+  } catch (err) {
+    console.error("Export PDF error:", err);
+    alert(`PDF export failed: ${err.message}`);
+  }
+}} style={{
+  padding: "9px 18px", borderRadius: 8, border: "none",
+  background: "#0b256d", color: "#fff", fontSize: 13,
+  fontWeight: 700, cursor: "pointer"
+}}>
+  Export PDF
+</button>
               <button onClick={onSave} style={{ padding: "9px 22px", borderRadius: 8, border: "none", background: "#142f5f", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
                 Save Report
               </button>
@@ -783,7 +1128,6 @@ function GenerationFormModal({ form, setForm, linkedAnalysis, linkedFull, genera
     );
   }
 
-  // ── Form view ──
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20 }}>
       <div style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 620, maxHeight: "92vh", overflowY: "auto", boxShadow: "0 24px 64px rgba(15,23,42,0.18)" }}>
@@ -805,7 +1149,6 @@ function GenerationFormModal({ form, setForm, linkedAnalysis, linkedFull, genera
               placeholder="e.g., ISO 27001 Audit – Q2 2026" style={inputStyle} />
           </FormField>
 
-          {/* ✅ Show org/dept read-only — sourced from DB, user cannot change */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
             <FormField label="Organisation (from analysis)">
               <div style={{ ...inputStyle, display: "flex", alignItems: "center", background: "#F8FAFF", color: orgDisplay === "—" ? "#94a3b8" : "#0f172a", border: "1.5px solid #e2e8f0", borderRadius: 8, height: 40, padding: "0 14px", fontSize: 13 }}>

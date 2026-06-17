@@ -15,9 +15,9 @@ router.get("/", async (req, res) => {
 
     // 🔐 filtre user
     if (user.role === "admin") {
-      conditions.push("l.role = ?");
-      params.push("admin");
-    } else if (user.role === "auditor") {
+      conditions.push("l.role IN (?, ?)");
+      params.push("admin", "anonymous"); // ← admin voit ses logs + les anonymous
+    } else if (user.role === "user") {
       conditions.push("l.role IN (?, ?)");
       params.push("auditor", "user");
     } else {

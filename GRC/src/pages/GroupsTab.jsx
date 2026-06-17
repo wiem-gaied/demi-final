@@ -130,17 +130,7 @@ function GroupDetailsModal({ group, users, onClose }) {
         </div>
 
         <div style={{ padding: "24px 32px", display: "flex", flexDirection: "column", gap: 24 }}>
-          {/* Description */}
-          {group.description && (
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: T.muted, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 }}>
-                Description
-              </div>
-              <div style={{ padding: "12px 16px", background: T.bg, borderRadius: 12, fontSize: 13, color: T.text }}>
-                {group.description}
-              </div>
-            </div>
-          )}
+          
 
           {/* Members section */}
           <div>
@@ -439,15 +429,7 @@ function GroupsModal({ group, users, onClose, onSave }) {
             />
           </Field>
 
-          <Field label="Description">
-            <textarea
-              value={form.description}
-              onChange={(e) => set("description", e.target.value)}
-              placeholder="Group description..."
-              style={{ ...inputStyle, minHeight: 80, resize: "vertical" }}
-            />
-          </Field>
-
+          
           <Field label={`Members (${form.members.length} selected)`}>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, maxHeight: 200, overflowY: "auto", padding: "8px 0" }}>
               {filteredUsers.map((u) => (

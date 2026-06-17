@@ -1,4 +1,4 @@
-// politique.jsx
+// frameworkadmin.jsx
 // Same visual design as before. All strings in English.
 // Renders Core (mandatory) and Annex (optional) sections strictly per framework,
 // with descriptions visible at chapter / sub-chapter / control level.
@@ -1273,14 +1273,7 @@ const PackageCard = ({ standard, onImportFramework, onUnimportFramework, onAddEx
             )}
           </div>
         </div>
-        <button onClick={(e) => { e.stopPropagation(); isImported ? onUnimportFramework(standard) : onImportFramework(standard); }} style={{
-          padding: "6px 14px", borderRadius: 8,
-          border: `1px solid ${isImported ? C.border : C.accent}`,
-          background: isImported ? "transparent" : C.accent,
-          color: isImported ? C.muted : "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer",
-        }}>
-          {isImported ? "Remove" : "+ Import"}
-        </button>
+        
         {isImported && (
           <ChevronDown size={16} style={{ transform: open ? "rotate(180deg)" : "rotate(0)", transition: "transform .2s", color: C.muted }} />
         )}
@@ -1525,7 +1518,7 @@ export default function Policies() {
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
           <span style={{ color: "#0F172A", fontSize: "26px", fontWeight: "800" }}>
-            Policies Library
+            Frameworks
           </span>
           <div style={{ position: "relative" }}>
             <Search size={16} style={{
@@ -1545,35 +1538,8 @@ export default function Policies() {
           </div>
         </div>
         <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-          <button
-            onClick={refreshAllData}
-            disabled={refreshing}
-            style={{
-              display: "flex", alignItems: "center", gap: 6,
-              padding: "6px 12px", borderRadius: 8, border: `1px solid ${C.border}`,
-              background: "transparent", cursor: refreshing ? "wait" : "pointer",
-              fontSize: 13, color: C.muted
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" strokeWidth="2"
-              style={{ animation: refreshing ? "spin 1s linear infinite" : "none" }}>
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-              <circle cx="12" cy="12" r="3" />
-            </svg>
-            Refresh
-          </button>
-          <button
-            onClick={() => setAddFrameworkModal(true)}
-            style={{
-              display: "flex", alignItems: "center", gap: 8,
-              padding: "8px 18px", borderRadius: 10, border: "none",
-              background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-              color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer"
-            }}
-          >
-            <Plus size={16} /> Import Framework
-          </button>
+          
+          
           <button
             onClick={() => setAddCustomModal(true)}
             style={{

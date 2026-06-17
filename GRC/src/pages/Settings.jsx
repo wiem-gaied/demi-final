@@ -11,6 +11,9 @@ import {
 import UsersTab from "./UsersTab";
 import PermissionsTab from "./PermissionsTab";
 import GroupsTab from "./GroupsTab";
+let analyzing = 0;
+export const startAnalysis = () => { analyzing++; };
+export const endAnalysis   = () => { analyzing = Math.max(0, analyzing - 1); };
 // ─── Design tokens (matching GRC platform) ──────────────────────────────────
 const T = {
   primary: "#3B6FFF",
@@ -71,7 +74,7 @@ const StatusBadge = ({ status }) => {
 
 
 // ─── Security Tab ────────────────────────────────────────────────────────────
-function SecurityTab({sessionTimeout, setSessionTimeout,updateTimeout}) {
+/*function SecurityTab({sessionTimeout, setSessionTimeout,updateTimeout}) {
   const [mfa, setMfa] = useState(true);
   
   const [passPolicy, setPassPolicy] = useState({ minLength: 12, uppercase: true, numbers: true, symbols: true, expiry: 90 });
@@ -109,7 +112,7 @@ function SecurityTab({sessionTimeout, setSessionTimeout,updateTimeout}) {
       
     </div>
   );
-}
+}*/
 
 
 // ─── Advanced Tab ─────────────────────────────────────────────────────────────
@@ -136,6 +139,7 @@ function Toggle({ value, onChange, color }) {
   );
 }
 
+
 // ─── Main Settings Page ───────────────────────────────────────────────────────
 // ─── Main Settings Page ───────────────────────────────────────────────────────
 export default function SettingsPage() {
@@ -159,8 +163,9 @@ export default function SettingsPage() {
     const timeoutMs = timeoutRef.current * 60 * 1000;
 
     timerRef.current = setTimeout(() => {
-      handleLogout();
-    }, timeoutMs);
+  if (analyzing > 0) resetTimer();
+  else handleLogout();
+}, timeoutMs);
   };
   useEffect(() => {
   resetTimer();
@@ -204,7 +209,7 @@ export default function SettingsPage() {
     { id: "users", label: "Users", icon: <Users size={16} /> },
     { id: "groups", label: "Groups", icon: <Layers size={16} /> },
     { id: "permissions", label: "Permissions", icon: <ShieldCheck size={16} /> },
-    { id: "security", label: "Security", icon: <Shield size={16} /> },
+    //{ id: "security", label: "Security", icon: <Shield size={16} /> },//
     
   ];
 
@@ -295,6 +300,7 @@ export default function SettingsPage() {
         {tab === "permissions" && (
           <PermissionsTab groups={groups} setGroups={setGroups} />
         )}
+        {/*
         {tab === "security" && (
           <SecurityTab
             sessionTimeout={sessionTimeout}
@@ -303,6 +309,7 @@ export default function SettingsPage() {
 
           />
         )}
+        */}
       </div>
     </div>
   );

@@ -118,5 +118,34 @@ router.get('/audit-data', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch audit data' });
   }
 });
+// Ajoute cette route après '/export-audit-report'
+router.post('/export-compliance-report', async (req, res) => {
+  try {
+    const { html, filename } = req.body;
+    
+    if (!html) return res.status(400).json({ error: "No HTML provided" });
+
+    console.log('HTML reçu, longueur:', html.length); // ← ajoute ça
+
+    const pdfBuffer = await pdfExportService.generatePDFFromHTML(html, {
+      styles: `
+        *, *::before, *::after { box-sizing: border-box; }
+        body { font-family: 'DM Sans', sans-serif; background: #fff; margin: 0; padding: 0; color: #0F172A; }
+      `
+    });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename || 'compliance-report'}_${Date.now()}.pdf"`);
+    res.send(pdfBuffer);
+
+  } catch (error) {
+    console.error('❌ Compliance Report Export Error:', error.message); // ← log complet
+    console.error(error.stack);
+    res.status(500).json({ 
+      error: 'Failed to generate compliance report',
+      details: error.message  // ← ce message arrive au frontend
+    });
+  }
+});
 
 export default router;

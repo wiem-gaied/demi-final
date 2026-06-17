@@ -53,9 +53,9 @@ const avatarBg = (initials) => {
 
 const StatusBadge = ({ status }) => {
   const map = {
-    active: { color: T.success, bg: "#D1FAE5", label: "Active" },
+    active: { color: T.muted, bg: "#F1F5F9", label: "Active" },
     inactive: { color: T.muted, bg: "#F1F5F9", label: "Inactive" },
-    pending: { color: T.warning, bg: "#FEF3C7", label: "Pending" },
+    pending: { color: T.muted, bg: "#F1F5F9", label: "Pending" },
   };
   const s = map[status] || map.inactive;
   return (

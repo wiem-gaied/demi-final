@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { X, ShieldAlert, TrendingUp, AlertTriangle, CheckCircle, Plus, Trash2, Edit3 } from "lucide-react";
+import { X, ShieldAlert, TrendingUp, AlertTriangle, CheckCircle, Plus, Trash2, Edit3, Eye } from "lucide-react";
+import RiskDetailDrawer from "./RiskDetailDrawer";
 
 const IMPACT_LEVELS = ["0", "1", "2", "3", "4"];
 const PROBA_LEVELS  = ["0", "1", "2", "3", "4"];
@@ -45,19 +46,22 @@ const Risques = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [hoveredRisk, setHoveredRisk] = useState(null);
   const [risques, setRisques]     = useState([]);
-  const [form, setForm]           = useState({ intitule: "", categorie: "", actif: "", source: "",owner:"", description: "",
-  dueDate: "",     
-    impact: "0", probabilite: "0" });
+  const [form, setForm] = useState({ 
+  intitule: "", categorie: "", actif: "", source: "", description: "",
+  dueDate: "", impact: "0", probabilite: "0", isBusinessRisk: false,
+isAssetRisk: false, 
+});
   const [hoveredCell, setHoveredCell] = useState(null);
   const [editingStatus, setEditingStatus] = useState(null);
   const [threats, setThreats] = useState([""]);
   const [vulnerabilities, setVulnerabilities] = useState([ ""]);
+  const [detailRiskId, setDetailRiskId] = useState(null);
 
   const openModal  = () => setModalOpen(true);
   const closeModal = () => {
     setModalOpen(false);
-    setForm({ intitule: "", categorie: "", actif: "", source: "",owner:"", description: "",
-  dueDate: "" , impact: "0", probabilite: "0" });setMitigations([""]); setVulnerabilities([""]); setVulnerabilities([""])
+    setForm({ intitule: "", categorie: "", actif: "", source: "", description: "",
+  dueDate: "", impact: "0", probabilite: "0", isBusinessRisk: false, isAssetRisk: false, });;setMitigations([""]); setVulnerabilities([""]); setVulnerabilities([""])
   };
   const [mitigations, setMitigations] = useState([""]);
   const [assetsList, setAssetsList] = useState([]);
@@ -114,42 +118,32 @@ useEffect(() => {
   fetchAssets();
 }, []);
   
-  useEffect(() => {
     const fetchRisques = async () => {
-      try {
-        const res = await fetch("http://localhost:3000/api/risks/getrisks");
-        const data = await res.json();
-        const grouped = {};
+    try {
+      const res = await fetch("http://localhost:3000/api/risks/getrisks");
+      const data = await res.json();
+      const grouped = {};
+      data.forEach(row => {
+        if (!grouped[row.id]) {
+          grouped[row.id] = { ...row, mitigations: [] };
+        }
+        if (row.mitigation_id) {
+          grouped[row.id].mitigations.push({
+            id: row.mitigation_id,
+            action: row.action,
+            priority: row.priority,
+            status: row.mitigation_status,
+            progress: row.progress
+          });
+        }
+      });
+      setRisques(Object.values(grouped));
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
-data.forEach(row => {
-  if (!grouped[row.id]) {
-    grouped[row.id] = {
-      ...row,
-      mitigations: []
-    };
-  }
-
-  if (row.mitigation_id) {
-    grouped[row.id].mitigations.push({
-      id: row.mitigation_id,
-      action: row.action,
-      priority: row.priority,
-      status: row.mitigation_status,
-      progress: row.progress
-    });
-  }
-});
-
-const risks = Object.values(grouped);
-setRisques(risks);
-      } catch (err) {
-        console.error(err);
-      }
-    };
-
-    fetchRisques();
-  }, []);
-
+  useEffect(() => { fetchRisques(); }, []);
   const handleAdd = async() => {
     if (!form.intitule) return;
     try{
@@ -164,9 +158,16 @@ setRisques(risks);
           categorie: form.categorie,
           assets: selectedAssets,
           source: form.source,
-          owner: form.owner,
+          
           description: form.description,
           dueDate: form.dueDate,
+          isBusinessRisk: form.isBusinessRisk,
+          isAssetRisk: form.isAssetRisk,
+          riskType: form.isBusinessRisk && form.isAssetRisk ? "Both"
+            : form.isBusinessRisk ? "Business Risk"
+              : form.isAssetRisk ? "Asset Risk"
+                : "",
+          assets: form.isAssetRisk ? selectedAssets : [],
 
           impact: parseInt(form.impact),
           probabilite: parseInt(form.probabilite),
@@ -817,17 +818,19 @@ const AIRisksSummary = ({ risks }) => {
 
                 return (
                   <tr
-  key={r.id}
-  className="risk-row"
-  onMouseEnter={() => setHoveredRisk(r.id)}
-  onMouseLeave={() => setHoveredRisk(null)}
-  style={{
-    borderTop: "1px solid #f0f5ff",
-    background: idx % 2 === 0 ? "#fff" : "#fafbff",
-    transition: "background .15s",
-    position: "relative"
-  }}
->
+                    key={r.id}
+                    className="risk-row"
+                    onMouseEnter={() => setHoveredRisk(r.id)}
+                    onMouseLeave={() => setHoveredRisk(null)}
+                    onClick={() => setDetailRiskId(r.id)}
+                    style={{
+                      borderTop: "1px solid #f0f5ff",
+                      background: idx % 2 === 0 ? "#fff" : "#fafbff",
+                      transition: "background .15s",
+                      position: "relative",
+                      cursor: "pointer"
+                    }}
+                  >
                     <td
                       style={{
                         padding: "11px 16px",
@@ -883,14 +886,21 @@ const AIRisksSummary = ({ risks }) => {
                         {r.categorie || "—"}
                       </span>
                     </td>
-                    <td
+                         <td
                       style={{
                         padding: "11px 16px",
                         fontSize: 12,
                         color: "#7a96c0",
                       }}
                     >
-                      {r.source || "—"}
+                      {(() => {
+                        const s = r.source || "";
+                        // Matche : "ai #1", "AI #1", "ai#1", "AI Analysis #1", "ia #1"...
+                        if (/^(ai|ia)\s*#?\s*\d*/i.test(s.trim())) {
+                          return "AI ";
+                        }
+                        return s || "—";
+                      })()}
                     </td>
                     <td
                       style={{
@@ -935,11 +945,12 @@ const AIRisksSummary = ({ risks }) => {
                       }}
                     >
                       {editingStatus === r.id ? (
-                        <select
+                                                <select
                           value={r.statut}
                           onChange={(e) =>
                             handleStatusUpdate(r.id, e.target.value)
                           }
+                          onClick={(e) => e.stopPropagation()}
                           onBlur={() => setEditingStatus(null)}
                           className="status-select"
                           autoFocus
@@ -971,7 +982,7 @@ const AIRisksSummary = ({ risks }) => {
                           </span>
                           <div style={{ display: "flex", gap: "4px" }}>
                             <button
-                              onClick={() => setEditingStatus(r.id)}
+                              onClick={(e) => { e.stopPropagation(); setEditingStatus(r.id); }}
                               className="action-btn"
                               style={{
                                 background: "none",
@@ -998,7 +1009,7 @@ const AIRisksSummary = ({ risks }) => {
                               <Edit3 size={14} />
                             </button>
                             <button
-                              onClick={() => handleDelete(r.id)}
+                              onClick={(e) => { e.stopPropagation(); handleDelete(r.id); }}
                               className="action-btn"
                               style={{
                                 background: "none",
@@ -1111,149 +1122,140 @@ const AIRisksSummary = ({ risks }) => {
                 }
                 style={INP}
               />
+              {/* Risk Type */}
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: "#3a5080", marginBottom: 10, display: "block" }}>
+                  Risk Type
+                </label>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
 
-              <div style={{ display: "flex", gap: 10 }}>
-                <select
-                  value={form.categorie}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, categorie: e.target.value }))
-                  }
-                  style={{ ...INP, flex: 1 }}
-                >
-                  <option value="">Category</option>
-                  <option value="Financial">Financial</option>
-                  <option value="HR">HR</option>
-                  <option value="SOC">SOC</option>
-                  <option value="IT">IT</option>
-                  <option value="Information Security">
-                    Information Security
-                  </option>
-                  <option value="Application Security">Application Security</option>
-                  <option value="Access Control">Access Control</option>
-                </select>
+                  {/* Business Risk checkbox */}
+                  <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+                    <div
+                      onClick={() => setForm(f => ({ ...f, isBusinessRisk: !f.isBusinessRisk }))}
+                      style={{
+                        width: 18, height: 18, borderRadius: 5,
+                        border: form.isBusinessRisk ? "2px solid #1a56db" : "2px solid #c7d9f8",
+                        background: form.isBusinessRisk ? "#1a56db" : "#fff",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        cursor: "pointer", transition: "all .2s", flexShrink: 0,
+                      }}
+                    >
+                      {form.isBusinessRisk && (
+                        <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                          <path d="M1 4L3.5 6.5L9 1" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      )}
+                    </div>
+                    <span style={{ fontSize: 13, color: form.isBusinessRisk ? "#1a56db" : "#3a5080", fontWeight: form.isBusinessRisk ? 600 : 400 }}>
+                      Business Risk
+                    </span>
+                  </label>
+
+                  {/* Asset Risk checkbox */}
+                  <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+                    <div
+                      onClick={() => setForm(f => ({ ...f, isAssetRisk: !f.isAssetRisk }))}
+                      style={{
+                        width: 18, height: 18, borderRadius: 5,
+                        border: form.isAssetRisk ? "2px solid #1a56db" : "2px solid #c7d9f8",
+                        background: form.isAssetRisk ? "#1a56db" : "#fff",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        cursor: "pointer", transition: "all .2s", flexShrink: 0,
+                      }}
+                    >
+                      {form.isAssetRisk && (
+                        <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                          <path d="M1 4L3.5 6.5L9 1" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      )}
+                    </div>
+                    <span style={{ fontSize: 13, color: form.isAssetRisk ? "#1a56db" : "#3a5080", fontWeight: form.isAssetRisk ? 600 : 400 }}>
+                      Asset Risk
+                    </span>
+                  </label>
+
+                  {/* Badge "Both" si les deux sont cochés */}
+                  {form.isBusinessRisk && form.isAssetRisk && (
+                    <div style={{
+                      display: "inline-flex", alignItems: "center", gap: 6,
+                      background: "linear-gradient(135deg, #6D28D915, #1a56db15)",
+                      border: "1.5px solid #6D28D940",
+                      borderRadius: 8, padding: "6px 12px",
+                      fontSize: 12, fontWeight: 600,
+                      color: "#1a56db", marginTop: 2,
+                    }}>
+                      <svg width="12" height="12" viewBox="0 0 10 8" fill="none">
+                        <path d="M1 4L3.5 6.5L9 1" stroke="#1a56db" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      This risk is classified as Both
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Asset selector — visible uniquement si Asset Risk coché */}
+              {form.isAssetRisk && (
                 <div style={{ flex: 1, position: "relative" }}>
-                  <div
-                    style={{
-                      ...INP,
-                      display: "flex",
-                      flexWrap: "wrap",
-                      gap: 6,
-                      minHeight: 42,
-                      alignItems: "center",
-                      position: "relative",
-                      zIndex: 1,
-                    }}
-                  >
-                    {/* Placeholder */}
+                  <label style={{ fontSize: 12, fontWeight: 600, color: "#3a5080", marginBottom: 6, display: "block" }}>
+                    Asset(s) concerned
+                  </label>
+                  <div style={{
+                    ...INP,
+                    display: "flex", flexWrap: "wrap", gap: 6,
+                    minHeight: 42, alignItems: "center", position: "relative", zIndex: 1,
+                  }}>
                     {selectedAssets.length === 0 && (
-                      <span style={{ color: "#7a96c0", fontSize: 13 }}>
-                        Asset concerned
-                      </span>
+                      <span style={{ color: "#7a96c0", fontSize: 13 }}>Select asset(s)</span>
                     )}
-
-                    {/* Selected tags */}
                     {selectedAssets.map((assetId) => {
                       const asset = assetsList.find((a) => a.id === assetId);
-
                       return (
-                        <span
-                          key={assetId}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 5,
-                            background: "#e8effd",
-                            color: "#1a56db",
-                            border: "1.5px solid #c7d9f8",
-                            borderRadius: 20,
-                            padding: "3px 10px",
-                            fontSize: 12,
-                            fontWeight: 600,
-                            position: "relative",
-                            zIndex: 2,
-                          }}
-                        >
+                        <span key={assetId} style={{
+                          display: "flex", alignItems: "center", gap: 5,
+                          background: "#e8effd", color: "#1a56db",
+                          border: "1.5px solid #c7d9f8", borderRadius: 20,
+                          padding: "3px 10px", fontSize: 12, fontWeight: 600,
+                        }}>
                           {asset?.intitule}
-
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedAssets((prev) =>
-                                prev.filter((id) => id !== assetId),
-                              );
-                            }}
-                            style={{
-                              background: "none",
-                              border: "none",
-                              cursor: "pointer",
-                              color: "#7a96c0",
-                              padding: 0,
-                              lineHeight: 1,
-                              fontSize: 14,
-                              position: "relative",
-                              zIndex: 3,
-                            }}
-                          >
-                            ×
-                          </button>
+                          <button type="button"
+                            onClick={(e) => { e.stopPropagation(); setSelectedAssets(prev => prev.filter(id => id !== assetId)); }}
+                            style={{ background: "none", border: "none", cursor: "pointer", color: "#7a96c0", padding: 0, fontSize: 14 }}
+                          >×</button>
                         </span>
                       );
                     })}
-
-                    {/* Select overlay */}
-                    <select
-                      value=""
-                      onChange={(e) => {
-                        const val = Number(e.target.value);
-
-                        if (val && !selectedAssets.includes(val)) {
-                          setSelectedAssets((prev) => [...prev, val]);
-                        }
-                      }}
-                      style={{
-                        position: "absolute",
-                        inset: 0,
-                        opacity: 0,
-                        cursor: "pointer",
-                        zIndex: 1,
-                      }}
+                    <select value="" onChange={(e) => {
+                      const val = Number(e.target.value);
+                      if (val && !selectedAssets.includes(val)) setSelectedAssets(prev => [...prev, val]);
+                    }}
+                      style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", zIndex: 1 }}
                     >
-                      <option value="">Asset concerned</option>
-
-                      {assetsList
-                        .filter((a) => !selectedAssets.includes(a.id))
-                        .map((a) => (
-                          <option key={a.id} value={a.id}>
-                            {a.intitule}
-                          </option>
-                        ))}
+                      <option value="">Select asset</option>
+                      {assetsList.filter(a => !selectedAssets.includes(a.id)).map(a => (
+                        <option key={a.id} value={a.id}>{a.intitule}</option>
+                      ))}
                     </select>
                   </div>
+                </div>
+              )}
+              {/* Catégorie seule */}
+<select
+  value={form.categorie}
+  onChange={(e) => setForm((f) => ({ ...f, categorie: e.target.value }))}
+  style={INP}
+>
+  <option value="">Category</option>
+  <option value="Financial">Financial</option>
+  <option value="HR">HR</option>
+  <option value="SOC">SOC</option>
+  <option value="IT">IT</option>
+  <option value="Information Security">Information Security</option>
+  <option value="Application Security">Application Security</option>
+  <option value="Access Control">Access Control</option>
+</select>
 
-                                  </div>
-              </div>
-
-              <select
-                value={form.source}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, source: e.target.value }))
-                }
-                style={INP}
-              >
-                <option value="">Source</option>
-                <option value="Manual entry">Manual entry</option>
-                <option value="Compliance gap">Compliance gap</option>
-                <option value="Best practices">Best practices</option>
-              </select>
-              <input
-                placeholder="Owner"
-                value={form.owner}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, owner: e.target.value }))
-                }
-                style={INP}
-              ></input>
+                            
 
               <textarea
                 placeholder="Description"
@@ -1267,89 +1269,12 @@ const AIRisksSummary = ({ risks }) => {
               <div
                 style={{ display: "flex", flexDirection: "column", gap: 10 }}
               >
-                <label style={{ fontSize: 14, fontWeight: 500 }}>
-                  Vulnerabilities
-                </label>
-
-                {vulnerabilities.map((vuln, index) => (
-                  <div key={`${vuln}-${index}`} style={{ position: "relative" }}>
-                    <input
-                      type="text"
-                      
-                      value={vuln}
-                      onChange={(e) =>
-                        handleChangeVulnerability(index, e.target.value)
-                      }
-                      placeholder={`Vulnerability ${index + 1}`}
-                      style={{ ...INP, paddingRight: 80 }}
-                    />
-
-                    <div
-                      style={{
-                        position: "absolute",
-                        right: 8,
-                        top: "50%",
-                        transform: "translateY(-50%)",
-                        display: "flex",
-                        gap: 6,
-                      }}
-                    >
-                      {index === vulnerabilities.length - 1 && (
-                        <button type="button" onClick={handleAddVulnerability}>
-                          <Plus size={14} />
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveVulnerability(index)}
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                
               </div>
               <div
                 style={{ display: "flex", flexDirection: "column", gap: 10 }}
               >
-                <label style={{ fontSize: 14, fontWeight: 500 }}>Threats</label>
-
-                {threats.map((threat, index) => (
-                  <div key={`${threat}-${index}`} style={{ position: "relative" }}>
-                    <input
-                      type="text"
-                      value={threat}
-                      onChange={(e) =>
-                        handleChangeThreat(index, e.target.value)
-                      }
-                      placeholder={`Threat ${index + 1}`}
-                      style={{ ...INP, paddingRight: 80 }}
-                    />
-
-                    <div
-                      style={{
-                        position: "absolute",
-                        right: 8,
-                        top: "50%",
-                        transform: "translateY(-50%)",
-                        display: "flex",
-                        gap: 6,
-                      }}
-                    >
-                      {index === threats.length - 1 && (
-                        <button type="button" onClick={handleAddThreat}>
-                          <Plus size={14} />
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveThreat(index)}
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                
               </div>
               <div
                 style={{ display: "flex", flexDirection: "column", gap: 10 }}
@@ -1557,6 +1482,13 @@ const AIRisksSummary = ({ risks }) => {
             </div>
           </div>
         </div>
+      )}
+       {detailRiskId && (
+        <RiskDetailDrawer
+          riskId={detailRiskId}
+          onClose={() => setDetailRiskId(null)}
+          onChanged={fetchRisques}
+        />
       )}
     </div>
   );

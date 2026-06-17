@@ -208,17 +208,7 @@ function AssetModal({ asset, onClose, onSave }) {
           </div>
         </div>
 
-        <div>
-          <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: THEME.colors.textGray, marginBottom: 6, textTransform: "uppercase" }}>Owner / Team</label>
-          <input 
-            value={form.owner} 
-            onChange={e => setForm({ ...form, owner: e.target.value })}
-            placeholder="e.g., DevOps Team"
-            style={inputStyle}
-            onFocus={(e) => e.target.style.borderColor = THEME.colors.primary}
-            onBlur={(e) => e.target.style.borderColor = THEME.colors.border}
-          />
-        </div>
+        
 
         <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end", gap: 12 }}>
           <button onClick={onClose} style={{ 
